@@ -442,27 +442,42 @@ export async function copyTemplateToUser(templateID: number, username: string) {
 
 
 export async function sendEnquiry(username: string, formData: FormData) {
-  const enquiryTableName = `${username}_enquiry`
+  // ⚠️ Basic sanitization to avoid SQL injection via table name
+  const safeUsername = username.replace(/[^a-zA-Z0-9_]/g, "")
+  const enquiryTableName = `${safeUsername}_enquiry`
 
-  // Extract values safely
-  const email = formData.get("email") as string
-  const message = formData.get("your_message") as string
+  // ✅ Convert FormData → object dynamically
+  const entries: Record<string, string> = {}
 
-  // Format the form data as a single entry string
-  const entryData = `Email: ${email}, Message: ${message}`
+  formData.forEach((value, key) => {
+    if (value !== null && value !== undefined) {
+      entries[key] = String(value)
+    }
+  })
 
-  // Insert into the user-specific enquiry table
+  // ✅ Option 1: store as readable string
+  const entryString = Object.entries(entries)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ")
+
+  // ✅ Option 2 (recommended): store JSON
+  const entryJSON = JSON.stringify(entries)
+
+  // 👉 choose ONE of these depending on your DB column
+  const finalEntry = entryString
+  // const finalEntry = entryJSON
+
   await sql.query(
     `
     INSERT INTO ${enquiryTableName} (entry)
     VALUES ($1)
-  `,
-    [entryData],
+    `,
+    [finalEntry]
   )
 
   console.log("Enquiry inserted into database:", {
     table: enquiryTableName,
-    entry: entryData,
+    entry: entries,
     timestamp: new Date().toISOString(),
   })
 
@@ -472,21 +487,30 @@ export async function sendEnquiry(username: string, formData: FormData) {
   }
 }
 
+
 export async function getEnquiries(username: string) {
   const enquiryTableName = `${username}_enquiry`;
 
   const rows: any[] = await sql.query(
     `SELECT id, entry, visited_at FROM ${enquiryTableName} ORDER BY visited_at DESC`
   );
-console.log("helloe")
+
   const enquiries = rows.map((row) => {
-    const emailMatch = row.entry.match(/Email:\s*([^,]+)/);
-    const messageMatch = row.entry.match(/Message:\s*(.*)/);
+    const parsed: Record<string, string> = {};
+
+    if (typeof row.entry === "string") {
+      row.entry.split(",").forEach((pair: string) => {
+        const [key, ...rest] = pair.split(":");
+
+        if (!key) return;
+
+        parsed[key.trim()] = rest.join(":").trim();
+      });
+    }
 
     return {
       id: row.id,
-      email: emailMatch ? emailMatch[1].trim() : null,
-      message: messageMatch ? messageMatch[1].trim() : null,
+      ...parsed, // ✅ dynamic fields from string
       created_at: row.visited_at,
     };
   });
@@ -531,4 +555,31 @@ export async function uploadImage(formData: FormData) {
   )
 
   return blob.url
+}
+
+// Add to your existing server actions file (e.g., website-actions.ts)
+
+export async function getActiveVisitorsCount(username: string, minutes: number = 60): Promise<number> {
+  try {
+    const safeUsername = username.replace(/[^a-zA-Z0-9_]/g, "")
+    const visitsTable = `${safeUsername}_visits`
+
+    // Check if table exists
+    const tableCheck = await sql.query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [visitsTable]
+    )
+    if (!tableCheck[0]?.exists) return 0
+
+    const result = await sql.query(
+      `SELECT COUNT(DISTINCT ip_address) as active 
+       FROM ${visitsTable}
+       WHERE visited_at >= NOW() - INTERVAL '${minutes} minutes'`
+    )
+
+    return Number(result[0]?.active || 0)
+  } catch (error) {
+    console.error("Error fetching active visitors:", error)
+    return 0
+  }
 }

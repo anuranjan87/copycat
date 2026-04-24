@@ -3,41 +3,57 @@
 import { useEffect, useRef } from "react"
 import { sendEnquiry } from "@/lib/website-actions"
 
-interface IframeWithLinkHandlerProps {
+export default function IframeWithLinkHandler({
+  content,
+  username,
+}: {
   content: string
   username: string
-}
-
-export default function IframeWithLinkHandler({ content, username }: IframeWithLinkHandlerProps) {
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    async function handleMessage(event: MessageEvent) {
-      if (!event.data) return
+    const handleMessage = async (event: MessageEvent) => {
+      // ✅ Only accept messages from THIS iframe
+      if (event.source !== iframeRef.current?.contentWindow) return
 
-      // 🔗 External link handler
-      if (event.data.openLink) {
-        window.open(event.data.openLink, "_blank", "noopener,noreferrer")
+      const data = event.data
+      if (!data) return
+
+      // 🔗 Open links
+      if (data.openLink) {
+        window.open(data.openLink, "_blank", "noopener,noreferrer")
+        return
       }
 
-      // 📩 Form submission handler
-      if (event.data.formData) {
-        const { email, message } = event.data.formData
-
-        // Build FormData for server action
+      // 📩 Handle form submission
+      if (data.formData) {
         const formData = new FormData()
-        formData.append("email", email)
-        formData.append("your_message", message)
+
+        // 🔥 Remove empty fields (FIXES your bug)
+        Object.entries(data.formData).forEach(([key, value]) => {
+          const v = String(value).trim()
+          if (v !== "") {
+            formData.append(key, v)
+          }
+        })
+
+        // ❗ If nothing left, don't send
+        if ([...formData.keys()].length === 0) return
 
         try {
-          console.log("[IframeWithLinkHandler] Sending enquiry for:", username)
-          const result = await sendEnquiry(username, formData)
+          await sendEnquiry(username, formData)
+console.log(Object.fromEntries(formData.entries()));
 
-          console.log("[IframeWithLinkHandler] Result:", result)
-          alert("✅ Form submitted successfully!")
-        } catch (error) {
-          console.error("[IframeWithLinkHandler] Submission failed:", error)
-          alert("❌ Failed to submit form")
+iframeRef.current?.contentWindow?.postMessage(
+            { status: "success" },
+            "*"
+          )
+        } catch {
+          iframeRef.current?.contentWindow?.postMessage(
+            { status: "error" },
+            "*"
+          )
         }
       }
     }
@@ -49,9 +65,9 @@ export default function IframeWithLinkHandler({ content, username }: IframeWithL
   return (
     <iframe
       ref={iframeRef}
+      key={content}
       srcDoc={content}
       className="w-full h-screen border-0"
-      sandbox="allow-scripts allow-forms allow-same-origin"
-    />
+   />
   )
 }

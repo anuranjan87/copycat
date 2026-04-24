@@ -1,219 +1,309 @@
 "use client"
 
 import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
-
+import { useEffect, useState, useMemo } from "react"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  AreaChart,
+  Area,
+  XAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import { ArrowLeft, Mail, CalendarDays, Eye, User, MessageSquare, ChevronLeft, ChevronRight } from "lucide-react"
 import {
-  type ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  getVisitChartData,
+  getEnquiries,
+} from "@/lib/website-actions"
 
-// ✅ Import from website-actions
-import { getVisitChartData } from "@/lib/website-actions"
-
-export const description = "An interactive area chart"
-
-const chartConfig = {
-  visitors: {
-    label: "Visitors",
-  },
-  visits: {
-    label: "Visits",
-    color: "hsl(200, 100%, 70%)", // Bright cyan-blue
-  },
-  unique_visits: {
-    label: "Unique Visits",
-    color: "hsl(280, 100%, 80%)", // Bright purple
-  },
-} satisfies ChartConfig
-
-export interface ChartProps {
-  username: string
+// ================= TYPES =================
+interface Enquiry {
+  id: number
+  created_at: Date
+  [key: string]: any
 }
 
-export default function Chart({ username }: ChartProps) {   // ✅ destructure props
-  const [timeRange, setTimeRange] = React.useState("90d")
-  const [chartData, setChartData] = React.useState<
-    { date: string; visits: number; unique_visits?: number }[]
-  >([])
+export default function Dashboard({ username }: { username: string }) {
+  const [chartData, setChartData] = useState<any[]>([])
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([])
+  const [selectedEnquiry, setSelectedEnquiry] = useState<Enquiry | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 5
 
-  React.useEffect(() => {
-    async function fetchData() {
-      try {
-        
-        const data = await getVisitChartData(username)  // ✅ now just the string
+  // ================= FETCH =================
+  useEffect(() => {
+    async function load() {
+      // chart
+      const visitRes = await getVisitChartData(username)
 
-        const viewerTZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const map: Record<
+        string,
+        { visits: number; date: Date }
+      > = {}
 
-        const formatted = data.map(
-          (item: { date: string; visits: number; unique_visits?: number }) => {
-            const utcDate = new Date(item.date + "T00:00:00Z")
-            const localString = utcDate.toLocaleDateString("en-CA", {
-              timeZone: viewerTZ,
-            })
-            return {
-              date: localString,
-              visits: item.visits,
-              unique_visits: item.unique_visits ?? 0,
-            }
-          }
+      visitRes.forEach((item: any) => {
+        const date = new Date(item.date)
+
+        const key = date.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+        })
+
+        if (!map[key]) map[key] = { visits: 0, date }
+
+        map[key].visits += item.visits
+      })
+
+      const monthly = Object.entries(map)
+        .map(([month, val]) => ({
+          month,
+          visits: val.visits,
+          date: val.date,
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+      setChartData(monthly)
+
+      // enquiries
+      const enquiryRes = await getEnquiries(username)
+
+      const formatted = enquiryRes
+        .map((e: any) => ({
+          ...e,
+          created_at: new Date(e.created_at),
+        }))
+        .sort(
+          (a, b) =>
+            b.created_at.getTime() - a.created_at.getTime()
         )
 
-        setChartData(formatted)
-      } catch (error) {
-        console.error("Error fetching chart data:", error)
-      }
+      setEnquiries(formatted)
     }
 
-    fetchData()
-  }, [username])   // ✅ add username as dependency
+    load()
+  }, [username])
 
-  const filteredData = chartData.filter((item) => {
-    const date = new Date(item.date)
-    const referenceDate = new Date(
-      Math.max(...chartData.map((i) => new Date(i.date).getTime()))
-    )
-    let daysToSubtract = 90
-    if (timeRange === "30d") {
-      daysToSubtract = 30
-    } else if (timeRange === "7d") {
-      daysToSubtract = 7
-    }
-    const startDate = new Date(referenceDate)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-    return date >= startDate
-  })
+  // ================= HELPERS =================
+  const totalPages = Math.ceil(enquiries.length / pageSize)
 
-  return (
-    <Card className="pt-0 bg-black border-gray-800 text-white">
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b border-gray-800 py-5 sm:flex-row">
-        <div className="grid flex-1 gap-1">
-          <CardTitle className="text-white">Area Chart - Interactive</CardTitle>
-          <CardDescription className="text-gray-300">
-            Showing visitor data for your live site
-          </CardDescription>
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return enquiries.slice(start, start + pageSize)
+  }, [enquiries, page])
+
+  const getEmail = (e: Enquiry) =>
+    e.email || e.Email || "No email"
+
+  const formatTime = (date: Date) =>
+    new Date(date).toLocaleString("en-US", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+
+  // ================= DETAIL VIEW =================
+  if (selectedEnquiry) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black text-white">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <Button
+            variant="ghost"
+            onClick={() => setSelectedEnquiry(null)}
+            className="mb-8 text-gray-400 hover:text-white hover:bg-white/10"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to dashboard
+          </Button>
+
+          <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-8 shadow-2xl">
+            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/10">
+              <Mail className="h-5 w-5 text-blue-400" />
+              <h2 className="text-xl font-semibold tracking-tight">Enquiry Details</h2>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <CalendarDays className="h-4 w-4" />
+                <span>{formatTime(selectedEnquiry.created_at)}</span>
+              </div>
+
+              <div className="grid gap-6">
+                {Object.entries(selectedEnquiry)
+                  .filter(([k]) => k !== "id" && k !== "created_at")
+                  .map(([k, v]) => (
+                    <div key={k} className="border-l-2 border-blue-500/50 pl-4">
+                      <p className="text-xs font-mono uppercase tracking-wider text-gray-500 mb-1">
+                        {k}
+                      </p>
+                      <p className="text-base text-white/90 break-words">
+                        {String(v) || "—"}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
         </div>
-        <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="hidden w-[160px] rounded-lg sm:ml-auto sm:flex bg-gray-900 border-gray-700 text-white hover:bg-gray-800">
-            <SelectValue placeholder="Last 3 months" />
-          </SelectTrigger>
-          <SelectContent className="rounded-xl bg-gray-900 border-gray-700 text-white">
-            <SelectItem
-              value="90d"
-              className="rounded-lg hover:bg-gray-800 focus:bg-gray-800"
-            >
-              Last 3 months
-            </SelectItem>
-            <SelectItem
-              value="30d"
-              className="rounded-lg hover:bg-gray-800 focus:bg-gray-800"
-            >
-              Last 30 days
-            </SelectItem>
-            <SelectItem
-              value="7d"
-              className="rounded-lg hover:bg-gray-800 focus:bg-gray-800"
-            >
-              Last 7 days
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </CardHeader>
-      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
-          <AreaChart data={filteredData}>
-            <defs>
-              <linearGradient id="fillDesktop" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(200, 100%, 70%)"
-                  stopOpacity={0.8}
+      </div>
+    )
+  }
+
+  // ================= MAIN DASHBOARD =================
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-950 to-black text-white">
+      <div className="max-w-6xl mx-auto px-6 py-10 space-y-12">
+        
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+            Dashboard
+          </h1>
+          <p className="text-gray-500 mt-1">Welcome back, {username}</p>
+        </div>
+
+        {/* ===== CHART CARD ===== */}
+        <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-6 shadow-xl transition-all hover:border-white/20">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-medium">Monthly visits</h2>
+                <p className="text-xs text-gray-500">Audience activity over time</p>
+              </div>
+            </div>
+            {chartData.length > 0 && (
+              <span className="text-xs text-gray-500">
+                Last 12 months
+              </span>
+            )}
+          </div>
+
+          <div className="w-full h-[350px] mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <XAxis
+                  dataKey="month"
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
                 />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(200, 100%, 70%)"
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-              <linearGradient id="fillMobile" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="hsl(280, 100%, 80%)"
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="hsl(280, 100%, 80%)"
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} stroke="hsl(0, 0%, 20%)" />
-            <XAxis
-              dataKey="date"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={32}
-              tick={{ fill: "white" }}
-              tickFormatter={(value) => {
-                const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })
-              }}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })
+                <Tooltip
+                  contentStyle={{
+                    background: "#111",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0,0,0,0.5)",
+                    padding: "8px 12px",
                   }}
-                  indicator="dot"
-                  className="bg-gray-900 border-gray-700 text-white [&_*]:text-white [&_.recharts-tooltip-item-value]:text-white"
+                  labelStyle={{ color: "#9ca3af", fontSize: "12px" }}
+                  formatter={(v: any) => [`${v} visits`, "Traffic"]}
+                  cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
                 />
-              }
-            />
-            <Area
-              dataKey="unique_visits"
-              type="natural"
-              fill="url(#fillMobile)"
-              stroke="hsl(280, 100%, 80%)"
-              stackId="a"
-            />
-            <Area
-              dataKey="visits"
-              type="natural"
-              fill="url(#fillDesktop)"
-              stroke="hsl(200, 100%, 70%)"
-              stackId="a"
-            />
-            <ChartLegend />
-          </AreaChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+                <defs>
+                  <linearGradient id="colorVisits" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.5} />
+                    <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="visits"
+                  stroke="#60a5fa"
+                  strokeWidth={2.5}
+                  fill="url(#colorVisits)"
+                  activeDot={{ r: 6, strokeWidth: 0, fill: "#60a5fa" }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* ===== ENQUIRIES CARD ===== */}
+        <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-6 shadow-xl transition-all hover:border-white/20">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-medium">Enquiries</h2>
+                <p className="text-xs text-gray-500">Recent messages from your site</p>
+              </div>
+            </div>
+            <span className="text-sm bg-white/5 px-3 py-1 rounded-full border border-white/10">
+              {enquiries.length} total
+            </span>
+          </div>
+
+          <ScrollArea className="max-h-[320px] rounded-lg">
+            {paginated.length === 0 ? (
+              <div className="text-center py-12 text-gray-500 text-sm">
+                No enquiries yet
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {paginated.map((e) => (
+                  <div
+                    key={e.id}
+                    onClick={() => setSelectedEnquiry(e)}
+                    className="group flex items-center justify-between p-4 cursor-pointer transition-all hover:bg-white/5 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-full bg-white/5 group-hover:bg-white/10 transition">
+                        <Mail className="h-4 w-4 text-gray-400 group-hover:text-blue-400" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium truncate max-w-[200px] md:max-w-[300px]">
+                          {getEmail(e)}
+                        </span>
+                        <span className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                          <CalendarDays className="h-3 w-3" />
+                          {formatTime(e.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-600 group-hover:text-gray-300 transition" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-2 border-t border-white/5">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="text-gray-400 hover:text-white disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-xs text-gray-500">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="text-gray-400 hover:text-white disabled:opacity-30"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

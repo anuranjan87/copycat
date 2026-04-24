@@ -8,15 +8,14 @@ import { useRouter } from "next/navigation"
 import { copyTemplateToUser, getAllWebsiteTemplates } from "@/lib/website-actions"
 import { motion, AnimatePresence } from "framer-motion"
 import mat from "@/asset/mat.gif";
-import { description } from "@/components/chart"
 
 
 
 
 interface PageProps {
-  params: Promise<{
+  params: {
     username: string
-  }>
+  }
 }
 
 // Template data
@@ -64,7 +63,7 @@ const templates = [
 ]
 
 export default function Page({ params }: PageProps) {
-  const username = "aftlatuun"
+  const { username } =  params
   const router = useRouter()
   const [isNavigating, setIsNavigating] = useState(false)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)

@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }, "*")
     })
   }
+
 })
 </script>
 `.trim()
@@ -82,7 +83,7 @@ ${data}
 
     // ✅ FINAL HTML (THIS WAS MISSING IN YOUR CODE)
     const finalHtml = buildFinalHtml(content.html, content.data)
-
+console.log(finalHtml)
     return (
       <IframeWithLinkHandler
         content={finalHtml}
