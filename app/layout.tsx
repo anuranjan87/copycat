@@ -2,11 +2,13 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { Montserrat } from "next/font/google";
+
 import { Toaster } from "sonner" // Import sonner's Toaster
 import { ClerkProvider } from '@clerk/nextjs'
 
 
-const inter = Inter({ subsets: ["latin"] })
+const montserrat = Montserrat({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "7WINK",
@@ -14,20 +16,15 @@ export const metadata: Metadata = {
   generator: "7WINK",
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }) {
   return (
     <ClerkProvider>
-    <html lang="en">
-    <body className={inter.className}>
-       <main>{children}</main>
-        <Toaster /> {/* Render sonner's Toaster component here */}
-      </body>
-    </html>
+      <html lang="en">
+        <body className={montserrat.className}>
+          <main>{children}</main>
+          <Toaster />
+        </body>
+      </html>
     </ClerkProvider>
-
-  )
+  );
 }

@@ -331,64 +331,52 @@ export async function getVisitCount(username: string): Promise<number> {
   }
 }
 
- export async function getVisitChartData(username: string): Promise<
- { date: string; visits: number }[]
+
+export async function getVisitChartData(username: string): Promise<
+  { date: string; visits: number }[]
 > {
   try {
-    const visitsTableName = `${username.toLowerCase()}_visits`
-    
+    const visitsTableName = `${username.toLowerCase()}_visits`;
 
-
-    // Check if the visits table exists
     const tableExists = await sql.query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [visitsTableName]
+    );
+    if (!tableExists[0]?.exists) return [];
+
+    // ✅ Include today’s date (IST) even if no visits yet
+    const result = await sql.query(
       `
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = $1
+      WITH date_series AS (
+        SELECT generate_series(
+          COALESCE(
+            (SELECT MIN((visited_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date) FROM ${visitsTableName}),
+            (now() AT TIME ZONE 'Asia/Kolkata')::date
+          ),
+          (now() AT TIME ZONE 'Asia/Kolkata')::date,
+          interval '1 day'
+        )::date AS date
       )
-    `,
-      [visitsTableName],
-    )
+      SELECT 
+        TO_CHAR(ds.date, 'YYYY-MM-DD') AS date,
+        COALESCE(COUNT(v.visited_at), 0) AS visits
+      FROM date_series ds
+      LEFT JOIN ${visitsTableName} v
+        ON ds.date = (v.visited_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date
+      GROUP BY ds.date
+      ORDER BY ds.date
+      `
+    );
 
-    if (!tableExists[0]?.exists) {
-      return []
-    }
-
-    // ✅ Use generate_series to pad missing days with 0
-   const result = await sql.query(
-  `
-  WITH date_series AS (
-    SELECT generate_series(
-      (SELECT MIN(visited_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date FROM ${visitsTableName}),
-      (SELECT MAX(visited_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date FROM ${visitsTableName}),
-      interval '1 day'
-    )::date AS date
-  )
-  SELECT 
-    TO_CHAR(ds.date, 'YYYY-MM-DD') AS date,
-    COALESCE(COUNT(v.visited_at), 0) AS visits
-  FROM date_series ds
-  LEFT JOIN ${visitsTableName} v
-    ON ds.date = (v.visited_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date
-  GROUP BY ds.date
-  ORDER BY ds.date
-  `,
-)
-console.log(username)
-        console.log("username")
-console.log(result)
-    // Format into chartData array
     return result.map((row: any) => ({
       date: row.date,
       visits: Number(row.visits),
-    }))
+    }));
   } catch (error) {
-    console.error("Error fetching visit chart data:", error)
-    return []
+    console.error("Error fetching visit chart data:", error);
+    return [];
   }
 }
-
-
 
 
 
