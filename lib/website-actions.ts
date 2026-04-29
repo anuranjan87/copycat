@@ -571,3 +571,29 @@ export async function getActiveVisitorsCount(username: string, minutes: number =
     return 0
   }
 }
+
+
+export async function getTemplateById(templateId: number) {
+  try {
+    const result = await sql`
+      SELECT code, code_script, code_data 
+      FROM website_template 
+      WHERE id = ${templateId}
+    `;
+    
+    if (!result || result.length === 0) {
+      return { success: false, error: "Template not found" };
+    }
+    
+    const template = result[0];
+    return {
+      success: true,
+      html: template.code,
+      script: template.code_script,
+      data: template.code_data,
+    };
+  } catch (error: any) {
+    console.error("Error fetching template by ID:", error);
+    return { success: false, error: error.message };
+  }
+}

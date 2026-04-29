@@ -5,16 +5,14 @@ import { Origami, Globe2Icon, LayoutDashboard, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { copyTemplateToUser, getAllWebsiteTemplates } from "@/lib/website-actions";
+import { getAllWebsiteTemplates } from "@/lib/website-actions";
 import mat from "@/asset/mat.gif";
 
 interface PageProps {
-  params: Promise<{   // ✅ params is a Promise
-    username: string;
-  }>;
+  params: Promise<{ username: string }>;
 }
 
-// Template metadata (same as before)
+// Template metadata (visual info only)
 const templatesMeta = [
   {
     id: "1",
@@ -85,17 +83,33 @@ const templatesMeta = [
     description: "3D scrolling animation that shouts out for business—one word at a time",
     mood: "risky / electric",
   },
-{
-  id: "10",
-  imageSrc: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
-  title: "Narrative Blocks",
-  description: "Two-column alternating sections that create a storytelling ",
-  mood: "balanced / intentional",
-}
+  {
+    id: "10",
+    imageSrc:
+      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
+    title: "Narrative Blocks",
+    description: "Two-column alternating sections that create a storytelling ",
+    mood: "balanced / intentional",
+  },
+  {
+    id: "11",
+    imageSrc:
+      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
+    title: "GlitchStory Mode",
+    description: "Two-column alternating sections that feel like a story breaking and reshaping based on player moves",
+    mood: "immersive / progressive",
+  },
+  {
+    id: "12",
+    imageSrc:
+      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
+    title: "GlitchStory Mode",
+    description: "Two-column alternating sections that feel like a story breaking and reshaping based on player moves",
+    mood: "immersive / progressive",
+  },
 ];
 
 export default function Page({ params }: PageProps) {
-  // ✅ Unwrap the params Promise using React.use()
   const { username } = use(params);
   const router = useRouter();
 
@@ -104,7 +118,7 @@ export default function Page({ params }: PageProps) {
   const [allTemplateData, setAllTemplateData] = useState<any[]>([]);
   const [isLoadingAllTemplates, setIsLoadingAllTemplates] = useState(true);
 
-  // Fetch full template data (code, etc.) on mount
+  // Fetch full template data (only needed to validate existence, not used for copying)
   useEffect(() => {
     const fetchAllTemplates = async () => {
       try {
@@ -119,7 +133,7 @@ export default function Page({ params }: PageProps) {
     fetchAllTemplates();
   }, []);
 
-  // Copy template & navigate to editor
+  // Handle template selection – navigate to editor with templateId, no auto-publish
   const handleSelectTemplate = async (templateId: string) => {
     if (isLoadingAllTemplates || !allTemplateData.length) {
       alert("Templates are still loading. Please wait.");
@@ -132,35 +146,26 @@ export default function Page({ params }: PageProps) {
       return;
     }
 
+    // Just navigate to the editor with templateId as a query parameter
     setIsNavigating(true);
     setSelectedTemplateId(templateId);
 
-    try {
-      const result = await copyTemplateToUser(Number(templateId), username);
-      if (result?.success) {
-        router.push(`/edit_new/${username}`);
-      } else {
-        alert(`Failed: ${result?.error || "Unknown error"}`);
-        setIsNavigating(false);
-        setSelectedTemplateId(null);
-      }
-    } catch (error) {
-      alert("Copy failed. Try again.");
-      setIsNavigating(false);
-      setSelectedTemplateId(null);
-    }
+    // Small delay for visual feedback, then redirect
+    setTimeout(() => {
+      router.push(`/edit_new/${username}?templateId=${templateId}`);
+    }, 300);
   };
 
   return (
     <div className="bg-black text-white min-h-screen overflow-x-hidden">
-      {/* Loading Overlay */}
+      {/* Loading Overlay while navigating */}
       {isNavigating && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
           <div className="bg-black/60 border border-red-500/30 rounded-xl p-6 flex flex-col items-center">
             <Image src={mat} alt="Loading" width={120} height={120} />
             <div className="flex items-center gap-2 mt-3">
               <Loader2 className="w-4 h-4 animate-spin text-red-500" />
-              <span className="text-sm text-white/80">Setting up your editor...</span>
+              <span className="text-sm text-white/80">Loading template into editor...</span>
             </div>
           </div>
         </div>
@@ -183,14 +188,14 @@ export default function Page({ params }: PageProps) {
           >
             <LayoutDashboard size={20} />
           </a>
-          <a href={`/templates`} className="text-neutral-500 hover:text-red-500 transition">
+          <a href={`/templates/${username}`} className="text-neutral-500 hover:text-red-500 transition">
             <Origami size={20} />
           </a>
         </aside>
 
         {/* Main Content */}
         <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mx-auto">
-          {/* Hero Section – inspired by the lightweight HTML */}
+          {/* Hero Section */}
           <section className="h-[70vh] flex flex-col items-center justify-center text-center">
             <div className="mb-4 w-12 h-[2px] bg-red-600 mx-auto" />
             <h1 className="text-5xl md:text-6xl font-light tracking-tight">
@@ -206,7 +211,7 @@ export default function Page({ params }: PageProps) {
             </div>
           </section>
 
-          {/* Templates Grid – pure CSS transitions, no framer-motion */}
+          {/* Templates Grid – each card navigates to editor with templateId */}
           <section className="pb-32">
             <div className="grid gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {templatesMeta.map((template) => {
@@ -217,7 +222,7 @@ export default function Page({ params }: PageProps) {
                     onClick={() => handleSelectTemplate(template.id)}
                     className="group relative bg-black/40 border border-white/10 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/5"
                   >
-                    {/* Image area (lightweight) */}
+                    {/* Image area */}
                     <div className="relative h-50 w-full overflow-hidden bg-neutral-900">
                       <Image
                         src={template.imageSrc}
@@ -241,7 +246,7 @@ export default function Page({ params }: PageProps) {
                       {isLoading && (
                         <div className="mt-3 flex items-center gap-1 text-red-400 text-xs">
                           <Loader2 className="w-3 h-3 animate-spin" />
-                          Copying...
+                          Loading...
                         </div>
                       )}
                     </div>
@@ -256,7 +261,7 @@ export default function Page({ params }: PageProps) {
 
           {/* Footer */}
           <footer className="border-t border-white/10 pt-8 text-center text-[11px] text-white/30 tracking-wider">
-            <p>All templates are fully customizable. Start with a design that fits your voice.</p>
+            <p>Select any template – it will open in the editor as a draft. Publish when you're ready.</p>
           </footer>
         </main>
       </div>
