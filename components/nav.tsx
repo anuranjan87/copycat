@@ -25,7 +25,7 @@ export default function Nav({ username }: NavProps)  {
         </div>
 
         <a href={`/edit_new/${username}`} className="bg-red-600 text-white px-[2.8rem] tracking-[0.1rem] py-2.5 rounded-sm text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
-          Publish
+          Edit
         </a>
 
       </div>

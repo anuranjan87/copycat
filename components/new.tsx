@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { SendIcon, Loader2 } from 'lucide-react'
 import { updateWebsiteContent, generateCodeWithAI, generateCodeWithAIBlank, getTemplateById } from "@/lib/website-actions"
@@ -51,12 +51,15 @@ export default function New({ username, initialContent }: NewMobileProps) {
   }, [])
 
   const extractDataFields = (dataString: string) => {
-    if (!dataString) return ''
-    return dataString
-      .replace(/const\s+data\s*=\s*{/, '')
-      .replace(/};?\s*$/, '')
-      .trim()
+  if (!dataString) return ''
+  // Try to match "const data = { ... }" (optional semicolon)
+  const match = dataString.match(/const\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i)
+  if (match) {
+    return match[1].trim()
   }
+  // Otherwise assume the string is already the inner content (published case)
+  return dataString
+}
 
   // --- Draft & Saved State ---
   const [draftData, setDraftData] = useState(extractDataFields(initialContent.data))
@@ -131,7 +134,7 @@ ${savedData}
     }
   }
 
-  const captureScrollPosition = () => {
+  const captureScrollPosition = useCallback(() => {
     if (iframeRef.current?.contentWindow && !isRestoringScroll.current) {
       try {
         const { scrollX, scrollY } = iframeRef.current.contentWindow
@@ -140,7 +143,7 @@ ${savedData}
         console.log("Could not capture scroll position:", error)
       }
     }
-  }
+  }, [])
 
   const restoreScrollPosition = () => {
     if (iframeRef.current?.contentWindow) {
@@ -219,13 +222,31 @@ ${savedData}
     } catch (error) {
       console.log("Scroll listener error:", error)
     }
-  }, [finalCode])
+  }, [finalCode, captureScrollPosition])
 
-  const handleSave = () => {
+  // --- Save handler with keyboard shortcut support ---
+  const handleSave = useCallback(() => {
     captureScrollPosition()
     setSavedHtml(draftHtml)
     setSavedData(draftData)
-  }
+    toast.success("Changes saved", {
+      description: "Your draft has been updated.",
+      position: "top-center",
+      duration: 2000,
+    })
+  }, [draftHtml, draftData, captureScrollPosition])
+
+  // Ctrl+S / Cmd+S keyboard shortcut
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleSave])
 
   const handlePublish = async () => {
     setIsPublishing(true)
@@ -257,6 +278,44 @@ ${savedData}
     )
   }
 
+  // Render the horizontal panel for desktop view
+  const DesktopHorizontalPanel = () => (
+    <div className="relative mt-3 flex justify-center">
+      <div className="flex flex-row gap-3 px-7 bg-white/10 backdrop-blur-md border border-orange-600/30 rounded-sm shadow-lg">
+        <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="p-1 hover:bg-white/30 rounded transition text-center text-xl">🏠</a>
+        <a href={`/assets`} target="_blank" rel="noopener noreferrer" className="p-1 hover:bg-white/30 rounded transition text-center text-xl">✜</a>
+        <button className="p-1 hover:bg-white/30 rounded transition text-center text-xl">↩️</button>
+        <button className="p-1 hover:bg-white/30 rounded transition text-center text-xl">↪️</button>
+        <button 
+          onClick={toggleFullscreen} 
+          className="p-1 hover:bg-white/30 rounded transition text-center text-xl"
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? '✕' : '⛶'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // Render the vertical sidebar for mobile view
+  const MobileVerticalPanel = () => (
+    <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
+      <div className="flex flex-col gap-3 p-2 bg-white/10 backdrop-blur-md border border-orange-600/40 rounded-sm shadow-lg">
+        <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/30 rounded transition text-center text-xl">🏠</a>
+        <a href={`/assets`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/30 rounded transition text-center text-xl">✜</a>
+        <button className="p-2 hover:bg-white/30 rounded transition text-center text-xl">↩️</button>
+        <button className="p-2 hover:bg-white/30 rounded transition text-center text-xl">↪️</button>
+        <button 
+          onClick={toggleFullscreen} 
+          className="p-2 hover:bg-white/30 rounded transition text-center text-xl"
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? '✕' : '⛶'}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <main className="bg-black text-white min-h-screen">
       {/* Top Navigation */}
@@ -280,44 +339,33 @@ ${savedData}
         </div>
       </nav>
 
-      {/* Sidebar */}
-      <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
-        <div className="flex flex-col gap-3 p-2 bg-white/10 backdrop-blur-md border border-orange-600/40 rounded-sm shadow-lg">
-          <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/30 rounded transition text-center text-xl">🏠</a>
-          <a href={`/assets`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/30 rounded transition text-center text-xl">✜</a>
-          <button className="p-2 hover:bg-white/30 rounded transition text-center text-xl">↩️</button>
-          <button className="p-2 hover:bg-white/30 rounded transition text-center text-xl">↪️</button>
-          <button 
-            onClick={toggleFullscreen} 
-            className="p-2 hover:bg-white/30 rounded transition text-center text-xl"
-            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? '✕' : '⛶'}
-          </button>
-        </div>
-      </div>
+      {/* Conditionally render panel based on viewMode */}
+      {viewMode === 'mobile' && <MobileVerticalPanel />}
 
       {/* Hero Section with static background image */}
       <section
         className="relative min-h-screen px-6 lg:px-16 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('https://i.postimg.cc/qv63BdKX/Chat-GPT-Image-Apr-11-2026-08-15-57-PM.png')",
-          backgroundColor: 'transparent',
-        }}
+  backgroundImage: inputBarVisible ? "url('https://i.postimg.cc/qv63BdKX/Chat-GPT-Image-Apr-11-2026-08-15-57-PM.png')" : 'none',
+  backgroundColor: 'transparent',
+}}
       >
         <div className="absolute inset-0 bg-white/5 backdrop-blur-xs"></div>
         <div className="relative z-10 min-h-screen flex items-center">
           
           {/* Preview Container */}
           <div 
-            className={`relative w-[60%] h-[100%] flex justify-center transition-transform duration-500 origin-center`}
+            className={`relative w-[60%] h-[100%] flex flex-col justify-center mt-[6rem] transition-transform duration-500 origin-center -left-8`}
             style={{
-              transform: viewMode === 'mobile' ? 'scale(1.3)' : 'scale(1)'
-            }}
+  transform: viewMode === 'mobile' ? 'scale(1.20)' : 'scale(1.09)',
+  marginTop: viewMode === 'mobile' ? '1rem' : '6rem',
+  left: viewMode === 'mobile' ? '15rem' : ''
+}}
+            
           >
             <button
               onClick={() => setInputBarVisible(!inputBarVisible)}
-              className="absolute -top-9 -right-1 z-20 bg-orange-600/50 hover:bg-red-700 text-white py-1 px-4 rounded-md shadow-lg transition-all duration-200 text-xs"
+              className="absolute -top-8 -left-1 z-20 bg-orange-600/60 hover:bg-red-700 text-white py-1 px-4 rounded-md shadow-lg transition-all duration-200 text-xs"
             >
               {inputBarVisible ? 'Hide Input' : 'Ask AI'}
             </button>
@@ -330,7 +378,7 @@ ${savedData}
             >
               <div
                 className={`overflow-hidden rounded-sm bg-white ${
-                  viewMode === 'desktop' ? 'w-full h-full' : 'w-[240px] h-[390px]'
+                  viewMode === 'desktop' ? 'w-full h-full' : 'w-[240px] h-[366px]'
                 }`}
               >
                 <div
@@ -359,6 +407,9 @@ ${savedData}
                 </div>
               </div>
             </div>
+
+            {/* Desktop Horizontal Panel appears below preview container */}
+            {viewMode === 'desktop' && <DesktopHorizontalPanel />}
           </div>
 
           {/* Code Editor */}
@@ -403,15 +454,19 @@ ${savedData}
               <textarea 
                 value={draftHtml} 
                 onChange={(e) => setDraftHtml(e.target.value)} 
+                wrap="off"
                 className="flex-1 bg-transparent py-3 px-5 text-sm font-mono text-white/80 outline-none resize-none overflow-auto scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent" 
                 spellCheck="false"
+                style={{ whiteSpace: 'pre', overflowX: 'auto', overflowY: 'auto' }}
               />
             ) : (
               <textarea 
                 value={draftData} 
                 onChange={(e) => setDraftData(e.target.value)} 
+                wrap="off"
                 className="flex-1 bg-transparent py-4 px-5 text-sm font-mono text-white/80 outline-none resize-none overflow-auto scrollbar-thin scrollbar-thumb-white/30 scrollbar-track-transparent" 
                 spellCheck="false" 
+                style={{ whiteSpace: 'pre', overflowX: 'auto', overflowY: 'auto' }}
               />
             )}
 
@@ -426,11 +481,11 @@ ${savedData}
             )}
 
             {inputBarVisible && (
-              <div className="absolute bottom-0 w-[calc(100%-2rem)] px-5 z-30">
+              <div className="absolute bottom-0 left-5 w-[calc(100%-2rem)] px-5 z-30">
                 <div className="relative w-full">
                   <input
                     type="text"
-                    placeholder="Ask AI to edit the content (requires save after generation)..."
+                    placeholder="Ask AI to edit the content..."
                     className="rounded-none pr-12 pl-6 py-3 w-full text-white text-sm bg-black/20 border border-white/60 backdrop-blur-md shadow-[inset_0_1px_0px_rgba(255,255,255,0.6),0_0_12px_rgba(0,0,0,0.4),0_6px_20px_rgba(0,0,0,0.25)] placeholder:text-white/60 focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all duration-300"
                   />
                   <button className="inline-flex items-center justify-center px-3 py-2 text-black text-xs font-medium rounded-md bg-white/80 border border-white/30 backdrop-blur-md shadow-[inset_0_1px_0px_rgba(255,255,255,0.75),0_0_9px_rgba(0,0,0,0.3)] hover:bg-white/40 transition-all duration-300 absolute right-2 top-1/2 -translate-y-1/2">
