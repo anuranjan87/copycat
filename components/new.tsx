@@ -3,9 +3,72 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { SendIcon, Loader2 } from 'lucide-react'
-import { updateWebsiteContent, generateCodeWithAI, generateCodeWithAIBlank, getTemplateById } from "@/lib/website-actions"
+import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from "@/lib/website-actions"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"
+import dynamic from 'next/dynamic'
+
+// Helper to strip markdown code fences
+function cleanGeneratedCode(raw: string): string {
+  let cleaned = raw.replace(/^```[\w]*\n/, '').replace(/\n```$/, '');
+  cleaned = cleaned.replace(/^```[\w]*/, '').replace(/```$/, '');
+  return cleaned.trim();
+}
+
+// Dynamically import Monaco Editor (no SSR)
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
+      <Loader2 className="h-6 w-6 animate-spin text-white" />
+    </div>
+  ),
+})
+
+// Custom theme + disable error diagnostics
+const handleEditorMount = (editor: any, monaco: any) => {
+  // Disable semantic & syntax validation (red squiggles)
+  if (monaco.languages?.typescript?.javascriptDefaults) {
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    });
+  }
+  if (monaco.languages?.html?.htmlDefaults) {
+    monaco.languages.html.htmlDefaults.setOptions({
+      validate: false,
+    });
+  }
+
+  // Define custom dark theme
+  monaco.editor.defineTheme("custom-dark", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "FF79C6", fontStyle: "" },
+      { token: "tag", foreground: "FF79C6" },
+      { token: "delimiter.html", foreground: "f2ecec" },
+      { token: "attribute.name", foreground: "f2ecec" },
+      { token: "attribute.value", foreground: "6fcaf2" },
+      { token: "string", foreground: "f2ecec" },
+      { token: "text", foreground: "6fcaf2" },
+    ],
+    colors: {
+      "editor.background": "#000000",
+      "editor.foreground": "#F8F8F2",
+      "editor.lineHighlightBackground": "#44475A",
+      "editorLineNumber.foreground": "#6272A4",
+      "editorLineNumber.activeForeground": "#F8F8F2",
+    },
+  });
+  monaco.editor.setTheme("custom-dark");
+
+  // Style container (no border, no radius)
+  const container = editor.getContainerDomNode();
+  container.style.borderRadius = "";
+  container.style.overflow = "hidden";
+  container.style.border = "";
+}
 
 export interface NewMobileProps {
   username: string
@@ -33,13 +96,15 @@ export default function New({ username, initialContent }: NewMobileProps) {
     return true
   })
 
-  // 🔥 Ref for the AI input field
+  // AI state
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+
   const aiInputRef = useRef<HTMLInputElement>(null)
 
-  // 🔥 Auto-focus when the input bar becomes visible (including initial load)
+  // Auto-focus when input bar becomes visible
   useEffect(() => {
     if (inputBarVisible) {
-      // Small delay to ensure DOM is fully rendered
       const timer = setTimeout(() => {
         aiInputRef.current?.focus()
       }, 100)
@@ -228,6 +293,51 @@ ${savedData}
     }
   }
 
+  // AI Generation Handler
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error("Please enter a prompt for AI assistance", { position: "top-center" })
+      return
+    }
+
+    setIsGenerating(true)
+
+    try {
+      const currentCode = devMode ? draftHtml : draftData
+      const result = await generateCodeWithAI(currentCode, aiPrompt)
+
+      if (result.success && result.generatedCode) {
+        const cleanedCode = cleanGeneratedCode(result.generatedCode)
+
+        if (devMode) {
+          setDraftHtml(cleanedCode)
+          setSavedHtml(cleanedCode)
+        } else {
+          setDraftData(cleanedCode)
+          setSavedData(cleanedCode)
+        }
+
+        setAiPrompt("")
+        toast.success("Code updated with AI!", { description: "Your changes are ready.", position: "top-center" })
+        aiInputRef.current?.focus()
+      } else {
+        toast.error(result.error || "AI generation failed", { position: "top-center" })
+      }
+    } catch (error) {
+      console.error("AI generation error:", error)
+      toast.error("An unexpected error occurred", { position: "top-center" })
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleAIGenerate()
+    }
+  }
+
   if (isLoadingTemplate) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -239,9 +349,22 @@ ${savedData}
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
-      <nav className="flex-shrink-0  border-b border-slate-200/50 bg-white/80 py-2 px-12 backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.57' }}>
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.3);
+          border-radius: 10px;
+        }
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255,255,255,0.3) transparent;
+        }
+      `}</style>
+      <nav className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-2 px-12 backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.57' }}>
         <div className="mx-auto flex max-w-9xl items-center justify-between">
-          <div className="hidden items-center space-x-12  text-lg text-black md:flex">
+          <div className="hidden items-center space-x-12 text-lg text-black md:flex">
             <a href={`/dashboard/${username}`} className="transition hover:opacity-70">Dashboard</a>
             <a href={`/refunds/${username}`} className="transition hover:opacity-70">Refunds</a>
             <a href={`/templates/${username}`} className="transition hover:opacity-70">Templates</a>
@@ -249,46 +372,143 @@ ${savedData}
             <a href={`/pricing`} className="transition hover:opacity-70">Premium</a>
           </div>
           <div className="space-x-12">
-                        <a href={`/${username}`} target="_blank"
-        rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
-
-          <button onClick={handlePublish} className="bg-red-600 text-white px-9 py-2.5 rounded-xl text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
-            {isPublishing ? <Loader2 className="mr-2.5 h-6 w-6 animate-spin text-yellow-400" /> : <>Publish</>}
-          </button>
+            <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
+            <button onClick={handlePublish} className="bg-red-600 text-white px-9 py-2.5 rounded-xl text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
+              {isPublishing ? <Loader2 className="mr-2.5 h-6 w-6 animate-spin text-yellow-400" /> : <>Publish</>}
+            </button>
           </div>
         </div>
       </nav>
 
       <div className="flex-1 flex gap-3 p-4 min-h-0 overflow-hidden">
-        {/* PREVIEW COLUMN */}
+        {/* Preview Panel */}
         <div className="flex-[0.6] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
-          <div className="px-4 py-2 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-white/10 rounded-md p-0.5">
-                <button
-                  onClick={() => setViewMode('mobile')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition ${
-                    viewMode === 'mobile' ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white/80'
-                  }`}
-                >
-                  📱
-                </button>
-                <button
-                  onClick={() => setViewMode('desktop')}
-                  className={`px-3 py-1 text-xs font-medium rounded transition ${
-                    viewMode === 'desktop' ? 'bg-white/20 text-white' : 'text-white/60 hover:text-white/80'
-                  }`}
-                >
-                  💻
-                </button>
-              </div>
-              <button onClick={toggleFullscreen} className="text-stone-400 hover:text-white transition">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <div className="px-4 py-2 flex items-center justify-between gap-3">
+
+  {/* LEFT SIDE: toggle + fullscreen */}
+<div className="flex items-center gap-2">
+
+  {/* DEVICE TOGGLE GROUP */}
+  <div className="flex items-center bg-white/10 rounded-md p-0.5">
+
+    {/* MOBILE */}
+    <button
+      onClick={() => setViewMode('mobile')}
+      className={`p-2 rounded transition ${
+        viewMode === 'mobile'
+          ? 'bg-white/20 text-white'
+          : 'text-white/60 hover:text-white'
+      }`}
+    >
+      {/* Phone Icon */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="w-4 h-4"
+      >
+        <rect x="7" y="2" width="10" height="20" rx="2" />
+        <circle cx="12" cy="18" r="1" />
+      </svg>
+    </button>
+
+    {/* DESKTOP */}
+    <button
+      onClick={() => setViewMode('desktop')}
+      className={`p-2 rounded transition ${
+        viewMode === 'desktop'
+          ? 'bg-white/20 text-white'
+          : 'text-white/60 hover:text-white'
+      }`}
+    >
+      {/* Monitor Icon */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="w-4 h-4"
+      >
+        <rect x="3" y="4" width="18" height="12" rx="2" />
+        <path d="M8 20h8M12 16v4" />
+      </svg>
+    </button>
+  </div>
+
+  {/* FULLSCREEN BUTTON */}
+  <button
+    onClick={toggleFullscreen}
+    className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+  >
+    {/* Fullscreen Icon */}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      className="w-4 h-4"
+    >
+      <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
+    </svg>
+  </button>
+
+</div>
+
+  {/* RIGHT SIDE: AI BAR (flex-grow 🔥) */}
+  <div className="flex items-center gap-2 flex-1 justify-end">
+    {inputBarVisible ? (
+      <div className="flex items-center gap-2 w-full max-w-md">
+        
+        {/* EXPANDING INPUT */}
+        <div className="relative flex-1">
+          <input
+            ref={aiInputRef}
+            type="text"
+            placeholder="Ask AI to tailor the content..."
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            onKeyDown={handleKeyPress}
+            disabled={isGenerating}
+            className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
+          />
+
+          <button
+            onClick={handleAIGenerate}
+            disabled={isGenerating || !aiPrompt.trim()}
+            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
+          >
+            {isGenerating ? (
+              <Loader2 className="size-3.5 text-white animate-spin" />
+            ) : (
+              <SendIcon className="size-3.5 text-white" />
+            )}
+          </button>
+        </div>
+
+        {/* INLINE HIDE */}
+        <button
+          onClick={() => setInputBarVisible(false)}
+          className="text-xs text-white/70 hover:text-white whitespace-nowrap"
+        >
+          ✕
+        </button>
+      </div>
+    ) : (
+      <button
+        onClick={() => setInputBarVisible(true)}
+        className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
+      >
+        + Ask AI
+      </button>
+    )}
+  </div>
+</div>
+
+          {/* IFrame preview */}
           <div className="flex-1 overflow-auto custom-scrollbar flex items-center justify-center bg-black/40 p-2">
             <div
               className={`transition-all duration-300 ${
@@ -309,7 +529,7 @@ ${savedData}
           </div>
         </div>
 
-        {/* CODE EDITOR COLUMN */}
+        {/* Code Editor Panel with Monaco */}
         <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
           <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -329,60 +549,50 @@ ${savedData}
           </div>
 
           <div className="flex-1 min-h-0">
-            {devMode ? (
-              <textarea
-                value={draftHtml}
-                onChange={(e) => setDraftHtml(e.target.value)}
-                className="w-full h-full bg-transparent p-4 text-sm font-mono text-white/80 outline-none resize-none overflow-auto scrollbar-thin"
-                spellCheck="false"
-              />
-            ) : (
-              <textarea
-                value={draftData}
-                onChange={(e) => setDraftData(e.target.value)}
-                className="w-full h-full bg-transparent p-4 text-sm font-mono text-white/80 outline-none resize-none overflow-auto scrollbar-thin"
-                spellCheck="false"
-              />
-            )}
+            <MonacoEditor
+              height="100%"
+              language={devMode ? "html" : "javascript"}
+              value={devMode ? draftHtml : draftData}
+              onChange={(value) => {
+                if (devMode) setDraftHtml(value || "");
+                else setDraftData(value || "");
+              }}
+              theme="custom-dark"
+              onMount={handleEditorMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+                lineNumbers: "off",
+                autoClosingBrackets: "never",
+                autoClosingQuotes: "never",
+                matchBrackets: "never",
+                renderIndentGuides: false,
+                scrollBeyondLastLine: false,
+                renderLineHighlight: "none",
+                unicodeHighlight: {
+                  ambiguousCharacters: false,
+                  invisibleCharacters: false,
+                  nonBasicASCII: false
+                },
+                automaticLayout: true,
+                glyphMargin: false,
+                folding: false,
+                find: {
+                  addExtraSpaceOnTop: false,
+                  autoFindInSelection: 'never',
+                  seedSearchStringFromSelection: 'never',
+                },
+              } as any}
+            />
           </div>
 
           {hasUnsavedChanges && (
             <button
               onClick={handleSave}
-              className="absolute top-12 right-6  px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full  hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
+              className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
             >
               Save
-            </button>
-          )}
-
-          {/* AI INPUT BAR */}
-          {inputBarVisible && (
-            <div className="absolute bottom-4 left-4 right-4 z-30">
-              <div className="relative w-full">
-                <input
-                  ref={aiInputRef}  // 🔥 Attach ref for auto-focus
-                  type="text"
-                  placeholder="Ask AI to edit the content..."
-                  className="w-full rounded-full pr-12 pl-6 py-3 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md placeholder:text-white/60 focus:bg-black/60 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
-                />
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/20 hover:bg-white/40 transition">
-                  <SendIcon className="size-4 text-white" />
-                </button>
-              </div>
-              <button
-                onClick={() => setInputBarVisible(false)}
-                className="absolute -top-7 right-0 text-xs text-white/70 hover:text-white"
-              >
-                ✕ Hide
-              </button>
-            </div>
-          )}
-          {!inputBarVisible && (
-            <button
-              onClick={() => setInputBarVisible(true)}
-              className="absolute bottom-4 right-4 text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/20"
-            >
-              + Ask AI
             </button>
           )}
         </div>

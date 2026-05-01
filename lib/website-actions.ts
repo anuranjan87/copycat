@@ -12,115 +12,98 @@ export interface WebsiteContent {
 }
 
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+import { GoogleGenAI } from "@google/genai"
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_API_KEY!,
 })
 
 
 export async function generateCodeWithAI(currentCode: string, prompt: string) {
-   
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      stream: true,
-      messages: [
-        {
-          role: "system",
-          
-          content: `You are a helpful JavaScript content editing assistant. You will be given a JavaScript data object definition and a user request to modify it.
-Always return complete, valid JavaScript code.
+    const response = await ai.models.generateContent({
+    model: "gemini-3.1-pro-preview",
+      contents: `
+You are a helpful JavaScript content editing assistant.
 
-Do NOT change the variable name, object keys, or structure.
+Rules:
+- Always return complete valid JS
+- Do NOT change structure or keys
+- Only edit values
+- No explanations, only code
+- Keep image URLs unchanged
 
-Only modify the content values (strings, arrays, numbers, booleans) as requested by the user.
+Current code:
+${currentCode}
 
-Preserve the overall skeleton and hierarchy exactly as it is.
-
-Ensure all JavaScript syntax is valid (proper commas, brackets, and quotes).
-
-Do not add or remove properties unless explicitly asked.
-
-Do not include explanations or markdown formatting — return only the updated JavaScript code.
-
-The content represents website copy, so ensure the tone and style are appropriate for web presentation. You never chage image urls based on user prompt, keep them unchanged-strictly`,
-        },
-        {
-          role: "user",
-          content: `Current JavaScript data object code:\n${currentCode}\n\nUser request: ${prompt}\n\nPlease modify the JavaScript data object according to the user's request and return the complete JavaScript data object, also maintaig the word countsame as in current code. `,
-        },
-      ],
-      max_tokens: 4000,
-      temperature: 1,
+User request:
+${prompt}
+      `,
     })
 
-let generatedCode = '';
+    const generatedCode = response.text
+    
 
-for await (const chunk of completion) {
-  const content = chunk.choices[0]?.delta?.content;
-  if (content) {
-    generatedCode += content;
-  }
-}
     if (!generatedCode) {
-      throw new Error("No code generated from OpenAI")
+      throw new Error("No code generated from Gemini")
     }
+            console.log(generatedCode)
 
     return {
+
       success: true,
       generatedCode: generatedCode.trim(),
     }
-  } catch (error) {
-    console.error("Error generating code with AI:", error)
+  } catch (error: any) {
+    console.error("Gemini error:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to generate code with AI",
+      error: error.message || "Failed with Gemini",
     }
   }
 }
 
 export async function generateCodeWithAIBlank(currentCode: string, prompt: string) {
-
-  
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      stream: true,
-      messages: [
-        {
-          role: "system",
-          
-          content: `create code in html 5, generate stunning website in a single page, and always use tailwind css.Do not include explanations or markdown formatting — return only the updated, do not have any action button or contact section, use this url for image urls - https://picsum.photos/720/720?random=12, where random=12 has 12 number as random generated number, if thres are three pictures in the out put please have three different random numbers in the url and 720/720 is the dimention of the image in the url,`,
-        },
-        {
-          role: "user",
-          content: `Current code:\n${currentCode}\n\nUser request: ${prompt}\n\n, if ${currentCode} is empty, generate new code, otherwise Please modify it the user's request and return the complete code `,
-        },
-      ],
-      max_tokens: 4000,
-      temperature: 1,
+    const response = await ai.models.generateContent({
+model: "gemini-1.5-flash",
+contents: `
+Create a stunning single-page HTML5 website using Tailwind CSS.
+
+Rules:
+- No explanations
+- No markdown
+- No contact section or buttons
+- Use images like:
+  https://picsum.photos/720/720?random=1
+- Use different random numbers for multiple images
+
+Current code:
+${currentCode}
+
+User request:
+${prompt}
+
+If current code is empty → create new.
+Otherwise → modify it.
+      `,
     })
 
-let generatedCode = '';
+    const generatedCode = response.text
 
-for await (const chunk of completion) {
-  const content = chunk.choices[0]?.delta?.content;
-  if (content) {
-    generatedCode += content;
-  }
-}
     if (!generatedCode) {
-      throw new Error("No code generated from OpenAI")
+      throw new Error("No code generated from Gemini")
     }
 
     return {
       success: true,
       generatedCode: generatedCode.trim(),
     }
-  } catch (error) {
-    console.error("Error generating code with AI:", error)
+  } catch (error: any) {
+    console.error("Gemini error:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to generate code with AI",
+      error: error.message || "Failed with Gemini",
     }
   }
 }
