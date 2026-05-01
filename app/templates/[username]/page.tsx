@@ -7,105 +7,129 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAllWebsiteTemplates } from "@/lib/website-actions";
 import mat from "@/asset/mat.gif";
+import Nav from "@/components/nav";
+
 
 interface PageProps {
   params: Promise<{ username: string }>;
 }
-
-// Template metadata (visual info only)
 const templatesMeta = [
   {
     id: "1",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/MDczMjE0NTNhYWVkN2Q0ODAyZWUxY2Q4YjQxMzY4MjI.jpg-RtJL8JHAO7YC1XcO6N0JhCHjpTWhNC.jpeg",
-    title: "Blank Canvas",
-    description: "Your HTML5 sandbox – tinker with code or generate a full website with our AI",
-    mood: "experimental / free",
+    localImage: "/1.png",
+    title: "Light House",
+    description: "A tiny spark of yellow warmth that guide the eye with quiet confidence",
+    mood: "experimental / landing page",
   },
   {
     id: "2",
-    imageSrc:
-      "https://i.postimg.cc/RVJmVNHh/MDcz-Mj-E0-NTNh-YWVk-N2-Q0-ODAy-ZWUx-Y2-Q4-Yj-Qx-Mz-Y4-Mj-I.jpg",
+    localImage: "/2.png",
     title: "Silent Ink",
-    description: "Calligraphic, minimal, white background, like an elegant business card",
-    mood: "quiet / refined",
+    description: "Refined minimal strokes that begin pixels dance for you without raising their voice",
+    mood: "quiet / sass marketing",
   },
   {
     id: "3",
-    imageSrc: "https://49iw5aq3b5e3nyxk.public.blob.vercel-storage.com/11234",
-    title: "Peekaboo",
-    description: "Ultra-low content, stylish link-in-bio. Open, explore… or don’t",
-    mood: "mysterious / subtle",
+    localImage: "/4.png",
+    title: "Darjeeling",
+    description: "The interface is waiting for a command that you have not given yet",
+    mood: "bold / blog",
   },
+  
   {
     id: "4",
-    imageSrc: "https://49iw5aq3b5e3nyxk.public.blob.vercel-storage.com/heloaos",
-    title: "Kenny?",
-    description: "Full of personality, multi-section with 2D animations for B2C brands",
-    mood: "playful / bold",
+    localImage: "/10.png",
+    title: "Holo Glow",
+    description: "Pure visual candy that somehow feels both childish and dangerously sophisticated",
+    mood: "futuristic / vibrant",
   },
   {
     id: "5",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-uSx6JzCKD5Kmmg9IDbAnNl7OHnAk8b.png",
+    localImage: "/5.png",
     title: "Stokebury",
-    description: "Ultra-professional layout, image-driven sections. For agencies and solo creators",
-    mood: "corporate / sharp",
+    description: "Unapologetically raw layouts that somehow still feel perfectly composed",
+    mood: "sharp / agencies & creators",
   },
   {
     id: "6",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
-    title: "Slot-Machine",
-    description: "3D scrolling animation that shouts out for business—one word at a time",
-    mood: "risky / electric",
+    localImage: "/3.png",
+    title: "SlotMachine",
+    description: "Playful motion that pulls you in and refuses to let you look away",
+    mood: "risky / founder vibe",
   },
   {
     id: "7",
-    imageSrc: "https://49iw5aq3b5e3nyxk.public.blob.vercel-storage.com/heloaos",
-    title: "Kenny?",
-    description: "Full of personality, multi-section with 2D animations for B2C brands",
-    mood: "playful / bold",
+    localImage: "/6.png",
+    title: "Peekaboo",
+    description: "When whisper meets white space rules of design is rushing through your brain",
+    mood: "subtle / company website",
   },
   {
     id: "8",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-uSx6JzCKD5Kmmg9IDbAnNl7OHnAk8b.png",
-    title: "Stokebury",
-    description: "Ultra-professional layout, image-driven sections. For agencies and solo creators",
-    mood: "corporate / sharp",
+    localImage: "/13.jpg",
+    title: "Pixel Perfect",
+    description: "Blocky little worlds that trigger pure unexpected joy with every section",
+    mood: "playful / retro",
   },
+  
   {
     id: "9",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
-    title: "Slot-Machine",
-    description: "3D scrolling animation that shouts out for business—one word at a time",
-    mood: "risky / electric",
+    localImage: "/14.jpg",
+    title: "Dark Luxe",
+    description: "Mountain vibe that makes you feel like you just discovered hidden luxury",
+    mood: "luxury / premium",
   },
-  {
+   {
     id: "10",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
+    localImage: "/7.png",
     title: "Narrative Blocks",
-    description: "Two-column alternating sections that create a storytelling ",
+    description: "Rhythm of sections that unfold like a story you didn’t know you needed",
     mood: "balanced / intentional",
   },
+  
   {
     id: "11",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
-    title: "GlitchStory Mode",
-    description: "Two-column alternating sections that feel like a story breaking and reshaping based on player moves",
-    mood: "immersive / progressive",
+    localImage: "/8.png",
+    title: "Glitch Story ",
+    description: "Something feels slightly off… in the most deliciously addictive way",
+    mood: "immersive / landing page",
   },
+
   {
     id: "12",
-    imageSrc:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Artboard%201-79YVrd7eG22eykmzjTZyAq7YKcuug3.png",
-    title: "GlitchStory Mode",
-    description: "Two-column alternating sections that feel like a story breaking and reshaping based on player moves",
-    mood: "immersive / progressive",
+    localImage: "/9.png",
+    title: "Thrift Mode",
+    description: "Simple surfaces hiding a surprising depth that keeps you scrolling",
+    mood: "bold / porfolio",
+  },
+ {
+    id: "13",
+    localImage: "/11.png",
+    title: "Retro VHS",
+    description: "Warm distortion and analog soul that makes your brain light up with nostalgia",
+    mood: "retro / nostalgic",
+  },
+   {
+    id: "14",
+    localImage: "/12.png",
+    title: "Zen Garden",
+    description: "So calm and balanced it quietly resets your nervous system",
+    mood: "calm / nature",
+  },
+ 
+  {
+    id: "15",
+    localImage: "/15.jpg",
+    title: "Cyber Pulse",
+    description: "Neon energy that hits different — suddenly you can’t stop smiling",
+    mood: "cyberpunk / energetic",
+  },
+  {
+    id: "16",
+    localImage: "/16.jpg",
+    title: "Minimal Mono",
+    description: "So clean and sharp it feels illegal how good it makes ordinary content look",
+    mood: "minimal / clean",
   },
 ];
 
@@ -158,6 +182,24 @@ export default function Page({ params }: PageProps) {
 
   return (
     <div className="bg-black text-white min-h-screen overflow-x-hidden">
+      {/* Add custom fonts */}
+      <style>
+        {`
+          @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap');
+          @font-face {
+            font-family: 'Roxborough CF Thin';
+            src: url('https://db.onlinewebfonts.com/c/68b898f6044bbee439423445076f3168?family=Roxborough+CF+Thin');
+            
+          }
+          .rox {
+            font-family: 'Roxborough CF Thin', serif;
+          }
+          body {
+            font-family: 'Montserrat', sans-serif;
+          }
+        `}
+      </style>
+
       {/* Loading Overlay while navigating */}
       {isNavigating && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
@@ -171,32 +213,12 @@ export default function Page({ params }: PageProps) {
         </div>
       )}
 
-      <div className="flex">
-        {/* Left Sidebar – fixed icons */}
-        <aside className="w-14 p-3 flex flex-col items-center gap-8 mt-9 sticky top-0 h-screen">
-          <a
-            href={`/${username}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-neutral-500 hover:text-red-500 transition"
-          >
-            <Globe2Icon size={20} />
-          </a>
-          <a
-            href={`/dashboard/${username}`}
-            className="text-neutral-500 hover:text-red-500 transition"
-          >
-            <LayoutDashboard size={20} />
-          </a>
-          <a href={`/templates/${username}`} className="text-neutral-500 hover:text-red-500 transition">
-            <Origami size={20} />
-          </a>
-        </aside>
+<Nav username={username} />
 
         {/* Main Content */}
-        <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mx-auto">
+        <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mt-12 mx-auto">
           {/* Hero Section */}
-          <section className="h-[70vh] flex flex-col items-center justify-center text-center">
+          <section className=" flex flex-col items-center justify-center text-center">
             <div className="mb-4 w-12 h-[2px] bg-red-600 mx-auto" />
             <h1 className="text-5xl md:text-6xl font-light tracking-tight">
               Not a website builder.<br />
@@ -212,35 +234,30 @@ export default function Page({ params }: PageProps) {
           </section>
 
           {/* Templates Grid – each card navigates to editor with templateId */}
-          <section className="pb-32">
-            <div className="grid gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          <section className="pb-32 mt-4">
+            <div className="grid gap-11 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {templatesMeta.map((template) => {
                 const isLoading = isNavigating && selectedTemplateId === template.id;
                 return (
                   <div
                     key={template.id}
                     onClick={() => handleSelectTemplate(template.id)}
-                    className="group relative bg-black/40 border border-white/10 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/5"
+                    className="bg-gray-900 p-4 rounded-3xl shadow-lg cursor-pointer transition-all duration-300 hover:scale-105"
                   >
-                    {/* Image area */}
-                    <div className="relative h-50 w-full overflow-hidden bg-neutral-900">
-                      <Image
-                        src={template.imageSrc}
+                    {/* Image area - using standard img to match HTML exactly */}
+                    <div className="relative w-full overflow-hidden rounded-xl">
+                      <img
+                        src={template.localImage}
                         alt={template.title}
-                        fill
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="rounded-2xl w-full h-auto object-cover"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                     </div>
 
                     {/* Card content */}
-                    <div className="p-5">
-                      <div className="text-[10px] tracking-[0.3em] text-white/30 mb-2">
-                        {template.id.padStart(2, "0")}
-                      </div>
-                      <div className="text-xl font-medium mb-1">{template.title}</div>
-                      <div className="text-[11px] text-white/40 mb-3">{template.mood}</div>
-                      <p className="text-xs text-white/50 line-clamp-2">{template.description}</p>
+                    <div className="mt-4">
+                      <h2 className="rox  text-white text-xl mt-[1rem] mb-[0.4rem]">{template.title}</h2>
+                      <p className=" text-gray-400    text-sm mb-[1rem] leading-[1.2rem] tracking-[.02rem]">{template.description}</p>
+                      <p className="text-gray-100/50 tracking-[.07rem]  font-thin text-xs ">{template.mood}</p>
 
                       {/* Loading indicator inside card */}
                       {isLoading && (
@@ -250,9 +267,6 @@ export default function Page({ params }: PageProps) {
                         </div>
                       )}
                     </div>
-
-                    {/* Subtle red line on hover */}
-                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-red-600 scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
                   </div>
                 );
               })}
@@ -265,6 +279,5 @@ export default function Page({ params }: PageProps) {
           </footer>
         </main>
       </div>
-    </div>
   );
 }

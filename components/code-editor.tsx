@@ -512,41 +512,33 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
 </AnimatePresence>
 
       </div>
-// Panel starts here
-      <div className="-mt-2  flex h-[calc(100vh-120px)] gap-3">
-        {/* Preview Panel */}
-        <div className="flex-1 bg-[#030712] border-t border-gray-800 rounded-t-lg">
+      {/* Panel starts here - 60% preview, 40% code editor */}
+      <div className="-mt-2 flex h-[calc(100vh-250px)] gap-3">
+        {/* Preview Panel - 60% width */}
+        <div className="flex-[0.6] min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
           <div className="px-4 py-1 flex justify-between">
             <h2 className="font-bold text-sm tracking-widest text-yellow-400">Preview</h2>
             <div className="flex items-center gap-1">
-             
-
-              
-      <button onClick={() => setIsOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center  align-middle select-none font-sans font-medium text-center transition-all ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm  px-2 shadow-sm bg-transparent relative text-stone-400 hover:bg-stone-700  duration-150  rounded-md  hover:shadow-none antialiased mr-3">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 mr-2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-        Insert More
-      </button>
-    
-
-               <button onClick={() => setIsFullscreenOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md  px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
-        <span>Maximize</span>
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-        </svg>
-      </button>
-
-            
-             
+              <button onClick={() => setIsOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center align-middle select-none font-sans font-medium text-center transition-all ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm px-2 shadow-sm bg-transparent relative text-stone-400 hover:bg-stone-700 duration-150 rounded-md hover:shadow-none antialiased mr-3">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 mr-2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Insert More
+              </button>
+              <button onClick={() => setIsFullscreenOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
+                <span>Maximize</span>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+              </button>
             </div>
           </div>
-          <div className="h-full overflow-auto custom-scrollbar ">
+          <div className="h-full overflow-auto custom-scrollbar">
             <iframe
               ref={iframeRef}
               srcDoc={debouncedContent}
               onLoad={handleIframeLoad}
-              className="w-full h-full  rounded-lg"
+              className="w-full h-full rounded-lg"
               title="Live Preview"
               sandbox="allow-scripts allow-same-origin"
               style={{ zoom: .6 }}
@@ -554,8 +546,8 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
           </div>
         </div>
 
-        {/* Code Editor Panel */}
-        <div className="flex-1 h-full relative">
+        {/* Code Editor Panel - 40% width */}
+        <div className="flex-[0.4] min-w-0 h-full relative">
           <div className="border-t border-gray-800 rounded-t-lg px-4 py-1 bg-[#030712]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -582,10 +574,8 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
                   </div>
                 )}
               </div>
-              <div className="items-center flex  -mr-1">
-
-
-               <Label htmlFor="nerdmode" className="text-xs mr-2 font-sans font-medium text-serif text-stone-400">
+              <div className="items-center flex -mr-1">
+                <Label htmlFor="nerdmode" className="text-xs mr-2 font-sans font-medium text-serif text-stone-400">
                   Nerd Mode
                 </Label>
                 <Switch
@@ -600,25 +590,22 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
                   style={{ zoom: 0.5 }}
                   className="mr-4 data-[state=unchecked]:bg-gray-600 data-[state=checked]:bg-yellow-600"
                 />
-                
-
-
-                 <button onClick={() => setIsCodeEditorMaximized(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md  px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
-        <span>Maximize</span>
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-        </svg>
-      </button>
+                <button onClick={() => setIsCodeEditorMaximized(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
+                  <span>Maximize</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
 
           <div>
             <MonacoEditor
-              height="calc(100vh - 120px)"
+              height="calc(100vh - 90px)"
               language={currentLanguage}
               value={currentCode}
-              onChange={(value) => currentSetCode(value || "")} // Fixed parameter usage
+              onChange={(value) => currentSetCode(value || "")}
               theme="custom-dark"
               onMount={(editor, monaco) => {
                 handleEditorMount(editor, monaco)
@@ -639,38 +626,32 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
             />
           </div>
 
-         {hasUnsavedChanges && (
-  <button
-    onClick={handleSave}
-    className="absolute bottom-6 right-6
-               min-w-[140px] px-6 py-3
-               bg-white/10 
-               backdrop-blur-xl 
-               border border-white/30 
-               hover:bg-white/20 
-               text-white 
-               text-sm font-[system-ui] font-semibold tracking-wide
-               rounded-2xl
-               shadow-lg
-               transition-all duration-300 
-               z-10 
-               flex items-center justify-center
-               hover:scale-105 hover:shadow-2xl
-                overflow-hidden"
-    title="Save changes to update preview"
-  >
-    <span className="relative z-10">Save</span>
-    {/* Glow effect */}
-    <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-green-400/30 to-emerald-500/30 opacity-0 hover:opacity-100 transition-opacity duration-500" />
-  </button>
-)}
-
+          {hasUnsavedChanges && (
+            <button
+              onClick={handleSave}
+              className="absolute bottom-6 right-6
+                         min-w-[140px] px-6 py-3
+                         bg-white/10 
+                         backdrop-blur-xl 
+                         border border-white/30 
+                         hover:bg-white/20 
+                         text-white 
+                         text-sm font-[system-ui] font-semibold tracking-wide
+                         rounded-2xl
+                         shadow-lg
+                         transition-all duration-300 
+                         z-10 
+                         flex items-center justify-center
+                         hover:scale-105 hover:shadow-2xl
+                         overflow-hidden"
+              title="Save changes to update preview"
+            >
+              <span className="relative z-10">Save</span>
+              <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-green-400/30 to-emerald-500/30 opacity-0 hover:opacity-100 transition-opacity duration-500" />
+            </button>
+          )}
         </div>
       </div>
-
-
-
-
     </div>
   )
 }

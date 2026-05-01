@@ -1,6 +1,4 @@
 // app/page.jsx
-import Nav from "@/components/nav";
-
 export default function Page() {
   const htmlContent = `<!doctype html>
 <html lang="en">
@@ -21,6 +19,25 @@ export default function Page() {
 
 <body class="bg-black text-white">
 
+<nav class="fixed top-0 right-0 left-0 z-50 border-b border-white/10 bg-black/40 py-4 px-6 md:px-16 backdrop-blur-xl tracking-[0.08em]">
+    <div class="mx-auto flex max-w-7xl items-center justify-between">
+      <div class="flex items-center">
+        <div class="mr-3 h-6 w-[2px] bg-red-600"></div>
+        <span class="text-xs font-extrabold tracking-[0.2em] uppercase">7WINKS</span>
+      </div>
+
+      <div class="hidden items-center space-x-12 text-[11px] uppercase tracking-widest font-medium md:flex">
+        <a href="#" class="transition hover:text-white text-white/50">Dashboard</a> 
+        <a href="#" class="transition hover:text-white text-white/50">Templates</a>
+        <a href="#" class="transition hover:text-white text-white/50">Service Tiers</a>
+        <a href="#" class="transition hover:text-white text-white/50">Settings</a>
+      </div>
+
+      <button class="bg-white text-black px-8 py-2 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all">
+        Publish
+      </button>
+    </div>
+  </nav>
 
 <!-- ================= HERO ================= -->
 <section class="max-w-5xl mx-auto px-6 pt-28 pb-20">
@@ -218,22 +235,25 @@ export default function Page() {
   </div>
 
 
-
+<div class="flex justify-center mt-10">
+    <img 
+      src="https://i.postimg.cc/ydxdntYX/mat.gif" 
+      alt="footer visual"
+      class="w-43 opacity-90 hover:opacity-100 transition duration-500"
+    />
+  </div>
 </footer>
 </body>
 </html>`;
 
   return (
-    <>
-      <Nav />
-      <div className="relative w-full h-screen">
-        <iframe
-          srcDoc={htmlContent}
-          title="7Winks Preview"
-          className="absolute top-0 left-0 w-full h-full border-0"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
-        />
-      </div>
-    </>
+    <div className="relative w-full h-screen">
+      <iframe
+        srcDoc={htmlContent}
+        title="7Winks Preview"
+        className="absolute top-0 left-0 w-full h-full border-0"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
+      />
+    </div>
   );
 }
