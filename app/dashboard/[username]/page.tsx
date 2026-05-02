@@ -90,7 +90,7 @@ function StatCard({
   return (
     <div
       style={{ animationDelay: `${delay}ms` }}
-      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl p-6 transition-all duration-500 hover:scale-[1.02] hover:border-white/20 hover:bg-black/60 animate-[slideUp_0.6s_ease-out_forwards] opacity-0"
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl p-6 transition-all duration-500 hover:scale-[1.02] hover:border-white/20 hover:bg-black/60 animate-[slideUp_0.6s_ease-out_forwards] opacity-0 shadow-[0_8px_20px_rgba(255,255,255,0.2),0_20px_60px_rgba(255,255,255,0.08)]"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       <div className="relative z-10">
@@ -319,7 +319,7 @@ export default function DashboardPage({ params }: { params: Promise<{ username: 
           </div>
 
           {/* Chart Card */}
-          <div className="group relative overflow-hidden rounded-3xl border border-white/20 bg-black/40 backdrop-blur-xl p-8 transition-all duration-500 hover:border-white/20 animate-[slideUp_0.6s_ease-out_0.3s_forwards] opacity-0">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/20 bg-black/40 backdrop-blur-xl p-8 transition-all duration-500 hover:border-white/20 animate-[slideUp_0.6s_ease-out_0.3s_forwards] opacity-0 shadow-[0_8px_20px_rgba(255,255,255,0.2),0_20px_60px_rgba(255,255,255,0.08)]">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <div className="relative z-10 space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
@@ -410,7 +410,7 @@ export default function DashboardPage({ params }: { params: Promise<{ username: 
           </div>
 
           {/* Enquiries Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl p-8 transition-all duration-500 hover:border-white/20 animate-[slideUp_0.6s_ease-out_0.6s_forwards] opacity-0">
+          <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl p-8 transition-all duration-500 hover:border-white/20 animate-[slideUp_0.6s_ease-out_0.6s_forwards] opacity-0 shadow-[0_8px_20px_rgba(255,255,255,0.2),0_20px_60px_rgba(255,255,255,0.08)]">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <div className="relative z-10">
               {!selectedEnquiry ? (

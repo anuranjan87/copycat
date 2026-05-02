@@ -10,9 +10,17 @@ import dynamic from 'next/dynamic'
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
-  let cleaned = raw.replace(/^```[\w]*\n/, '').replace(/\n```$/, '');
-  cleaned = cleaned.replace(/^```[\w]*/, '').replace(/```$/, '');
-  return cleaned.trim();
+  let cleaned = raw
+    .replace(/^```[\w]*\n?/, '')
+    .replace(/```$/, '')
+    .trim();
+
+  // Remove wrapping object { ... }
+  if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  return cleaned;
 }
 
 // Dynamically import Monaco Editor (no SSR)
@@ -99,6 +107,43 @@ export default function New({ username, initialContent }: NewMobileProps) {
   // AI state
   const [aiPrompt, setAiPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+
+  // Fun jokes and interesting facts to show during AI loading
+  const loadingMessages = [
+    "The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim",
+    "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new  — Steve Jobs",
+    "Give them quality. That is the best kind of advertising — Milton Hershey",
+    "Fact: Professors use the red pen to mark our mistakes. Life uses the mistakes to mark our path",
+    "Fact: The world's first website is still online at info.cern.ch (created in 1991)",
+    "The ultimate revenge isn't a confrontation; it is building a reality so successful that the people who doubted you wouldn't even recognize the person you have become",
+    "Write to one person, not a million — 'Classic Copywriting Maxim'",
+    "How many programmers does it take to change a light bulb? None, that's a hardware problem",
+    "The first hard drive weighed over a ton and stored only 5MB of data",
+    "People do not want to buy a quarter inch drill, they want a quarterinch hole — Theodore Levitt"
+  ];
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+
+  // Rotate message every 3 seconds while generating
+  useEffect(() => {
+    if (!isGenerating) return;
+   const interval = setInterval(() => {
+  setCurrentMessageIndex((prev) => {
+    let newIndex;
+    do {
+      newIndex = Math.floor(Math.random() * loadingMessages.length);
+    } while (newIndex === prev && loadingMessages.length > 1);
+    return newIndex;
+  });
+}, 6000);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  // Reset message index when generation starts
+  useEffect(() => {
+    if (isGenerating) {
+      setCurrentMessageIndex(0);
+    }
+  }, [isGenerating]);
 
   const aiInputRef = useRef<HTMLInputElement>(null)
 
@@ -362,7 +407,7 @@ ${savedData}
           scrollbar-color: rgba(255,255,255,0.3) transparent;
         }
       `}</style>
-      <nav className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-2 px-12 backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.57' }}>
+      <nav className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-1 px-[8rem] backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.58' }}>
         <div className="mx-auto flex max-w-9xl items-center justify-between">
           <div className="hidden items-center space-x-12 text-lg text-black md:flex">
             <a href={`/dashboard/${username}`} className="transition hover:opacity-70">Dashboard</a>
@@ -373,146 +418,146 @@ ${savedData}
           </div>
           <div className="space-x-12">
             <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
-            <button onClick={handlePublish} className="bg-red-600 text-white px-9 py-2.5 rounded-xl text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
-              {isPublishing ? <Loader2 className="mr-2.5 h-6 w-6 animate-spin text-yellow-400" /> : <>Publish</>}
+            <button onClick={handlePublish} className="bg-red-600 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
+              {isPublishing ? <Loader2 className=" h-6 w-6 mr-4 animate-spin text-yellow-400" /> : <>Publish</>}
             </button>
           </div>
         </div>
       </nav>
 
-      <div className="flex-1 flex gap-3 p-4 min-h-0 overflow-hidden">
+      <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
         {/* Preview Panel */}
-        <div className="flex-[0.6] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
+        <div className="flex-[0.59] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
           <div className="px-4 py-2 flex items-center justify-between gap-3">
 
-  {/* LEFT SIDE: toggle + fullscreen */}
-<div className="flex items-center gap-2">
+            {/* LEFT SIDE: toggle + fullscreen */}
+            <div className="flex items-center gap-5">
 
-  {/* DEVICE TOGGLE GROUP */}
-  <div className="flex items-center bg-white/10 rounded-md p-0.5">
+              {/* DEVICE TOGGLE GROUP */}
+              <div className="flex items-center bg-white/10 rounded-md p-0.5">
 
-    {/* MOBILE */}
-    <button
-      onClick={() => setViewMode('mobile')}
-      className={`p-2 rounded transition ${
-        viewMode === 'mobile'
-          ? 'bg-white/20 text-white'
-          : 'text-white/60 hover:text-white'
-      }`}
-    >
-      {/* Phone Icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        className="w-4 h-4"
-      >
-        <rect x="7" y="2" width="10" height="20" rx="2" />
-        <circle cx="12" cy="18" r="1" />
-      </svg>
-    </button>
+                {/* MOBILE */}
+                <button
+                  onClick={() => setViewMode('mobile')}
+                  className={`p-2 rounded transition ${
+                    viewMode === 'mobile'
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  {/* Phone Icon */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="w-4 h-4"
+                  >
+                    <rect x="7" y="2" width="10" height="20" rx="2" />
+                    <circle cx="12" cy="18" r="1" />
+                  </svg>
+                </button>
 
-    {/* DESKTOP */}
-    <button
-      onClick={() => setViewMode('desktop')}
-      className={`p-2 rounded transition ${
-        viewMode === 'desktop'
-          ? 'bg-white/20 text-white'
-          : 'text-white/60 hover:text-white'
-      }`}
-    >
-      {/* Monitor Icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        className="w-4 h-4"
-      >
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 20h8M12 16v4" />
-      </svg>
-    </button>
-  </div>
+                {/* DESKTOP */}
+                <button
+                  onClick={() => setViewMode('desktop')}
+                  className={`p-2 rounded transition ${
+                    viewMode === 'desktop'
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  {/* Monitor Icon */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="w-4 h-4"
+                  >
+                    <rect x="3" y="4" width="18" height="12" rx="2" />
+                    <path d="M8 20h8M12 16v4" />
+                  </svg>
+                </button>
+              </div>
 
-  {/* FULLSCREEN BUTTON */}
-  <button
-    onClick={toggleFullscreen}
-    className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
-  >
-    {/* Fullscreen Icon */}
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      className="w-4 h-4"
-    >
-      <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
-    </svg>
-  </button>
+              {/* FULLSCREEN BUTTON */}
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+              >
+                {/* Fullscreen Icon */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="w-4 h-4"
+                >
+                  <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
+                </svg>
+              </button>
 
-</div>
+            </div>
 
-  {/* RIGHT SIDE: AI BAR (flex-grow 🔥) */}
-  <div className="flex items-center gap-2 flex-1 justify-end">
-    {inputBarVisible ? (
-      <div className="flex items-center gap-2 w-full max-w-md">
-        
-        {/* EXPANDING INPUT */}
-        <div className="relative flex-1">
-          <input
-            ref={aiInputRef}
-            type="text"
-            placeholder="Ask AI to tailor the content..."
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            onKeyDown={handleKeyPress}
-            disabled={isGenerating}
-            className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
-          />
+            {/* RIGHT SIDE: AI BAR (flex-grow 🔥) */}
+            <div className="flex items-center  flex-1 justify-end">
+              {inputBarVisible ? (
+                <div className="flex items-center gap-2 w-full max-w-md">
+                  
+                  {/* EXPANDING INPUT */}
+                  <div className="relative flex-1">
+                    <input
+                      ref={aiInputRef}
+                      type="text"
+                      placeholder="Ask AI to tailor the content..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      disabled={isGenerating}
+                      className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
+                    />
 
-          <button
-            onClick={handleAIGenerate}
-            disabled={isGenerating || !aiPrompt.trim()}
-            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
-          >
-            {isGenerating ? (
-              <Loader2 className="size-3.5 text-white animate-spin" />
-            ) : (
-              <SendIcon className="size-3.5 text-white" />
-            )}
-          </button>
-        </div>
+                    <button
+                      onClick={handleAIGenerate}
+                      disabled={isGenerating || !aiPrompt.trim()}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
+                    >
+                      {isGenerating ? (
+                        <Loader2 className="size-3.5 text-white animate-spin" />
+                      ) : (
+                        <SendIcon className="size-3.5 text-white" />
+                      )}
+                    </button>
+                  </div>
 
-        {/* INLINE HIDE */}
-        <button
-          onClick={() => setInputBarVisible(false)}
-          className="text-xs text-white/70 hover:text-white whitespace-nowrap"
-        >
-          ✕
-        </button>
-      </div>
-    ) : (
-      <button
-        onClick={() => setInputBarVisible(true)}
-        className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
-      >
-        + Ask AI
-      </button>
-    )}
-  </div>
-</div>
+                  {/* INLINE HIDE */}
+                  <button
+                    onClick={() => setInputBarVisible(false)}
+                    className="text-xs text-white/70 hover:text-white whitespace-nowrap"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setInputBarVisible(true)}
+                  className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
+                >
+                  + Ask AI
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* IFrame preview */}
-          <div className="flex-1 overflow-auto custom-scrollbar flex items-center justify-center bg-black/40 p-2">
+          <div className="flex-1  overflow-auto  flex items-center justify-center bg-black/40 p-7">
             <div
               className={`transition-all duration-300 ${
-                viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[280px]'
+                viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[480px]'
               }`}
               style={{ zoom: 0.6 }}
             >
@@ -520,16 +565,16 @@ ${savedData}
                 ref={iframeRef}
                 srcDoc={finalCode}
                 onLoad={handleIframeLoad}
-                className="w-full h-full rounded-lg border-0"
+                className="w-full h-full rounded-lg border-0 "
                 title="Live Preview"
                 sandbox="allow-scripts allow-same-origin"
-                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/16', background: 'white' }}
+                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'white' }}
               />
             </div>
           </div>
         </div>
 
-        {/* Code Editor Panel with Monaco */}
+        {/* Code Editor Panel with Monaco - with AI loading overlay */}
         <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
           <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -538,9 +583,9 @@ ${savedData}
                 <span className="w-2 h-2 bg-green-400 rounded-full"></span>
                 <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
               </div>
-              <span className="text-xs text-gray-400 font-mono">{devMode ? 'RAW HTML' : 'DATA.JS'}</span>
+              <span className="text-xs ml-1 text-gray-400 font-mono">{devMode ? 'RAW HTML' : 'DATA.JS'}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="text-white/50 text-xs">Dev mode</span>
               <button onClick={() => setDevMode(!devMode)} className={`relative flex h-5 w-9 items-center rounded-sm transition-colors ${devMode ? 'bg-stone-500' : 'bg-gray-400'}`}>
                 <div className={`h-4 w-4 rounded-sm bg-white shadow transition-transform duration-300 ${devMode ? 'translate-x-full' : ''}`}/>
@@ -548,7 +593,8 @@ ${savedData}
             </div>
           </div>
 
-          <div className="flex-1 min-h-0">
+          {/* Relative container for overlay */}
+          <div className="flex-1 min-h-0 relative">
             <MonacoEditor
               height="100%"
               language={devMode ? "html" : "javascript"}
@@ -583,8 +629,20 @@ ${savedData}
                   autoFindInSelection: 'never',
                   seedSearchStringFromSelection: 'never',
                 },
+                readOnly: isGenerating,
               } as any}
             />
+
+            {/* AI Loading Overlay with Jokes/Facts */}
+            {isGenerating && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
+                <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
+                  <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
+                    {loadingMessages[currentMessageIndex]}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {hasUnsavedChanges && (

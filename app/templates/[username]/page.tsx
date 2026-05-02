@@ -18,35 +18,35 @@ const templatesMeta = [
     id: "1",
     localImage: "/1.png",
     title: "Light House",
-    description: "Warm colors like yellows oranges have long wavelengths, that makes someone to take action, something that pushes in",
-    mood: "experimental / landing page",
+    description: "Warm colors like yellows oranges have long wavelengths, that makes something that pushes in",
+    mood: "Landing page",
   },
   {
     id: "2",
     localImage: "/2.png",
     title: "Silent Ink",
     description: "Tons of empty space, minimalist like a quiet library, the silence is what makes you focus. makes user to think before they click.",
-    mood: "quiet / sass marketing",
+    mood: "Sass marketing",
   },
   {
     id: "3",
     localImage: "/4.png",
     title: "Darjeeling",
-    description: "Reveal the story step by step so the user doesn't panic. ensuring they actually stay long enough to fall in love with the product.",
-    mood: "bold / blog",
+    description: "Reveal the story step by step so the user doesn't panic. ensuring they stay long enough to fall in love with the product.",
+    mood: "Blog",
   },
   {
     id: "4",
     localImage: "/10.png",
     title: "Holo Glow",
-    description: "Spoon-feeding the information to hooked visitors without making them doing actual work. storytelling like those old school books",
+    description: "Spoon-feeding the information without making them doing actual work. storytelling like those old school books",
     mood: "futuristic / vibrant",
   },
   {
     id: "5",
     localImage: "/5.png",
     title: "Stokebury",
-    description: "Balances asymmetrical layouts with strong alignment rules, makes user hooked without ever making them feel lost in the madness.",
+    description: "Balances asymmetrical layouts with strong alignment rules, makes them hooked without ever making feel lost.",
     mood: "sharp / agencies & creators",
   },
   {
@@ -213,9 +213,9 @@ export default function Page({ params }: PageProps) {
         {/* Main Content */}
         <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mt-12 mx-auto">
           {/* Hero Section */}
-          <section className=" flex flex-col items-center justify-center text-center">
+          <section className=" flex flex-col items-center justify-center text-center mt-7">
             <div className="mb-4 w-12 h-[2px] bg-red-600 mx-auto" />
-            <h1 className="text-5xl md:text-6xl font-light tracking-tight">
+            <h1 className="text-5xl md:text-6xl mt-4 font-light tracking-tight">
               Not a website builder.<br />
               A starting point.
             </h1>
@@ -223,7 +223,7 @@ export default function Page({ params }: PageProps) {
               7Winks gives you structured templates designed to convert—so you spend less time
               arranging pixels, and more time building something that matters.
             </p>
-            <div className="mt-12 text-[10px] tracking-[0.3em] text-white/30">
+            <div className="mt-16 text-[10px] tracking-[0.3em] text-white/30">
               SELECT YOUR FOUNDATION ↓
             </div>
           </section>
@@ -237,7 +237,7 @@ export default function Page({ params }: PageProps) {
                   <div
                     key={template.id}
                     onClick={() => handleSelectTemplate(template.id)}
-                    className="bg-gray-900 p-4 rounded-3xl shadow-lg cursor-pointer transition-all duration-300 hover:scale-105"
+                    className="bg-gray-900/70 shadow-[0_8px_20px_rgba(255,255,255,0.2),0_20px_60px_rgba(255,255,255,0.08)] p-4 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-105"
                   >
                     {/* Image area - using standard img to match HTML exactly */}
                     <div className="relative w-full overflow-hidden rounded-xl">
@@ -252,7 +252,7 @@ export default function Page({ params }: PageProps) {
                     <div className="mt-4">
                       <h2 className="rox  text-white text-xl mt-[1rem] mb-[0.4rem]">{template.title}</h2>
                       <p className=" text-gray-400    text-sm mb-[1rem] leading-[1.2rem] tracking-[.02rem]">{template.description}</p>
-                      <p className="text-gray-100/50 tracking-[.07rem]  font-thin text-xs ">{template.mood}</p>
+                      <p className="text-gray-100/50 tracking-[.07rem]  font-thin italic text-xs ">{template.mood}</p>
 
                       {/* Loading indicator inside card */}
                       {isLoading && (
