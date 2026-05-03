@@ -1,53 +1,81 @@
-"use client"
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
-import { Loader2, Send, CheckCircle, AlertCircle, Maximize2, SquarePlus,Plus, Save } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { updateWebsiteContent, generateCodeWithAI, generateCodeWithAIBlank } from "@/lib/website-actions"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { insertList } from "@/lib/insertlist"
-import dynamic from "next/dynamic"
-import { motion, AnimatePresence } from "framer-motion"
-import { LoadingCircle, SendIcon } from '@/components/icons'
+'use client'
 
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { SendIcon, Loader2 } from 'lucide-react'
+import { updateWebsiteContent, generateCodeWithAIBlank, getTemplateById } from "@/lib/website-actions"
+import { useRouter } from "next/navigation";
+import { toast } from "sonner"
+import dynamic from 'next/dynamic'
+
+// Helper to strip markdown code fences
+function cleanGeneratedCode(raw: string): string {
+  let cleaned = raw
+    .replace(/^```[\w]*\n?/, '')
+    .replace(/```$/, '')
+    .trim();
+
+  // Remove wrapping object { ... }
+  if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  return cleaned;
+}
+
+// Dynamically import Monaco Editor (no SSR)
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="h-8 w-8 animate-spin" />
+    <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
+      <Loader2 className="h-6 w-6 animate-spin text-white" />
     </div>
   ),
 })
 
+// Custom theme + disable error diagnostics
 const handleEditorMount = (editor: any, monaco: any) => {
-  if (!monaco?.editor) return
+  // Disable semantic & syntax validation (red squiggles)
+  if (monaco.languages?.typescript?.javascriptDefaults) {
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    });
+  }
+  if (monaco.languages?.html?.htmlDefaults) {
+    monaco.languages.html.htmlDefaults.setOptions({
+      validate: false,
+    });
+  }
+
+  // Define custom dark theme
   monaco.editor.defineTheme("custom-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [
-      { token: "comment", foreground: "9CA3AF", fontStyle: "italic" }, // softer gray
+      { token: "comment", foreground: "FF79C6", fontStyle: "" },
       { token: "tag", foreground: "FF79C6" },
       { token: "delimiter.html", foreground: "f2ecec" },
       { token: "attribute.name", foreground: "f2ecec" },
       { token: "attribute.value", foreground: "6fcaf2" },
-      { token: "string", foreground: "E6C76D" }, // softer Apple-style yellow
+      { token: "string", foreground: "f2ecec" },
       { token: "text", foreground: "6fcaf2" },
     ],
     colors: {
-      "editor.background": "#242424",
+      "editor.background": "#000000",
       "editor.foreground": "#F8F8F2",
       "editor.lineHighlightBackground": "#44475A",
       "editorLineNumber.foreground": "#6272A4",
       "editorLineNumber.activeForeground": "#F8F8F2",
     },
-  })
-  monaco.editor.setTheme("custom-dark")
-  const container = editor.getContainerDomNode()
-  container.style.borderRadius = "0.50rem"
-  container.style.overflow = "hidden"
-  container.style.border = "1px solid #454545"
+  });
+  monaco.editor.setTheme("custom-dark");
+
+  // Style container (no border, no radius)
+  const container = editor.getContainerDomNode();
+  container.style.borderRadius = "";
+  container.style.overflow = "hidden";
+  container.style.border = "";
 }
 
 export interface CodeEditorProps {
@@ -60,118 +88,195 @@ export interface CodeEditorProps {
 }
 
 export function CodeEditor({ username, initialContent }: CodeEditorProps) {
-  const [codeHtml, setCodeHtml] = useState(initialContent.html)
-  const [codeScript, setCodescript] = useState(initialContent.script)
-  const [codeData, setCodedata] = useState(initialContent.data)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [savedContent, setSavedContent] = useState({
-    html: initialContent.html,
-    script: initialContent.script,
-    data: initialContent.data,
-  })
-  const [isManualEdit, setIsManualEdit] = useState(false)
-  const [nerdMode, setnerdMode] = useState(false)
-  const [activeTab, setActiveTab] = useState("data.js")
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [aiPrompt, setAiPrompt] = useState("")
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const templateId = searchParams.get('templateId');
+
+  const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [inputBarVisible, setInputBarVisible] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("inputBarVisible")
+      return stored !== null ? JSON.parse(stored) : true
+    }
+    return true
+  })
 
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [isOpen, setIsOpen] = useState(false)
-  const [selected, setSelected] = useState<number | null>(null)
-  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false)
-  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop")
-  const iframeRef = useRef<any>(null)
-  const [isRestoringScroll, setIsRestoringScroll] = useState(false)
-  const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
-  const [debouncedContent, setDebouncedContent] = useState(initialContent.html)
-  const [isCodeEditorMaximized, setIsCodeEditorMaximized] = useState(false)
+  // AI state
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  // Word wrap toggle (replaces devMode)
+  const [wordWrapEnabled, setWordWrapEnabled] = useState(false)
+
+  // Fun jokes and interesting facts to show during AI loading
+  const loadingMessages = [
+    "The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim",
+    "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new  — Steve Jobs",
+    "Give them quality. That is the best kind of advertising — Milton Hershey",
+    "Fact: The world's first website is still online at info.cern.ch (created in 1991)",
+    "The ultimate revenge isn't a confrontation; it is building a reality so successful that the people who doubted you wouldn't even recognize the person you have become",
+    "Write to one person, not a million — 'Classic Copywriting Maxim'",
+    "How many programmers does it take to change a light bulb? None, that's a hardware problem",
+    "The first hard drive weighed over a ton and stored only 5MB of data",
+    "People do not want to buy a quarter inch drill, they want a quarterinch hole — Theodore Levitt"
+  ];
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+
+  // Rotate message every 3 seconds while generating
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      setCurrentMessageIndex((prev) => {
+        let newIndex;
+        do {
+          newIndex = Math.floor(Math.random() * loadingMessages.length);
+        } while (newIndex === prev && loadingMessages.length > 1);
+        return newIndex;
+      });
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [isGenerating]);
+
+  // Reset message index when generation starts
+  useEffect(() => {
+    if (isGenerating) {
+      setCurrentMessageIndex(0);
+    }
+  }, [isGenerating]);
+
+  const aiInputRef = useRef<HTMLInputElement>(null)
+
+  // Auto-focus when input bar becomes visible
+  useEffect(() => {
+    if (inputBarVisible) {
+      const timer = setTimeout(() => {
+        aiInputRef.current?.focus()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [inputBarVisible])
 
   useEffect(() => {
-    setCodeHtml(initialContent.html)
-    setCodescript(initialContent.script)
-    setCodedata(initialContent.data)
-    setSavedContent({
-      html: initialContent.html,
-      script: initialContent.script,
-      data: initialContent.data,
-    })
-
-    // Auto-update preview for initial load
-    const safeHtml = initialContent.html || ""
-    const safeScript = initialContent.script || ""
-    const safeData = initialContent.data || ""
-
-    let combinedHtml = safeHtml
-    combinedHtml = combinedHtml.replace('<script src="data.js"></script>', `<script>\n${safeData}\n</script>`)
-    combinedHtml = combinedHtml.replace('<script src="script.js"></script>', `<script>\n${safeScript}\n</script>`)
-    setDebouncedContent(combinedHtml)
-    setIsManualEdit(false)
-  }, [initialContent])
+    localStorage.setItem("inputBarVisible", JSON.stringify(inputBarVisible))
+  }, [inputBarVisible])
 
   useEffect(() => {
-    const hasChanges =
-      codeHtml !== savedContent.html || codeScript !== savedContent.script || codeData !== savedContent.data
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
-    setHasUnsavedChanges(hasChanges && isManualEdit)
-  }, [codeHtml, codeScript, codeData, savedContent, isManualEdit])
-
-  const updatePreviewImmediately = (html: string, script: string, data: string) => {
-    captureScrollPosition()
-
-    let combinedHtml = html || ""
-    const safeScript = script || ""
-    const safeData = data || ""
-
-    combinedHtml = combinedHtml.replace('<script src="data.js"></script>', `<script>\n${safeData}\n</script>`)
-    combinedHtml = combinedHtml.replace('<script src="script.js"></script>', `<script>\n${safeScript}\n</script>`)
-    setDebouncedContent(combinedHtml)
-
-    setSavedContent({
-      html: html || "",
-      script: safeScript,
-      data: safeData,
-    })
+  const extractDataFields = (dataString: string) => {
+    if (!dataString) return ''
+    const match = dataString.match(/const\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i)
+    if (match) return match[1].trim()
+    return dataString
   }
 
-  const handleSave = () => {
-    updatePreviewImmediately(codeHtml, codeScript, codeData)
-    setHasUnsavedChanges(false)
-    setIsManualEdit(false)
-  }
+  const [draftData, setDraftData] = useState(extractDataFields(initialContent.data))
+  const [draftHtml, setDraftHtml] = useState(initialContent.html)
+  const [savedHtml, setSavedHtml] = useState(initialContent.html)
+  const [savedData, setSavedData] = useState(extractDataFields(initialContent.data))
 
-  const captureScrollPosition = () => {
-    if (iframeRef.current?.contentWindow && !isRestoringScroll) {
+  useEffect(() => {
+    if (!templateId) return
+    async function loadTemplate() {
       try {
-        const { scrollX, scrollY } = iframeRef.current.contentWindow
-        setScrollPosition({ x: scrollX, y: scrollY })
-        console.log("[v0] Captured scroll position:", { x: scrollX, y: scrollY })
+        const result = await getTemplateById(Number(templateId))
+        if (result.success && result.html && result.data) {
+          const extracted = extractDataFields(result.data)
+          setDraftHtml(result.html)
+          setDraftData(extracted)
+          setSavedHtml(result.html)
+          setSavedData(extracted)
+          toast.info("Template loaded", { description: "Edit and click Publish to make it live.", position: "top-center" })
+        } else {
+          toast.error("Failed to load template", { description: result.error || "Template not found" })
+        }
       } catch (error) {
-        console.log("[v0] Could not capture scroll position:", error)
+        console.error(error)
+        toast.error("Error loading template")
+      } finally {
+        setIsLoadingTemplate(false)
       }
+    }
+    loadTemplate()
+  }, [templateId])
+
+  const hasUnsavedChanges = draftHtml !== savedHtml
+
+  const finalCode = savedHtml.replace(
+    '<script type="text/babel">',
+    `<script>
+const data = {
+${savedData}
+};
+</script>
+<script type="text/babel">`
+  )
+
+  
+  // NEW: Open draft preview tab with current unsaved code
+  const openDraftPreview = () => {
+    // Build the full HTML code from unsaved draft
+    const currentPreviewCode = draftHtml.replace(
+      '<script type="text/babel">',
+      `<script>
+const data = {
+${draftData}
+};
+</script>
+<script type="text/babel">`
+    );
+
+    // Store in sessionStorage with a unique key (timestamp)
+    const key = `draft_preview_${Date.now()}`;
+    sessionStorage.setItem(key, currentPreviewCode);
+
+    // Open new tab with the draft page, passing the key in query params
+    const draftUrl = `/draft/${username}?previewKey=${encodeURIComponent(key)}`;
+    window.open(draftUrl, '_blank');
+  };
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
+  const isRestoringScroll = useRef(false)
+
+  const toggleFullscreen = () => {
+    if (!iframeRef.current) return
+    if (!document.fullscreenElement) {
+      iframeRef.current.requestFullscreen().catch(err => {
+        console.error(`Fullscreen error: ${err.message}`)
+        toast.error("Fullscreen failed", { description: "Please check browser permissions", position: "top-center" })
+      })
+    } else {
+      document.exitFullscreen()
     }
   }
 
+  const captureScrollPosition = useCallback(() => {
+    if (iframeRef.current?.contentWindow && !isRestoringScroll.current) {
+      try {
+        const { scrollX, scrollY } = iframeRef.current.contentWindow
+        setScrollPosition({ x: scrollX, y: scrollY })
+      } catch (error) { console.log("Could not capture scroll position:", error) }
+    }
+  }, [])
+
   const restoreScrollPosition = () => {
     if (iframeRef.current?.contentWindow) {
-      setIsRestoringScroll(true)
-
+      isRestoringScroll.current = true
       const attemptRestore = (attempt = 1) => {
         try {
           iframeRef.current?.contentWindow?.scrollTo(scrollPosition.x, scrollPosition.y)
-          console.log("[v0] Restored scroll position:", scrollPosition, `(attempt ${attempt})`)
-        } catch (error) {
-          console.log("[v0] Could not restore scroll position:", error)
-        }
-
-        if (attempt < 3) {
-          setTimeout(() => attemptRestore(attempt + 1), attempt * 100)
-        } else {
-          setIsRestoringScroll(false)
-        }
+        } catch (error) { console.log("Scroll restore error:", error) }
+        if (attempt < 3) setTimeout(() => attemptRestore(attempt + 1), attempt * 100)
+        else isRestoringScroll.current = false
       }
-
       setTimeout(attemptRestore, 50)
     }
   }
@@ -182,193 +287,106 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
         const doc = iframeRef.current.contentWindow.document
         const script = doc.createElement("script")
         script.textContent = `
-          let preservedScrollPosition = { x: ${scrollPosition.x}, y: ${scrollPosition.y} };
-          
+          let preservedScroll = { x: ${scrollPosition.x}, y: ${scrollPosition.y} };
           const preserveScroll = () => {
-            preservedScrollPosition = { x: window.scrollX, y: window.scrollY };
-            window.parent.postMessage({ type: 'scrollUpdate', position: preservedScrollPosition }, '*');
+            preservedScroll = { x: window.scrollX, y: window.scrollY };
+            window.parent.postMessage({ type: 'scrollUpdate', position: preservedScroll }, '*');
           };
-          
           const restoreScroll = () => {
-            requestAnimationFrame(() => {
-              window.scrollTo(preservedScrollPosition.x, preservedScrollPosition.y);
-            });
+            requestAnimationFrame(() => { window.scrollTo(preservedScroll.x, preservedScroll.y); });
           };
-          
-          const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-          if (originalInnerHTML) {
-            Object.defineProperty(Element.prototype, 'innerHTML', {
-              set: function(value) {
-                preserveScroll();
-                originalInnerHTML.set.call(this, value);
-                setTimeout(restoreScroll, 10);
-              },
-              get: originalInnerHTML.get
-            });
-          }
-          
-          const originalAppendChild = Element.prototype.appendChild;
-          Element.prototype.appendChild = function(child) {
-            preserveScroll();
-            const result = originalAppendChild.call(this, child);
-            setTimeout(restoreScroll, 10);
-            return result;
-          };
-          
-          const originalRemoveChild = Element.prototype.removeChild;
-          Element.prototype.removeChild = function(child) {
-            preserveScroll();
-            const result = originalRemoveChild.call(this, child);
-            setTimeout(restoreScroll, 10);
-            return result;
-          };
-          
-          const originalInsertBefore = Element.prototype.insertBefore;
-          Element.prototype.insertBefore = function(newNode, referenceNode) {
-            preserveScroll();
-            const result = originalInsertBefore.call(this, newNode, referenceNode);
-            setTimeout(restoreScroll, 10);
-            return result;
-          };
-          
-          const observer = new MutationObserver((mutations) => {
-            let shouldRestore = false;
-            mutations.forEach((mutation) => {
-              if (mutation.type === 'childList' && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
-                shouldRestore = true;
-              }
-            });
-            if (shouldRestore) {
-              setTimeout(restoreScroll, 20);
-            }
-          });
-          
+          const observer = new MutationObserver(() => { setTimeout(restoreScroll, 20); });
           window.addEventListener('load', () => {
-            observer.observe(document.body, {
-              childList: true,
-              subtree: true,
-              attributes: false
-            });
-            
-            setTimeout(() => {
-              window.scrollTo(preservedScrollPosition.x, preservedScrollPosition.y);
-            }, 100);
+            observer.observe(document.body, { childList: true, subtree: true });
+            restoreScroll();
           });
-          
-          let scrollTimeout;
-          window.addEventListener('scroll', () => {
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(preserveScroll, 100);
-          });
+          window.addEventListener('scroll', () => { requestAnimationFrame(preserveScroll); });
         `
         doc.head.appendChild(script)
-      } catch (error) {
-        console.log("[v0] Could not inject scroll preservation script:", error)
-      }
+      } catch (error) { console.log("Scroll script injection failed:", error) }
     }
-
     restoreScrollPosition()
   }
 
   useEffect(() => {
     const iframe = iframeRef.current
     if (!iframe?.contentWindow) return
-
-    const handleScroll = () => {
-      if (!isRestoringScroll) {
-        captureScrollPosition()
-      }
+    const handleScroll = () => { if (!isRestoringScroll.current) captureScrollPosition() }
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'scrollUpdate') setScrollPosition(event.data.position)
     }
-
-    const handleMessage = (event: any) => {
-      if (event.data?.type === "scrollUpdate") {
-        setScrollPosition(event.data.position)
-      }
-    }
-
     try {
-      iframe.contentWindow.addEventListener("scroll", handleScroll)
-      window.addEventListener("message", handleMessage)
+      iframe.contentWindow.addEventListener('scroll', handleScroll)
+      window.addEventListener('message', handleMessage)
       return () => {
-        iframe.contentWindow?.removeEventListener("scroll", handleScroll)
-        window.removeEventListener("message", handleMessage)
+        iframe.contentWindow?.removeEventListener('scroll', handleScroll)
+        window.removeEventListener('message', handleMessage)
       }
-    } catch (error) {
-      console.log("[v0] Could not add scroll listener:", error)
+    } catch (error) { console.log("Scroll listener error:", error) }
+  }, [finalCode, captureScrollPosition])
+
+  const handleSave = useCallback(() => {
+    captureScrollPosition()
+    setSavedHtml(draftHtml)
+    // Also keep savedData in sync (unchanged)
+    toast.success("Changes saved", { description: "Your draft has been updated.", position: "top-center", duration: 2000 })
+  }, [draftHtml, captureScrollPosition])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
     }
-  }, [debouncedContent, isRestoringScroll])
-
-  const handleInsertSubmit = () => {
-    if (selected === null) return
-
-    const htmlString = insertList[selected].code
-
-    setCodeHtml((prevHtml) => {
-      const modalIdRegex = /<[^>]*id=["']modal_insert["'][^>]*>[\s\S]*?<\/[^>]+>/i
-
-      if (modalIdRegex.test(prevHtml)) {
-        return prevHtml.replace(modalIdRegex, htmlString)
-      } else if (prevHtml.includes("</body>")) {
-        return prevHtml.replace("</body>", `${htmlString}\n</body>`)
-      } else {
-        return prevHtml + htmlString
-      }
-    })
-
-    setIsOpen(false)
-    setSelected(null)
-  }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleSave])
 
   const handlePublish = async () => {
     setIsPublishing(true)
-    setMessage(null)
     try {
-      const result = await updateWebsiteContent(username, codeHtml, codeScript, codeData)
+      const result = await updateWebsiteContent(username, draftHtml, draftData, draftData)
       if (result.success) {
-        setMessage({ type: "success", text: "Website published successfully!" })
+        toast.success("Published!", { description: "Your website is now live.", position: "top-center" })
+        router.replace(`/edit/${username}`)
       } else {
-        setMessage({ type: "error", text: result.error || "Failed to publish website" })
+        toast.error(result.error || "Failed to publish website")
       }
     } catch {
-      setMessage({ type: "error", text: "An unexpected error occurred" })
+      toast.error("An unexpected error occurred")
     } finally {
       setIsPublishing(false)
     }
   }
 
+  // AI Generation Handler – always uses and updates RAW HTML
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
-      setMessage({ type: "error", text: "Please enter a prompt for AI assistance" })
+      toast.error("Please enter a prompt for AI assistance", { position: "top-center" })
       return
     }
 
     setIsGenerating(true)
-    setMessage(null)
 
     try {
-      const isBlank = !initialContent?.data || initialContent.data.trim() === ""
-      console.log("isBlank:", isBlank, "initialContent.data:", initialContent.data)
-
-      const result = isBlank
-        ? await generateCodeWithAIBlank(codeHtml, aiPrompt)
-        : await generateCodeWithAI(codeData, aiPrompt)
+      const result = await generateCodeWithAIBlank(draftHtml, aiPrompt)
 
       if (result.success && result.generatedCode) {
-        if (isBlank) {
-          setCodeHtml(result.generatedCode)
-          updatePreviewImmediately(result.generatedCode, codeScript, codeData)
-        } else {
-          setCodedata(result.generatedCode)
-          updatePreviewImmediately(codeHtml, codeScript, result.generatedCode)
-        }
+        const cleanedCode = cleanGeneratedCode(result.generatedCode)
+
+        setDraftHtml(cleanedCode)
+        setSavedHtml(cleanedCode)
+
         setAiPrompt("")
-        setIsManualEdit(false) // AI changes don't require manual save
-        setMessage({ type: "success", text: "Code updated successfully with AI assistance!" })
+        toast.success("HTML updated with AI!", { description: "Your changes are ready.", position: "top-center" })
+        aiInputRef.current?.focus()
       } else {
-        setMessage({ type: "error", text: result.error || "Failed to generate code with AI" })
+        toast.error(result.error || "AI generation failed", { position: "top-center" })
       }
-    } catch {
-      setMessage({ type: "error", text: "An unexpected error occurred while generating code" })
+    } catch (error) {
+      console.error("AI generation error:", error)
+      toast.error("An unexpected error occurred", { position: "top-center" })
     } finally {
       setIsGenerating(false)
     }
@@ -381,273 +399,212 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
     }
   }
 
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(null), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [message])
-
-  const handleManualCodeChange = (setter: (value: string) => void) => (value: string) => {
-    setter(value)
-    setIsManualEdit(true)
-  }
-
-  let currentCode, currentSetCode, currentLanguage
-  if (nerdMode) {
-    switch (activeTab) {
-      case "data.js":
-        currentCode = codeData
-        currentSetCode = handleManualCodeChange(setCodedata)
-        currentLanguage = "javascript"
-        break
-      case "index.html":
-        currentCode = codeHtml
-        currentSetCode = handleManualCodeChange(setCodeHtml)
-        currentLanguage = "html"
-        break
-      case "script.js":
-        currentCode = codeScript
-        currentSetCode = handleManualCodeChange(setCodescript)
-        currentLanguage = "javascript"
-        break
-      default:
-        currentCode = codeData
-        currentSetCode = handleManualCodeChange(setCodedata)
-        currentLanguage = "javascript"
-    }
-  } else {
-    if (!initialContent?.data) {
-      currentCode = codeHtml
-      currentSetCode = handleManualCodeChange(setCodeHtml)
-      currentLanguage = "html"
-    } else {
-      currentCode = codeData
-      currentSetCode = handleManualCodeChange(setCodedata)
-      currentLanguage = "javascript"
-    }
+  if (isLoadingTemplate) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black text-white">
+        <Loader2 className="h-8 w-8 animate-spin text-red-500 mr-2" />
+        <span>Loading template into editor...</span>
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col">
-      <div className="bg-[#181818] px-4 mt-2 rounded-xl" style={{ zoom: 0.9 }}>
-        <div className="flex items-center shadow-2xl gap-1">
-          <div className="flex-1 font-sans  text-white flex max-w-2xl mx-auto mt-1 rounded-xl border-2 border-dotted border-gray-700 shadow-2xl px-2 py-1 min-w-sm focus-within:border-gray-300">
-            <input
-              type="text"
-              ref={inputRef}
-              placeholder="Tell us your site idea — name, vibe, what it does..."
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              onKeyDown={handleKeyPress}
-              disabled={isGenerating}
-              className="flex-1 w-full px-6 py-2 placeholder:text-stone-400 placeholder:font-normal placeholder:tracking-wider bg-transparent border-none rounded-none rounded-l focus:outline-none focus:ring-0 caret-white text-teal-400 placeholder:opacity-100 focus:placeholder-opacity-0"
-            />
-            <button
-              onClick={handleAIGenerate}
-              disabled={isGenerating || !aiPrompt.trim()}
-              type="button"
-              className="relative w-full md:w-auto px-6 py-2 overflow-hidden text-white transition-all duration-100 bg-black border-l border-black rounded-none rounded-r active:scale-95 will-change-transform disabled:opacity-50"
-            >
-              <span className="flex items-center transition-all opacity-1">
-                {isGenerating ? (
-                  <>
-                    <LoadingCircle />
-                    <span className="mx-auto text-sm font-semibold truncate whitespace-nowrap text-white px-2">
-                      Generating...
-                    </span>
-                  </>
-                ) :  (
-          <SendIcon className={`h-4 w-4 ${aiPrompt.length === 0 ? "text-muted-foreground" : "text-primary-foreground"}`} />
-        )}
-              </span>
+    <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
+      <nav className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-1 px-[8rem] backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.58' }}>
+        <div className="mx-auto flex max-w-9xl items-center justify-between">
+          <div className="hidden items-center space-x-12 text-lg text-black md:flex">
+            <a href={`/dashboard/${username}`} className="transition hover:opacity-70">Dashboard</a>
+            <a href={`/refunds/${username}`} className="transition hover:opacity-70">Refunds</a>
+            <a href={`/templates/${username}`} className="transition hover:opacity-70">Templates</a>
+            <a href="#" className="transition hover:opacity-70">Settings</a>
+            <a href={`/pricing`} className="transition hover:opacity-70">Premium</a>
+          </div>
+          <div className="space-x-12">
+            <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
+            <button onClick={handlePublish} className="bg-red-600 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
+              {isPublishing ? <Loader2 className=" h-6 w-6 mr-4 animate-spin text-yellow-400" /> : <>Publish</>}
             </button>
           </div>
-          <a onClick={handlePublish} className="flex items-center text-blue-400 cursor-pointer">
-            {isPublishing ? (
-              <>
-                <Loader2 className="mr-2.5 h-4 w-4 animate-spin text-yellow-400" />
-                <div className="text-yellow-400 text-sm font-mono mr-1 ">Publishing...</div>
-              </>
-            ) : (
-              <>
-                <div className="text-yellow-400 text-sm border py-1 px-8 border-yellow-400 rounded-sm font-serif mr-4 tracking-widest underline-offset-2">
-                  Publish
-                </div>
-              </>
-            )}
-          </a>
         </div>
-      <AnimatePresence mode="wait">
-  {message && (
-    <motion.div
-      key={message.text}
-      layout   // 🔑 preserves smooth layout shifts
-      initial={{ opacity: 0, y: -20, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -20, scale: 0.9 }}
-      transition={{
-        type: "spring",
-        stiffness: 120,
-        damping: 16,
-        duration: 0.35,
-      }}
-      className="mt-2"
-    >
-      <Alert
-        variant={message.type === "error" ? "destructive" : "default"}
-        className="bg-black text-white border border-gray-800 rounded-xl shadow-lg flex items-center gap-2 p-3"
-      >
-        {message.type === "success" ? (
-          <CheckCircle className="h-5 w-5 text-green-400" />
-        ) : (
-          <AlertCircle className="h-5 w-5 text-red-400" />
-        )}
-        <AlertDescription className="text-gray-200 tracking-wide">
-          {message.text}
-        </AlertDescription>
-      </Alert>
-    </motion.div>
-  )}
-</AnimatePresence>
+      </nav>
 
-      </div>
-      {/* Panel starts here - 60% preview, 40% code editor */}
-      <div className="-mt-2 flex h-[calc(100vh-250px)] gap-3">
-        {/* Preview Panel - 60% width */}
-        <div className="flex-[0.6] min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
-          <div className="px-4 py-1 flex justify-between">
-            <h2 className="font-bold text-sm tracking-widest text-yellow-400">Preview</h2>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setIsOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center align-middle select-none font-sans font-medium text-center transition-all ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm px-2 shadow-sm bg-transparent relative text-stone-400 hover:bg-stone-700 duration-150 rounded-md hover:shadow-none antialiased mr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 mr-2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Insert More
-              </button>
-              <button onClick={() => setIsFullscreenOpen(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
-                <span>Maximize</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div className="h-full overflow-auto custom-scrollbar">
-            <iframe
-              ref={iframeRef}
-              srcDoc={debouncedContent}
-              onLoad={handleIframeLoad}
-              className="w-full h-full rounded-lg"
-              title="Live Preview"
-              sandbox="allow-scripts allow-same-origin"
-              style={{ zoom: .6 }}
-            />
-          </div>
-        </div>
-
-        {/* Code Editor Panel - 40% width */}
-        <div className="flex-[0.4] min-w-0 h-full relative">
-          <div className="border-t border-gray-800 rounded-t-lg px-4 py-1 bg-[#030712]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-                  <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                  <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
-                </div>
-                {nerdMode && (
-                  <div className="flex items-center gap-6 ml-4">
-                    {["data.js", "index.html", "script.js"].map((tabName) => (
-                      <button
-                        key={tabName}
-                        style={{ zoom: 0.8 }}
-                        className={cn(
-                          "px-7 py-1 text-xs font-serif tracking-widest rounded-md transition-colors duration-200",
-                          activeTab === tabName ? "bg-[#242424] text-yellow-400" : "text-gray-400 hover:bg-[#242424]",
-                        )}
-                        onClick={() => setActiveTab(tabName)}
-                      >
-                        {tabName}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="items-center flex -mr-1">
-                <Label htmlFor="nerdmode" className="text-xs mr-2 font-sans font-medium text-serif text-stone-400">
-                  Nerd Mode
-                </Label>
-                <Switch
-                  checked={nerdMode}
-                  onCheckedChange={(checked) => {
-                    setnerdMode(checked)
-                    if (!checked) {
-                      setActiveTab("data.js")
-                    }
-                  }}
-                  id="nerdmode"
-                  style={{ zoom: 0.5 }}
-                  className="mr-4 data-[state=unchecked]:bg-gray-600 data-[state=checked]:bg-yellow-600"
-                />
-                <button onClick={() => setIsCodeEditorMaximized(true)} style={{zoom: .9}} className="inline-flex items-center justify-center border align-middle select-none font-sans font-medium text-center transition-all duration-300 ease-in disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed focus:shadow-none text-sm rounded-md px-2 bg-transparent border-transparent text-stone-400 hover:bg-stone-700 hover:border-stone-100/5 shadow-none hover:shadow-none">
-                  <span>Maximize</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4 ml-2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+      <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
+        {/* Preview Panel */}
+        <div className="flex-[0.59] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
+          <div className="px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-5">
+              <div className="flex items-center bg-white/10 rounded-md p-0.5">
+                <button
+                  onClick={() => setViewMode('mobile')}
+                  className={`p-2 rounded transition ${
+                    viewMode === 'mobile'
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                    <rect x="7" y="2" width="10" height="20" rx="2" />
+                    <circle cx="12" cy="18" r="1" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setViewMode('desktop')}
+                  className={`p-2 rounded transition ${
+                    viewMode === 'desktop'
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                    <rect x="3" y="4" width="18" height="12" rx="2" />
+                    <path d="M8 20h8M12 16v4" />
                   </svg>
                 </button>
               </div>
+              <button onClick={openDraftPreview} className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                  <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex items-center flex-1 justify-end">
+              {inputBarVisible ? (
+                <div className="flex items-center gap-2 w-full max-w-md">
+                  <div className="relative flex-1">
+                    <input
+                      ref={aiInputRef}
+                      type="text"
+                      placeholder="Ask AI to request any website..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      disabled={isGenerating}
+                      className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
+                    />
+                    <button
+                      onClick={handleAIGenerate}
+                      disabled={isGenerating || !aiPrompt.trim()}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
+                    >
+                      {isGenerating ? (
+                        <Loader2 className="size-3.5 text-white animate-spin" />
+                      ) : (
+                        <SendIcon className="size-3.5 text-white" />
+                      )}
+                    </button>
+                  </div>
+                  <button onClick={() => setInputBarVisible(false)} className="text-xs text-white/70 hover:text-white whitespace-nowrap">
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setInputBarVisible(true)} className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition">
+                  + Ask AI
+                </button>
+              )}
             </div>
           </div>
 
-          <div>
+          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7">
+            <div
+              className={`transition-all duration-300 ${
+                viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[480px]'
+              }`}
+              style={{ zoom: 0.6 }}
+            >
+              <iframe
+                ref={iframeRef}
+                srcDoc={finalCode}
+                onLoad={handleIframeLoad}
+                className="w-full h-full rounded-lg border-0"
+                title="Live Preview"
+                sandbox="allow-scripts allow-same-origin"
+                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'white' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Code Editor Panel with Monaco */}
+        <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
+          <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
+              </div>
+              <span className="text-xs ml-1 text-gray-400 font-mono">HTML</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-white/50 text-xs">Word wrap</span>
+              <button
+                onClick={() => setWordWrapEnabled(!wordWrapEnabled)}
+                className={`relative flex h-5 w-9 items-center rounded-sm transition-colors ${
+                  wordWrapEnabled ? 'bg-stone-500' : 'bg-gray-400'
+                }`}
+              >
+                <div className={`h-4 w-4 rounded-sm bg-white shadow transition-transform duration-300 ${
+                  wordWrapEnabled ? 'translate-x-full' : ''
+                }`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 relative">
             <MonacoEditor
-              height="calc(100vh - 90px)"
-              language={currentLanguage}
-              value={currentCode}
-              onChange={(value) => currentSetCode(value || "")}
+              height="100%"
+              language="html"
+              value={draftHtml}
+              onChange={(value) => setDraftHtml(value || "")}
               theme="custom-dark"
-              onMount={(editor, monaco) => {
-                handleEditorMount(editor, monaco)
-              }}
+              onMount={handleEditorMount}
               options={{
-                fontFamily: " ",
-                fontLigatures: true,
-                fontWeight: "200",
-                lineHeight: 17,
-                letterSpacing: 0.8,
-                tabSize: 2,
                 minimap: { enabled: false },
-                fontSize: 12,
+                fontSize: 14,
+                fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+                lineNumbers: "off",
+                wordWrap: wordWrapEnabled ? "on" : "off",
+                autoClosingBrackets: "never",
+                autoClosingQuotes: "never",
+                matchBrackets: "never",
                 scrollBeyondLastLine: false,
-                lineNumbers: "on",
-                padding: { top: 10, bottom: 10 },
+                renderLineHighlight: "none",
+                unicodeHighlight: {
+                  ambiguousCharacters: false,
+                  invisibleCharacters: false,
+                  nonBasicASCII: false
+                },
+                automaticLayout: true,
+                glyphMargin: false,
+                folding: false,
+                find: {
+                  addExtraSpaceOnTop: false,
+                  autoFindInSelection: 'never',
+                  seedSearchStringFromSelection: 'never',
+                },
+                readOnly: isGenerating,
               }}
             />
+
+            {isGenerating && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
+                <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
+                  <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
+                    {loadingMessages[currentMessageIndex]}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {hasUnsavedChanges && (
             <button
               onClick={handleSave}
-              className="absolute bottom-6 right-6
-                         min-w-[140px] px-6 py-3
-                         bg-white/10 
-                         backdrop-blur-xl 
-                         border border-white/30 
-                         hover:bg-white/20 
-                         text-white 
-                         text-sm font-[system-ui] font-semibold tracking-wide
-                         rounded-2xl
-                         shadow-lg
-                         transition-all duration-300 
-                         z-10 
-                         flex items-center justify-center
-                         hover:scale-105 hover:shadow-2xl
-                         overflow-hidden"
-              title="Save changes to update preview"
+              className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
             >
-              <span className="relative z-10">Save</span>
-              <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-green-400/30 to-emerald-500/30 opacity-0 hover:opacity-100 transition-opacity duration-500" />
+              Save
             </button>
           )}
         </div>

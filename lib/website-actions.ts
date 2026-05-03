@@ -66,16 +66,16 @@ ${prompt}
 export async function generateCodeWithAIBlank(currentCode: string, prompt: string) {
   try {
     const response = await ai.models.generateContent({
-model: "gemini-1.5-flash",
+model: "gemini-3.1-pro-preview",
 contents: `
 Create a stunning single-page HTML5 website using Tailwind CSS.
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
 Rules:
 - No explanations
 - No markdown
 - No contact section or buttons
-- Use images like:
-  https://picsum.photos/720/720?random=1
+- 
 - Use different random numbers for multiple images
 
 Current code:
@@ -578,5 +578,47 @@ export async function getTemplateById(templateId: number) {
   } catch (error: any) {
     console.error("Error fetching template by ID:", error);
     return { success: false, error: error.message };
+  }
+}
+
+// actions.tsx (add this function)
+export async function getEditRedirectPath(username: string): Promise<string> {
+  const content = await getWebsiteContent(username);
+  // If data exists and is not an empty string → go to edit_new
+  const hasData = content?.data && content.data.trim() !== "";
+  return hasData ? `/edit_new/${username}` : `/edit/${username}`;
+}
+
+// actions.tsx
+export async function getLatestPublishedSiteWithNullData(username: string): Promise<WebsiteContent | null> {
+  try {
+    const tableName = `${username.toLowerCase()}_website`;
+
+    // Check if table exists
+    const tableExists = await sql.query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [tableName]
+    );
+    if (!tableExists[0]?.exists) return null;
+
+    // Get the most recent row where code_data IS NULL (or empty string)
+    const result = await sql.query(
+      `SELECT code, code_script, code_data
+       FROM ${tableName}
+       WHERE code_data IS NULL OR code_data = ''
+       ORDER BY created_at DESC
+       LIMIT 1`
+    );
+
+    if (result.length === 0) return null;
+
+    return {
+      html: result[0].code || "",
+      script: result[0].code_script || "",
+      data: result[0].code_data || "",
+    };
+  } catch (error) {
+    console.error("Error fetching latest null‑data site:", error);
+    return null;
   }
 }

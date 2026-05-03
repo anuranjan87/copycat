@@ -15,15 +15,13 @@ function cleanGeneratedCode(raw: string): string {
     .replace(/```$/, '')
     .trim();
 
-  // Remove wrapping object { ... }
   if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
     cleaned = cleaned.slice(1, -1).trim();
   }
-
   return cleaned;
 }
 
-// Dynamically import Monaco Editor (no SSR)
+// Dynamically import Monaco Editor
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
@@ -35,7 +33,6 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 // Custom theme + disable error diagnostics
 const handleEditorMount = (editor: any, monaco: any) => {
-  // Disable semantic & syntax validation (red squiggles)
   if (monaco.languages?.typescript?.javascriptDefaults) {
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: true,
@@ -48,7 +45,6 @@ const handleEditorMount = (editor: any, monaco: any) => {
     });
   }
 
-  // Define custom dark theme
   monaco.editor.defineTheme("custom-dark", {
     base: "vs-dark",
     inherit: true,
@@ -71,7 +67,6 @@ const handleEditorMount = (editor: any, monaco: any) => {
   });
   monaco.editor.setTheme("custom-dark");
 
-  // Style container (no border, no radius)
   const container = editor.getContainerDomNode();
   container.style.borderRadius = "";
   container.style.overflow = "hidden";
@@ -95,7 +90,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [inputBarVisible, setInputBarVisible] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("inputBarVisible")
@@ -104,16 +98,13 @@ export default function New({ username, initialContent }: NewMobileProps) {
     return true
   })
 
-  // AI state
   const [aiPrompt, setAiPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Fun jokes and interesting facts to show during AI loading
   const loadingMessages = [
     "The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim",
     "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new  — Steve Jobs",
     "Give them quality. That is the best kind of advertising — Milton Hershey",
-    "Fact: Professors use the red pen to mark our mistakes. Life uses the mistakes to mark our path",
     "Fact: The world's first website is still online at info.cern.ch (created in 1991)",
     "The ultimate revenge isn't a confrontation; it is building a reality so successful that the people who doubted you wouldn't even recognize the person you have become",
     "Write to one person, not a million — 'Classic Copywriting Maxim'",
@@ -123,22 +114,20 @@ export default function New({ username, initialContent }: NewMobileProps) {
   ];
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
 
-  // Rotate message every 3 seconds while generating
   useEffect(() => {
     if (!isGenerating) return;
-   const interval = setInterval(() => {
-  setCurrentMessageIndex((prev) => {
-    let newIndex;
-    do {
-      newIndex = Math.floor(Math.random() * loadingMessages.length);
-    } while (newIndex === prev && loadingMessages.length > 1);
-    return newIndex;
-  });
-}, 6000);
+    const interval = setInterval(() => {
+      setCurrentMessageIndex((prev) => {
+        let newIndex;
+        do {
+          newIndex = Math.floor(Math.random() * loadingMessages.length);
+        } while (newIndex === prev && loadingMessages.length > 1);
+        return newIndex;
+      });
+    }, 6000);
     return () => clearInterval(interval);
   }, [isGenerating]);
 
-  // Reset message index when generation starts
   useEffect(() => {
     if (isGenerating) {
       setCurrentMessageIndex(0);
@@ -147,7 +136,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
 
   const aiInputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-focus when input bar becomes visible
   useEffect(() => {
     if (inputBarVisible) {
       const timer = setTimeout(() => {
@@ -160,14 +148,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
   useEffect(() => {
     localStorage.setItem("inputBarVisible", JSON.stringify(inputBarVisible))
   }, [inputBarVisible])
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
-    }
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
-  }, [])
 
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
@@ -224,17 +204,27 @@ ${savedData}
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
   const isRestoringScroll = useRef(false)
 
-  const toggleFullscreen = () => {
-    if (!iframeRef.current) return
-    if (!document.fullscreenElement) {
-      iframeRef.current.requestFullscreen().catch(err => {
-        console.error(`Fullscreen error: ${err.message}`)
-        toast.error("Fullscreen failed", { description: "Please check browser permissions", position: "top-center" })
-      })
-    } else {
-      document.exitFullscreen()
-    }
-  }
+  // NEW: Open draft preview tab with current unsaved code
+  const openDraftPreview = () => {
+    // Build the full HTML code from unsaved draft
+    const currentPreviewCode = draftHtml.replace(
+      '<script type="text/babel">',
+      `<script>
+const data = {
+${draftData}
+};
+</script>
+<script type="text/babel">`
+    );
+
+    // Store in sessionStorage with a unique key (timestamp)
+    const key = `draft_preview_${Date.now()}`;
+    sessionStorage.setItem(key, currentPreviewCode);
+
+    // Open new tab with the draft page, passing the key in query params
+    const draftUrl = `/draft/${username}?previewKey=${encodeURIComponent(key)}`;
+    window.open(draftUrl, '_blank');
+  };
 
   const captureScrollPosition = useCallback(() => {
     if (iframeRef.current?.contentWindow && !isRestoringScroll.current) {
@@ -338,7 +328,6 @@ ${savedData}
     }
   }
 
-  // AI Generation Handler
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
       toast.error("Please enter a prompt for AI assistance", { position: "top-center" })
@@ -429,14 +418,8 @@ ${savedData}
         {/* Preview Panel */}
         <div className="flex-[0.59] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
           <div className="px-4 py-2 flex items-center justify-between gap-3">
-
-            {/* LEFT SIDE: toggle + fullscreen */}
             <div className="flex items-center gap-5">
-
-              {/* DEVICE TOGGLE GROUP */}
               <div className="flex items-center bg-white/10 rounded-md p-0.5">
-
-                {/* MOBILE */}
                 <button
                   onClick={() => setViewMode('mobile')}
                   className={`p-2 rounded transition ${
@@ -445,21 +428,11 @@ ${savedData}
                       : 'text-white/60 hover:text-white'
                   }`}
                 >
-                  {/* Phone Icon */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    className="w-4 h-4"
-                  >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                     <rect x="7" y="2" width="10" height="20" rx="2" />
                     <circle cx="12" cy="18" r="1" />
                   </svg>
                 </button>
-
-                {/* DESKTOP */}
                 <button
                   onClick={() => setViewMode('desktop')}
                   className={`p-2 rounded transition ${
@@ -468,47 +441,28 @@ ${savedData}
                       : 'text-white/60 hover:text-white'
                   }`}
                 >
-                  {/* Monitor Icon */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    className="w-4 h-4"
-                  >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                     <rect x="3" y="4" width="18" height="12" rx="2" />
                     <path d="M8 20h8M12 16v4" />
                   </svg>
                 </button>
               </div>
 
-              {/* FULLSCREEN BUTTON */}
+              {/* MAXIMIZE BUTTON NOW OPENS DRAFT PREVIEW */}
               <button
-                onClick={toggleFullscreen}
+                onClick={openDraftPreview}
                 className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+                title="Open full screen preview in new tab"
               >
-                {/* Fullscreen Icon */}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="w-4 h-4"
-                >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
                   <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
                 </svg>
               </button>
-
             </div>
 
-            {/* RIGHT SIDE: AI BAR (flex-grow 🔥) */}
-            <div className="flex items-center  flex-1 justify-end">
+            <div className="flex items-center flex-1 justify-end">
               {inputBarVisible ? (
                 <div className="flex items-center gap-2 w-full max-w-md">
-                  
-                  {/* EXPANDING INPUT */}
                   <div className="relative flex-1">
                     <input
                       ref={aiInputRef}
@@ -520,7 +474,6 @@ ${savedData}
                       disabled={isGenerating}
                       className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
                     />
-
                     <button
                       onClick={handleAIGenerate}
                       disabled={isGenerating || !aiPrompt.trim()}
@@ -533,28 +486,19 @@ ${savedData}
                       )}
                     </button>
                   </div>
-
-                  {/* INLINE HIDE */}
-                  <button
-                    onClick={() => setInputBarVisible(false)}
-                    className="text-xs text-white/70 hover:text-white whitespace-nowrap"
-                  >
+                  <button onClick={() => setInputBarVisible(false)} className="text-xs text-white/70 hover:text-white whitespace-nowrap">
                     ✕
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => setInputBarVisible(true)}
-                  className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
-                >
+                <button onClick={() => setInputBarVisible(true)} className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition">
                   + Ask AI
                 </button>
               )}
             </div>
           </div>
 
-          {/* IFrame preview */}
-          <div className="flex-1  overflow-auto  flex items-center justify-center bg-black/40 p-7">
+          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7">
             <div
               className={`transition-all duration-300 ${
                 viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[480px]'
@@ -565,7 +509,7 @@ ${savedData}
                 ref={iframeRef}
                 srcDoc={finalCode}
                 onLoad={handleIframeLoad}
-                className="w-full h-full rounded-lg border-0 "
+                className="w-full h-full rounded-lg border-0"
                 title="Live Preview"
                 sandbox="allow-scripts allow-same-origin"
                 style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'white' }}
@@ -574,7 +518,7 @@ ${savedData}
           </div>
         </div>
 
-        {/* Code Editor Panel with Monaco - with AI loading overlay */}
+        {/* Code Editor Panel */}
         <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
           <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -593,7 +537,6 @@ ${savedData}
             </div>
           </div>
 
-          {/* Relative container for overlay */}
           <div className="flex-1 min-h-0 relative">
             <MonacoEditor
               height="100%"
@@ -633,7 +576,6 @@ ${savedData}
               } as any}
             />
 
-            {/* AI Loading Overlay with Jokes/Facts */}
             {isGenerating && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
                 <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">

@@ -1,8 +1,7 @@
-import { getWebsiteContent } from "@/lib/website-actions"
+import { getLatestPublishedSiteWithNullData  } from "@/lib/website-actions"
 import { notFound } from "next/navigation"
 import { CodeEditor } from "@/components/code-editor"
 import  {Origami, Globe2Icon, LayoutDashboard, Link, CirclePlayIcon }  from "lucide-react";
-import { NavigationSidebar } from "@/components/navigation-sidebar"
 
 
 interface PageProps {
@@ -15,7 +14,7 @@ export default async function EditPage({ params }: PageProps) {
   const { username } = await params
 
   try {
-    const content = await getWebsiteContent(username)
+    const content = await getLatestPublishedSiteWithNullData (username)
     if (!content) {
       notFound()
     }
@@ -25,7 +24,7 @@ export default async function EditPage({ params }: PageProps) {
         {/* Sidebar */}
 
         {/* Main Content */}
-        <main className="flex-1 p-1">
+        <main className="flex-1 ">
           <CodeEditor username={username} initialContent={content} />
         </main>
       </div>

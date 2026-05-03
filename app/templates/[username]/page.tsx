@@ -1,5 +1,5 @@
 "use client";
-
+import Link from 'next/link';
 import { use } from "react"; // ✅ Required to unwrap params Promise
 import { Origami, Globe2Icon, LayoutDashboard, Loader2 } from "lucide-react";
 import Image from "next/image";
@@ -223,9 +223,12 @@ export default function Page({ params }: PageProps) {
               7Winks gives you structured templates designed to convert—so you spend less time
               arranging pixels, and more time building something that matters.
             </p>
-            <div className="mt-16 text-[10px] tracking-[0.3em] text-white/30">
-              SELECT YOUR FOUNDATION ↓
-            </div>
+           <Link
+  href={`/edit/${username}`}
+  className="underline underline-offset-4 mt-16 mb-9 text-[10px] tracking-[0.3em] text-white/30 hover:text-white/50 transition inline-block"
+>
+  CLICK HERE FOR BLANK EDITOR →
+</Link>
           </section>
 
           {/* Templates Grid – each card navigates to editor with templateId */}
