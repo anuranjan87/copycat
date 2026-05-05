@@ -75,7 +75,7 @@ const templatesMeta = [
     localImage: "/14.jpg",
     title: "Dark Luxe",
     description: "Uses low-light palettes with high contrast typography to create depth, focus, and a premium visual hierarchy",
-    mood: "luxury / premium",
+    mood: "experimenting",
   },
   {
     id: "10",
@@ -219,10 +219,35 @@ export default function Page({ params }: PageProps) {
               Not a website builder.<br />
               A starting point.
             </h1>
-            <p className="mt-6 text-white/40 text-sm max-w-lg">
-              7Winks gives you structured templates designed to convert—so you spend less time
-              arranging pixels, and more time building something that matters.
-            </p>
+           <div className="mt-8 space-y-6 max-w-lg">
+  <p className="text-white/40 text-sm leading-relaxed tracking-wide">
+    You have an idea. Instead of overthinking design… <br className="hidden md:block" />
+    you just start. 
+  </p>
+
+  <p className="text-white/40 text-sm leading-relaxed">
+    Pick a template. Change a few words. <strong className="text-white/80 font-medium">Go live.</strong>
+  </p>
+
+  <p className="text-white/40 text-sm leading-relaxed">
+    Now people can find you on Google. They land on your page. <br />
+    They get curious. They leave their email.
+  </p>
+
+  <p className="text-white/40 text-sm leading-relaxed">
+    And just like that—you’re collecting leads. <span className="text-white/60 italic">For free.</span>
+  </p>
+
+  <p className="text-white/40 text-sm leading-relaxed">
+    You open your dashboard. Real people are visiting. <br />
+    Right now.
+  </p>
+
+  <p className="text-white/60 text-sm font-medium border-t border-white/10 pt-4">
+    No clutter. No pixel pushing. <br />
+    Just templates built like top design agencies—made to convert.
+  </p>
+</div>
            <Link
   href={`/edit/${username}`}
   className="underline underline-offset-4 mt-16 mb-9 text-[10px] tracking-[0.3em] text-white/30 hover:text-white/50 transition inline-block"

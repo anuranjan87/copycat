@@ -86,6 +86,7 @@ export default function New({ username, initialContent }: NewMobileProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get('templateId');
+  
 
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
@@ -512,7 +513,7 @@ ${draftData}
                 className="w-full h-full rounded-lg border-0"
                 title="Live Preview"
                 sandbox="allow-scripts allow-same-origin"
-                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'white' }}
+                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'black' }}
               />
             </div>
           </div>
