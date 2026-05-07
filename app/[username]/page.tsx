@@ -28,26 +28,36 @@ export default async function UserWebsitePage({ params }: PageProps) {
     await trackVisit(username, clientIp)
 
     // ✅ Inject form handler
-    const forceLinkScript = `
+  const forceLinkScript = `
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.querySelector("form")
-  if (form) {
-    form.addEventListener("submit", (e) => {
-      e.preventDefault()
-      const email = form.querySelector("[name='email']")?.value || ""
-      const message = form.querySelector("[name='your_message']")?.value || ""
-
-      window.parent.postMessage({
-        formData: { email, message },
-        username: "${username}"
-      }, "*")
-    })
+(function() {
+  function getAllFormData(form) {
+    const formData = new FormData(form);
+    const values = {};
+    for (let [key, value] of formData.entries()) {
+      values[key] = value;
+    }
+    return values;
   }
 
-})
+  document.addEventListener("DOMContentLoaded", () => {
+    const form = document.querySelector("form");
+    if (!form) return;
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const formData = getAllFormData(form);
+      window.parent.postMessage({
+        formData: formData,
+        username: "${username}"
+      }, "*");
+      console.log("SENDING DATA:", formData);
+    });
+  });
+})();
 </script>
-`.trim()
+`.trim();
+
 
     // ✅ MAIN BUILDER FUNCTION (THIS WAS YOUR MISSING PIECE)
     const buildFinalHtml = (html: string, data: string) => {

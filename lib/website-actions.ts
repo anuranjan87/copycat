@@ -86,6 +86,74 @@ ${prompt}
 
 If current code is empty → create new.
 Otherwise → modify it.
+
+
+if you are making a form have this logic to send it to system, so that he will receive it this is as follow"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hardcoded Form – Full Object + postMessage</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    input:focus, button:focus { outline: none; }
+    input, button { transition: all 0.2s ease; }
+  </style>
+</head>
+<body class="bg-gray-50 antialiased">
+
+  <div class="flex min-h-screen items-center justify-center px-4">
+    <form id="testForm" class="w-80 rounded-2xl bg-white p-6 shadow-lg border border-gray-200" novalidate>
+      
+      <input type="email" name="email" placeholder="Email" required
+             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+
+      <input type="text" name="name" placeholder="Name"
+             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+
+      <input type="text" name="phone" placeholder="Phone"
+             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+
+      <input type="text" name="phonee" placeholder="new"
+             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+
+      <input type="text" name="hello" placeholder="hello"
+             class="mb-4 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+
+      <button type="submit" class="w-full rounded-lg bg-black py-2 text-white hover:bg-gray-800 transition">
+        Submit
+      </button>
+    </form>
+  </div>
+
+  <script>
+    (function() {
+      const form = document.getElementById('testForm');
+
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Collect all fields into a plain object
+        const formData = new FormData(form);
+        const values = Object.fromEntries(formData.entries());
+
+        // Log exactly as the original React code did
+        console.log("SENDING DATA:", values);
+
+        // Send to parent window (same as original)
+        try {
+          window.parent.postMessage({ formData: values }, "*");
+          console.log("✅ postMessage sent to parent");
+        } catch (err) {
+          console.error("❌ Failed to send postMessage:", err);
+        }
+
+        // Optional: show a small toast/alert for testing (only if you want visual feedback)
+      });
+    })();
+  </script>
+</body>
+</html>"
       `,
     })
 

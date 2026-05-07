@@ -13,7 +13,7 @@ import Nav from "@/components/nav";
 interface PageProps {
   params: Promise<{ username: string }>;
 }
-const templatesMeta = [
+const templatesMeta1 = [
   {
     id: "1",
     localImage: "/1.png",
@@ -38,7 +38,7 @@ const templatesMeta = [
   {
     id: "4",
     localImage: "/10.png",
-    title: "Holo Glow",
+    title: "Slow",
     description: "Spoon-feeding the information without making them doing actual work. storytelling like those old school books",
     mood: "futuristic / vibrant",
   },
@@ -128,6 +128,121 @@ const templatesMeta = [
   },
 ];
 
+const templatesMeta = [
+  {
+    id: "1",
+    localImage: "/1.png",
+    title: "Light House",
+    description: "Vivid shades like crimson vermilion carry high intensities, this creates something that pulls in",
+    mood: "Landing page",
+  },
+  {
+    id: "2",
+    localImage: "/2.png",
+    title: "Silent Ink",
+    description: "Rows of white canvas, purposeful like a stone garden, the emptiness is what keeps you steady. guides soul to pause before they move.",
+    mood: "Sass marketing",
+  },
+  {
+    id: "3",
+    localImage: "/4.png",
+    title: "Darjeeling",
+    description: "Unfold the journey bit by bit so the heart relaxes. ensuring they stay long enough to build trust with the concept.",
+    mood: "Blog",
+  },
+  {
+    id: "4",
+    localImage: "/10.png",
+    title: "Slow",
+    description: "Slow-rolling the data flow without making them exert effort. storytelling like those old school books",
+    mood: "Landing Page",
+  },
+  {
+    id: "5",
+    localImage: "/5.png",
+    title: "Stokebury",
+    description: "Unites unconventional patterns with fixed structural logic, makes them stay without ever feeling lost.",
+    mood: "Agencies & creators",
+  },
+  {
+    id: "6",
+    localImage: "/3.png",
+    title: "Copy Cat",
+    description: "A deep state where the terminal dissolves, and only the information remains.",
+    mood: "founder vibe",
+  },
+  {
+    id: "7",
+    localImage: "/6.png",
+    title: "Peekaboo",
+    description: "Utilizes negative-space and motion-triggers to build mental air, enhancing focus and mental rest",
+    mood: "company website",
+  },
+  {
+    id: "8",
+    localImage: "/13.jpg",
+    title: "Pixel Perfect",
+    description: "Combines block systems and uniform padding to build optic tempo and order across elements",
+    mood: "Product Launch",
+  },
+  {
+    id: "9",
+    localImage: "/14.jpg",
+    title: "Dark Luxe",
+    description: "Pairs low-value tones with bold aesthetic fonts to build grit, mood, and a refined optic structure",
+    mood: "experimenting",
+  },
+  {
+    id: "10",
+    localImage: "/7.png",
+    title: "Blocks",
+    description: "Organizes visuals using steady pacing and column shifts to lead users toward a tight descriptive logic",
+    mood: "Blog",
+  },
+  {
+    id: "11",
+    localImage: "/8.png",
+    title: "Negative Space",
+    description: "Alters optic patterns purposely to build force, using chaos and fracture as a style choice",
+    mood: "Landing page",
+  },
+  {
+    id: "12",
+    localImage: "/9.png",
+    title: "Thrift Mode",
+    description: "Illustrates how basic primitives and echoes can foster comfort and ease mental work",
+    mood: "Porfolio",
+  },
+  {
+    id: "13",
+    localImage: "/11.png",
+    title: "Retro VHS",
+    description: "Employs grain, haze, and hue shifting to stir memory, showing how vibes control thought",
+    mood: "nostalgic",
+  },
+  {
+    id: "14",
+    localImage: "/12.png",
+    title: "Zen Garden",
+    description: "Focuses on parity, padding, and optic peace to lower mental static and foster user repose",
+    mood: "Landing page",
+  },
+  {
+    id: "15",
+    localImage: "/15.jpg",
+    title: "Cyber Pulse",
+    description: "Directs neon brightness, punch, and drift to foster vigor and optic drive in the viewport",
+    mood: "cyberpunk / energetic",
+  },
+  {
+    id: "16",
+    localImage: "/16.jpg",
+    title: "Minimal Mono",
+    description: "Employs rigid font weights and gutter uniformity to foster poise, utility, and clear optic path",
+    mood: "minimal / clean",
+  },
+];
+
 export default function Page({ params }: PageProps) {
   const { username } = use(params);
   const router = useRouter();
@@ -136,6 +251,9 @@ export default function Page({ params }: PageProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [allTemplateData, setAllTemplateData] = useState<any[]>([]);
   const [isLoadingAllTemplates, setIsLoadingAllTemplates] = useState(true);
+  
+  // State for delayed rox font animation
+  const [applyRoxFont, setApplyRoxFont] = useState(false);
 
   // Fetch full template data (only needed to validate existence, not used for copying)
   useEffect(() => {
@@ -150,6 +268,16 @@ export default function Page({ params }: PageProps) {
       }
     };
     fetchAllTemplates();
+  }, []);
+
+  // Delayed rox font effect - adds "rox" class after 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setApplyRoxFont(true);
+    }, 4000);
+    
+    // Cleanup timeout on component unmount
+    return () => clearTimeout(timer);
   }, []);
 
   // Handle template selection – navigate to editor with templateId, no auto-publish
@@ -213,59 +341,64 @@ export default function Page({ params }: PageProps) {
         {/* Main Content */}
         <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mt-12 mx-auto">
           {/* Hero Section */}
-          <section className=" flex flex-col items-center justify-center text-center mt-7">
+          <section className=" flex flex-col items-center justify-center mb-4 text-center mt-7">
             <div className="mb-4 w-12 h-[2px] bg-red-600 mx-auto" />
-            <h1 className="text-5xl md:text-6xl mt-4 font-light tracking-tight">
+            <h1 className={`${applyRoxFont ? "rox " : ""}text-5xl md:text-6xl mt-4 text-stone-400 font-light tracking-tight transition-all duration-700 ease-in-out`}>
               Not a website builder.<br />
               A starting point.
             </h1>
-           <div className="mt-8 space-y-6 max-w-lg">
-  <p className="text-white/40 text-sm leading-relaxed tracking-wide">
+           <div className="mt-8 space-y-1 max-w-lg">
+  <p className="text-white/60 text-sm leading-relaxed tracking-wide">
     You have an idea. Instead of overthinking design… <br className="hidden md:block" />
     you just start. 
   </p>
 
-  <p className="text-white/40 text-sm leading-relaxed">
+  <p className="text-white/60 text-sm leading-relaxed">
     Pick a template. Change a few words. <strong className="text-white/80 font-medium">Go live.</strong>
   </p>
 
-  <p className="text-white/40 text-sm leading-relaxed">
+  <p className="text-white/60 text-sm leading-relaxed">
     Now people can find you on Google. They land on your page. <br />
     They get curious. They leave their email.
   </p>
 
-  <p className="text-white/40 text-sm leading-relaxed">
+  <p className="text-white/60 text-sm leading-relaxed">
     And just like that—you’re collecting leads. <span className="text-white/60 italic">For free.</span>
   </p>
 
-  <p className="text-white/40 text-sm leading-relaxed">
+  <p className="text-white/60 text-sm leading-relaxed mb-3">
     You open your dashboard. Real people are visiting. <br />
     Right now.
   </p>
 
-  <p className="text-white/60 text-sm font-medium border-t border-white/10 pt-4">
-    No clutter. No pixel pushing. <br />
-    Just templates built like top design agencies—made to convert.
-  </p>
+  
 </div>
+
+
+          
+          </section><p className="text-white/60 text-sm mx-auto  text-center font-medium border-t border-white/20 pt-3 mt-6 ">
+   Select any template – it will open in the editor as a draft. Publish when you're ready.
+
+
+  </p>
+
            <Link
   href={`/edit/${username}`}
-  className="underline underline-offset-4 mt-16 mb-9 text-[10px] tracking-[0.3em] text-white/30 hover:text-white/50 transition inline-block"
+  className="inline-flex items-center gap-2 mt-16 mb-12 px-4 py-2 text-[12px] uppercase tracking-[0.28em] text-white/40 border-y border-dotted border-white/20 hover:text-white/80 hover:border-white/40 transition-all duration-30 backdrop-blur-sm"
 >
   CLICK HERE FOR BLANK EDITOR →
 </Link>
-          </section>
 
           {/* Templates Grid – each card navigates to editor with templateId */}
           <section className="pb-32 mt-4">
-            <div className="grid gap-11 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {templatesMeta.map((template) => {
                 const isLoading = isNavigating && selectedTemplateId === template.id;
                 return (
                   <div
                     key={template.id}
                     onClick={() => handleSelectTemplate(template.id)}
-                    className="bg-gray-900/70 shadow-[0_8px_20px_rgba(255,255,255,0.2),0_20px_60px_rgba(255,255,255,0.08)] p-4 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-105"
+                    className="bg-stone-600/50  px-5 py-3 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-106"
                   >
                     {/* Image area - using standard img to match HTML exactly */}
                     <div className="relative w-full overflow-hidden rounded-xl">
@@ -297,8 +430,8 @@ export default function Page({ params }: PageProps) {
           </section>
 
           {/* Footer */}
-          <footer className="border-t border-white/10 pt-8 text-center text-[11px] text-white/30 tracking-wider">
-            <p>Select any template – it will open in the editor as a draft. Publish when you're ready.</p>
+          <footer className="border-t border-white/20 pt-8 text-center text-[11px] text-white/30 tracking-wider">
+            <p>Your chosen premium template never expires</p>
           </footer>
         </main>
       </div>

@@ -7,100 +7,228 @@ export default function Page({ params }: { params: { username: string } }) {
   const { username } = params;
 
   const htmlContent = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
   <!-- Fonts -->
   <link href="https://db.onlinewebfonts.com/c/68b898f6044bbee439423445076f3168?family=Roxborough+CF+Thin" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <style>
-    body {
-      font-family: 'Montserrat', sans-serif;
-      background-color: black;
-      margin: 0;
-      padding: 0;
+    body{
+      margin:0;
+      background:black;
+      font-family:'Inter',sans-serif;
+      color:white;
     }
-    .rox {
-      font-family: "Roxborough CF Thin", serif;
-    }
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 8px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.3);
-      border-radius: 10px;
-    }
-    .custom-scrollbar {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255,255,255,0.3) transparent;
+
+    .rox{
+      font-family:"Roxborough CF Thin",serif;
+      letter-spacing:-0.03em;
     }
   </style>
 </head>
+
 <body>
 
-<!-- ================= PRICING SECTION ================= -->
-<section class="relative w-full px-6 lg:px-16 py-32 bg-black overflow-hidden">
-  <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_50%)]"></div>
+<section class="relative overflow-hidden bg-black px-6 lg:px-12 py-32">
+
+  <!-- subtle atmosphere -->
+  <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_55%)]"></div>
+
   <div class="relative z-10 max-w-6xl mx-auto">
-    <div class="max-w-3xl mx-auto text-center mb-24">
-      <h1 class="rox text-[48px] md:text-[64px] text-white leading-[1.1] tracking-tight mb-8">
-        Pricing, without bias.
-      </h1>
-      <p class="text-[18px] md:text-[20px] text-white/60 leading-relaxed font-light">
-        Gain the same toolkit used by high-end agencies. Everything in our library is now your competitive advantage
+
+    <!-- heading -->
+    <div class="max-w-3xl mb-28">
+
+      <p class="text-[10px] uppercase tracking-[0.28em] text-white/20 mb-8">
+        Pricing
       </p>
+
+      <h1 class="rox text-[58px] md:text-[82px] leading-[0.95] tracking-tight text-white mb-8">
+        Not loud. <br>
+        Just well made.
+      </h1>
+
+      <p class="max-w-xl text-white/40 text-[15px] leading-[1.9] font-light">
+        Some people want attention.
+        Some people just want their work to look right.
+        7Wings is built for the second kind.
+      </p>
+
     </div>
 
-    <div class="grid md:grid-cols-2 gap-8 items-stretch">
-      <!-- Foundation Card -->
-      <div class="group flex flex-col h-full p-12 rounded-[32px] bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] hover:bg-white/[0.05] hover:border-white/20 transition-all duration-700">
-        <div class="mb-12">
-          <h3 class="rox text-3xl text-white mb-3">Foundation</h3>
-          <p class="text-white/30 text-[10px] tracking-[0.2em] uppercase mb-8">Base Tier</p>
-          <div class="text-5xl text-white font-light tracking-tighter rox">Free</div>
-        </div>
-        <ul class="space-y-5 text-white/50 text-sm mb-12 flex-grow">
-          <li class="flex items-center gap-3"><span class="w-1 h-1 bg-white/20 rounded-full"></span> Core Templates</li>
-          <li class="flex items-center gap-3"><span class="w-1 h-1 bg-white/20 rounded-full"></span> Basic Customization</li>
-          <li class="flex items-center gap-3"><span class="w-1 h-1 bg-white/20 rounded-full"></span> Community Support</li>
-        </ul>
-        <button class="w-full py-4 rounded-2xl bg-white/5 text-white border border-white/10 hover:bg-white/10 hover:border-white/30 transition-all duration-300 tracking-wide font-medium">
-          Get Started
-        </button>
-      </div>
+    <!-- pricing cards -->
+    <div class="grid lg:grid-cols-2 gap-6">
 
-      <!-- Premium Card -->
-      <div class="group relative flex flex-col h-full p-12 rounded-[32px] bg-white/[0.07] backdrop-blur-3xl border border-white/20 shadow-[0_40px_80px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.1)] hover:border-white/40 transition-all duration-700">
-        <div class="absolute top-0 right-0 p-6">
-          <span class="text-[9px] bg-white text-black px-3 py-1 rounded-full font-bold tracking-widest uppercase">Elite</span>
-        </div>
-        <div class="mb-12">
-          <div class="flex items-baseline gap-2 mt-6 mb-2">
-            <span class="text-5xl text-white font-light tracking-tighter rox">₹666</span>
-            <span class="text-white/40 text-sm">/ month</span>
+      <!-- free -->
+      <div class="rounded-[32px] border border-white/10 bg-white/[0.025] p-10">
+
+        <div class="mb-14">
+
+          <p class="text-[10px] uppercase tracking-[0.24em] text-white/20 mb-6">
+            Foundation
+          </p>
+
+          <div class="flex items-end gap-3">
+
+            <h2 class="rox text-[56px] leading-none text-white">
+              Free
+            </h2>
+
           </div>
-          <p class="text-white/50 text-sm italic">Unlock what you need, when you need it.</p>
+
         </div>
-        <ul class="space-y-5 text-white/80 text-[15px] mb-12 flex-grow">
-          <li class="flex items-center gap-3"><span class="w-1.5 h-1.5 bg-white rounded-full"></span> <strong>All Foundation features</strong></li>
-          <li class="flex items-center gap-3"><span class="w-1.5 h-1.5 bg-white rounded-full"></span> Unlock one premium template every month</li>
-          <li class="flex items-center gap-3"><span class="w-1.5 h-1.5 bg-white rounded-full"></span> Save and revisit your designs</li>
-          <li class="flex items-center gap-3"><span class="w-1.5 h-1.5 bg-white rounded-full"></span> Full layout + code access</li>
-        </ul>
-        <button class="w-full py-4 rounded-2xl bg-white text-black hover:bg-neutral-200 transition-all duration-300 shadow-xl font-bold tracking-tight">
-          Continue to Sovereign
+
+        <div class="space-y-7 mb-16">
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              Core templates
+            </h3>
+
+            <p class="text-white/35 text-sm leading-relaxed">
+              Enough to launch something clean and thoughtful.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              AI-assisted editing
+            </h3>
+
+            <p class="text-white/35 text-sm leading-relaxed">
+              Edit layouts naturally without learning complicated tools.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              Instant publishing
+            </h3>
+
+            <p class="text-white/35 text-sm leading-relaxed">
+              No setup rituals. No technical friction.
+            </p>
+          </div>
+
+        </div>
+
+        <button class="w-full rounded-2xl border border-white/10 py-4 text-white text-sm hover:bg-white/[0.04] transition-all duration-300">
+          Start building
         </button>
+
       </div>
+
+      <!-- premium -->
+      <div class="relative rounded-[32px] border border-white/15 bg-white/[0.045] p-10">
+
+        <!-- badge -->
+        <div class="absolute top-6 right-6">
+
+          <span class="text-[9px] uppercase tracking-[0.2em] text-white/35 border border-white/10 rounded-full px-3 py-1">
+            Premium
+          </span>
+
+        </div>
+
+        <div class="mb-14">
+
+          <p class="text-[10px] uppercase tracking-[0.24em] text-white/20 mb-6">
+            Quietly premium
+          </p>
+
+          <div class="flex items-end gap-3 mb-4">
+
+            <h2 class="rox text-[64px] leading-none text-white">
+              €6.66
+            </h2>
+
+            <span class="text-white/30 text-sm mb-2">
+              / month
+            </span>
+
+          </div>
+
+          <p class="text-white/35 text-sm italic leading-relaxed max-w-sm">
+            Unlock what you need, when you need it.
+          </p>
+
+        </div>
+
+        <div class="space-y-7 mb-16">
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              One premium unlock every month
+            </h3>
+
+            <p class="text-white/45 text-sm leading-relaxed">
+              Your unlocked templates stay forever.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              Save and revisit projects
+            </h3>
+
+            <p class="text-white/45 text-sm leading-relaxed">
+              Build slowly. Return whenever you want.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              Full layout + code access
+            </h3>
+
+            <p class="text-white/45 text-sm leading-relaxed">
+              Change things your way without platform limits.
+            </p>
+          </div>
+
+          <div>
+            <h3 class="text-white text-[15px] mb-2">
+              Better aesthetics, less effort
+            </h3>
+
+            <p class="text-white/45 text-sm leading-relaxed">
+              Because presentation still matters.
+            </p>
+          </div>
+
+        </div>
+
+        <button class="w-full rounded-2xl bg-white text-black py-4 text-sm font-medium hover:bg-neutral-200 transition-all duration-300">
+          Continue
+        </button>
+
+        <p class="text-center text-[10px] tracking-[0.16em] uppercase text-white/15 mt-5">
+          Cancel anytime
+        </p>
+
+      </div>
+
     </div>
 
-    <div class="text-center mt-32 text-white/20 text-xs tracking-[0.2em] uppercase">
-      From Berlin with love
+    <!-- footer -->
+    <div class="mt-28 flex flex-col items-center">
+
+      <div class="w-16 h-px bg-white/10 mb-6"></div>
+
+      <p class="text-white/15 uppercase tracking-[0.28em] text-[10px]">
+        Built for independent builders
+      </p>
+
     </div>
+
   </div>
+
 </section>
 
 </body>

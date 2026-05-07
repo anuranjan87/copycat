@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
+  InboxIcon,
   Mail,
   CalendarDays,
   Eye,
@@ -418,11 +419,11 @@ export default function DashboardPage({ params }: { params: Promise<{ username: 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="p-1 rounded-xl bg-red-600/10 text-red-500 scale-110 transition-transform">
-                        <MessageSquare className="h-6 w-6" />
+                        <InboxIcon className="h-6 w-6" />
                       </div>
                       <div>
-                        <h2 className="text-3xl font-bold rox mb-2">Voices from your audience</h2>
-                        <p className="text-sm text-white/40 mb-2">Visitor messages</p>
+                        <h2 className="text-3xl font-bold rox mb-2">Inbox</h2>
+                        <p className="text-sm text-white/40 mb-2">Voices from your audience</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/10">

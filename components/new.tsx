@@ -7,6 +7,9 @@ import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from "@/lib
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"
 import dynamic from 'next/dynamic'
+import { SignInModal } from "@/components/SignInModal";
+import { CharacterForm } from "@/components/character-form";
+
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -87,7 +90,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
   const searchParams = useSearchParams();
   const templateId = searchParams.get('templateId');
   
-
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId)
@@ -101,6 +103,8 @@ export default function New({ username, initialContent }: NewMobileProps) {
 
   const [aiPrompt, setAiPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showSignInModal, setShowSignInModal] = useState(false);
+
 
   const loadingMessages = [
     "The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim",
@@ -311,23 +315,30 @@ ${draftData}
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleSave])
-
-  const handlePublish = async () => {
-    setIsPublishing(true)
-    try {
-      const result = await updateWebsiteContent(username, draftHtml, draftData, draftData)
-      if (result.success) {
-        toast.success("Published!", { description: "Your website is now live.", position: "top-center" })
-        router.replace(`/edit_new/${username}`)
-      } else {
-        toast.error(result.error || "Failed to publish website")
-      }
-    } catch {
-      toast.error("An unexpected error occurred")
-    } finally {
-      setIsPublishing(false)
-    }
+const handlePublish = async () => {
+  // If username is "demo", show the sign-in popup instead of publishing
+  if (username === "demo") {
+    setShowSignInModal(true);
+    console.log("signin")
+    return;
   }
+
+  // Normal publish logic for other users
+  setIsPublishing(true);
+  try {
+    const result = await updateWebsiteContent(username, draftHtml, draftData, draftData);
+    if (result.success) {
+      toast.success("Published!", { description: "Your website is now live.", position: "top-center" });
+      router.replace(`/edit_new/${username}`);
+    } else {
+      toast.error(result.error || "Failed to publish website");
+    }
+  } catch {
+    toast.error("An unexpected error occurred");
+  } finally {
+    setIsPublishing(false);
+  }
+};
 
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
@@ -384,6 +395,10 @@ ${draftData}
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
+      <SignInModal 
+      open={showSignInModal} 
+      onClose={() => setShowSignInModal(false)} 
+    />
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
@@ -408,8 +423,8 @@ ${draftData}
           </div>
           <div className="space-x-12">
             <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
-            <button onClick={handlePublish} className="bg-red-600 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
-              {isPublishing ? <Loader2 className=" h-6 w-6 mr-4 animate-spin text-yellow-400" /> : <>Publish</>}
+            <button onClick={handlePublish} className="bg-red-700 mt-1 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
+              {isPublishing ? <Loader2 className=" h-6 w-6 mr-4 animate-spin text-yellow-400" /> : <>Make Public</>}
             </button>
           </div>
         </div>
@@ -580,6 +595,11 @@ ${draftData}
             {isGenerating && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
                 <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
+                  <img 
+      src="https://i.postimg.cc/ydxdntYX/mat.gif" 
+      alt="footer visual"
+      className="w-43 opacity-90 hover:opacity-100 transition duration-500"
+    />
                   <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
                     {loadingMessages[currentMessageIndex]}
                   </p>

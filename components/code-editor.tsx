@@ -2,11 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { SendIcon, Loader2 } from 'lucide-react'
 import { updateWebsiteContent, generateCodeWithAIBlank, getTemplateById } from "@/lib/website-actions"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"
 import dynamic from 'next/dynamic'
+import { SendIcon, Loader2, Download } from "lucide-react";
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -107,6 +107,7 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   // AI state
   const [aiPrompt, setAiPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+const [showSignInModal, setShowSignInModal] = useState(false);
 
   // Word wrap toggle (replaces devMode)
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false)
@@ -148,6 +149,34 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   }, [isGenerating]);
 
   const aiInputRef = useRef<HTMLInputElement>(null)
+
+const handleDownload = () => {
+  // Build the full HTML exactly as it appears in the live preview
+  const fullHtml = savedHtml.replace(
+    '<script type="text/babel">',
+    `<script>
+const data = {
+${savedData}
+};
+</script>
+<script type="text/babel">`
+  );
+  const blob = new Blob([fullHtml], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${username}-website.html`; // e.g., "john-website.html"
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success("Website exported!", {
+    description: "Your HTML file has been downloaded.",
+    position: "top-center",
+  });
+};
+
+
 
   // Auto-focus when input bar becomes visible
   useEffect(() => {
@@ -342,23 +371,29 @@ ${draftData}
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleSave])
-
-  const handlePublish = async () => {
-    setIsPublishing(true)
-    try {
-      const result = await updateWebsiteContent(username, draftHtml, draftData, draftData)
-      if (result.success) {
-        toast.success("Published!", { description: "Your website is now live.", position: "top-center" })
-        router.replace(`/edit/${username}`)
-      } else {
-        toast.error(result.error || "Failed to publish website")
-      }
-    } catch {
-      toast.error("An unexpected error occurred")
-    } finally {
-      setIsPublishing(false)
-    }
+const handlePublish = async () => {
+  // If username is "demo", show the sign-in popup instead of publishing
+  if (username === "demo") {
+    setShowSignInModal(true);
+    return;
   }
+
+  // Normal publish logic for other users
+  setIsPublishing(true);
+  try {
+    const result = await updateWebsiteContent(username, draftHtml, draftData, draftData);
+    if (result.success) {
+      toast.success("Published!", { description: "Your website is now live.", position: "top-center" });
+      router.replace(`/edit_new/${username}`);
+    } else {
+      toast.error(result.error || "Failed to publish website");
+    }
+  } catch {
+    toast.error("An unexpected error occurred");
+  } finally {
+    setIsPublishing(false);
+  }
+};
 
   // AI Generation Handler – always uses and updates RAW HTML
   const handleAIGenerate = async () => {
@@ -407,6 +442,8 @@ ${draftData}
       </div>
     )
   }
+// Add this state near wordWrapEnabled
+const [hidePreview, setHidePreview] = useState(false)
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
@@ -427,188 +464,325 @@ ${draftData}
           </div>
         </div>
       </nav>
+<div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
 
-      <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
-        {/* Preview Panel */}
-        <div className="flex-[0.59] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg">
-          <div className="px-4 py-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-5">
-              <div className="flex items-center bg-white/10 rounded-md p-0.5">
-                <button
-                  onClick={() => setViewMode('mobile')}
-                  className={`p-2 rounded transition ${
-                    viewMode === 'mobile'
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/60 hover:text-white'
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                    <rect x="7" y="2" width="10" height="20" rx="2" />
-                    <circle cx="12" cy="18" r="1" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setViewMode('desktop')}
-                  className={`p-2 rounded transition ${
-                    viewMode === 'desktop'
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/60 hover:text-white'
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                    <rect x="3" y="4" width="18" height="12" rx="2" />
-                    <path d="M8 20h8M12 16v4" />
-                  </svg>
-                </button>
-              </div>
-              <button onClick={openDraftPreview} className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                  <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex items-center flex-1 justify-end">
-              {inputBarVisible ? (
-                <div className="flex items-center gap-2 w-full max-w-md">
-                  <div className="relative flex-1">
-                    <input
-                      ref={aiInputRef}
-                      type="text"
-                      placeholder="Ask AI to request any website..."
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={handleKeyPress}
-                      disabled={isGenerating}
-                      className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
-                    />
-                    <button
-                      onClick={handleAIGenerate}
-                      disabled={isGenerating || !aiPrompt.trim()}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
-                    >
-                      {isGenerating ? (
-                        <Loader2 className="size-3.5 text-white animate-spin" />
-                      ) : (
-                        <SendIcon className="size-3.5 text-white" />
-                      )}
-                    </button>
-                  </div>
-                  <button onClick={() => setInputBarVisible(false)} className="text-xs text-white/70 hover:text-white whitespace-nowrap">
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => setInputBarVisible(true)} className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition">
-                  + Ask AI
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7">
-            <div
-              className={`transition-all duration-300 ${
-                viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[480px]'
-              }`}
-              style={{ zoom: 0.6 }}
+  {/* Preview Panel */}
+  <div
+    className={`transition-[width,opacity,flex] duration-5 delay-100 ease-out overflow-hidden ${
+      hidePreview
+        ? 'w-0 opacity-0 pointer-events-none'
+        : 'flex-[0.59] opacity-100'
+    } flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg`}
+  >
+    <div className="px-4 py-2 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-5">
+        <div className="flex items-center bg-white/10 rounded-md p-0.5">
+          <button
+            onClick={() => setViewMode('mobile')}
+            className={`p-2 rounded transition ${
+              viewMode === 'mobile'
+                ? 'bg-white/20 text-white'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="w-4 h-4"
             >
-              <iframe
-                ref={iframeRef}
-                srcDoc={finalCode}
-                onLoad={handleIframeLoad}
-                className="w-full h-full rounded-lg border-0"
-                title="Live Preview"
-                sandbox="allow-scripts allow-same-origin"
-                style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'white' }}
-              />
-            </div>
-          </div>
+              <rect x="7" y="2" width="10" height="20" rx="2" />
+              <circle cx="12" cy="18" r="1" />
+            </svg>
+          </button>
+
+          <button
+            onClick={() => setViewMode('desktop')}
+            className={`p-2 rounded transition ${
+              viewMode === 'desktop'
+                ? 'bg-white/20 text-white'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="w-4 h-4"
+            >
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+          </button>
         </div>
 
-        {/* Code Editor Panel with Monaco */}
-        <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
-          <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
-              </div>
-              <span className="text-xs ml-1 text-gray-400 font-mono">HTML</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-white/50 text-xs">Word wrap</span>
-              <button
-                onClick={() => setWordWrapEnabled(!wordWrapEnabled)}
-                className={`relative flex h-5 w-9 items-center rounded-sm transition-colors ${
-                  wordWrapEnabled ? 'bg-stone-500' : 'bg-gray-400'
-                }`}
-              >
-                <div className={`h-4 w-4 rounded-sm bg-white shadow transition-transform duration-300 ${
-                  wordWrapEnabled ? 'translate-x-full' : ''
-                }`} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 min-h-0 relative">
-            <MonacoEditor
-              height="100%"
-              language="html"
-              value={draftHtml}
-              onChange={(value) => setDraftHtml(value || "")}
-              theme="custom-dark"
-              onMount={handleEditorMount}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-                lineNumbers: "off",
-                wordWrap: wordWrapEnabled ? "on" : "off",
-                autoClosingBrackets: "never",
-                autoClosingQuotes: "never",
-                matchBrackets: "never",
-                scrollBeyondLastLine: false,
-                renderLineHighlight: "none",
-                unicodeHighlight: {
-                  ambiguousCharacters: false,
-                  invisibleCharacters: false,
-                  nonBasicASCII: false
-                },
-                automaticLayout: true,
-                glyphMargin: false,
-                folding: false,
-                find: {
-                  addExtraSpaceOnTop: false,
-                  autoFindInSelection: 'never',
-                  seedSearchStringFromSelection: 'never',
-                },
-                readOnly: isGenerating,
-              }}
-            />
-
-            {isGenerating && (
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
-                <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
-                  <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
-                    {loadingMessages[currentMessageIndex]}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {hasUnsavedChanges && (
-            <button
-              onClick={handleSave}
-              className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
-            >
-              Save
-            </button>
-          )}
-        </div>
+        <button
+          onClick={openDraftPreview}
+          className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="w-4 h-4"
+          >
+            <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
+          </svg>
+        </button>
       </div>
+
+      <div className="flex items-center flex-1 justify-end">
+        {inputBarVisible ? (
+          <div className="flex items-center gap-2 w-full max-w-md">
+            <div className="relative flex-1">
+              <input
+                ref={aiInputRef}
+                type="text"
+                placeholder="Ask AI to request any website..."
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyDown={handleKeyPress}
+                disabled={isGenerating}
+                className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
+              />
+
+              <button
+                onClick={handleAIGenerate}
+                disabled={isGenerating || !aiPrompt.trim()}
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
+              >
+                {isGenerating ? (
+                  <Loader2 className="size-3.5 text-white animate-spin" />
+                ) : (
+                  <SendIcon className="size-3.5 text-white" />
+                )}
+              </button>
+            </div>
+
+            <button
+              onClick={() => setInputBarVisible(false)}
+              className="text-xs text-white/70 hover:text-white whitespace-nowrap"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setInputBarVisible(true)}
+            className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
+          >
+            + Ask AI
+          </button>
+        )}
+      </div>
+    </div>
+
+    <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7">
+      <div
+        className={`transition-all duration-300 ${
+          viewMode === 'desktop'
+            ? 'w-full max-w-7xl'
+            : 'w-[480px]'
+        }`}
+        style={{ zoom: 0.6 }}
+      >
+        <iframe
+          ref={iframeRef}
+          srcDoc={finalCode}
+          onLoad={handleIframeLoad}
+          className="w-full h-full rounded-lg border-0"
+          title="Live Preview"
+          sandbox="allow-scripts allow-same-origin"
+          style={{
+            aspectRatio:
+              viewMode === 'desktop'
+                ? '16/9'
+                : '9/13',
+            background: 'white',
+          }}
+        />
+      </div>
+    </div>
+  </div>
+
+  {/* Editor Panel */}
+  <div
+  className={`transition-all duration-300 ${
+    hidePreview
+      ? 'flex-1 max-w-6xl mx-auto w-full px-6 md:px-10 py-2'
+      : 'flex-[0.4]'
+  } flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative`}
+>
+
+    <div className="px-4 py-2 flex items-center justify-between">
+
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1">
+          <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+          <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+          <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
+        </div>
+
+        <span className="text-xs ml-1 text-gray-400 font-mono">
+          HTML
+        </span>
+      </div>
+
+   <div className="flex items-center gap-3  px-3 py-2">
+
+  {/* Preview Toggle */}
+  <div className="flex items-center gap-2">
+    <span className="text-[11px] font-medium tracking-wide text-white/40">
+      View
+    </span>
+
+    <button
+      onClick={() => setHidePreview(!hidePreview)}
+      className={`relative flex h-4 w-7 items-center rounded-full border border-white/10 transition-all duration-200 ${
+        hidePreview
+          ? "bg-white/15"
+          : "bg-white/5"
+      }`}
+    >
+      <div
+        className={`h-3 w-3 rounded-full bg-white shadow-md transition-all duration-200 ${
+          hidePreview
+            ? "translate-x-3.5"
+            : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  </div>
+
+  {/* Wrap Toggle */}
+  <div className="flex items-center gap-2">
+    <span className="text-[11px] font-medium tracking-wide text-white/40">
+      Wrap
+    </span>
+
+    <button
+      onClick={() =>
+        setWordWrapEnabled(!wordWrapEnabled)
+      }
+      className={`relative flex h-4 w-7 items-center rounded-full border border-white/10 transition-all duration-200 ${
+        wordWrapEnabled
+          ? "bg-white/15"
+          : "bg-white/5"
+      }`}
+    >
+      <div
+        className={`h-3 w-3 rounded-full bg-white shadow-md transition-all duration-200 ${
+          wordWrapEnabled
+            ? "translate-x-3.5"
+            : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  </div>
+
+  {/* Divider */}
+  <div className="h-4 w-px bg-white/10" />
+
+  {/* Download */}
+  <button
+    onClick={handleDownload}
+    title="Download HTML"
+    className="group flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95"
+  >
+    <Download className="h-3.5 w-3.5 " />
+  </button>
+
+</div>
+      
+    </div>
+
+    <div className="flex-1 min-h-0 relative">
+
+      <MonacoEditor
+        height="100%"
+        language="html"
+        value={draftHtml}
+        onChange={(value) =>
+          setDraftHtml(value || "")
+        }
+        theme="custom-dark"
+        onMount={handleEditorMount}
+       options={{
+  minimap: { enabled: false },
+  fontSize: 14,
+  fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+  lineNumbers: "off",
+  wordWrap: wordWrapEnabled ? "on" : "off",
+
+  quickSuggestions: true,
+  suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: "on",
+  tabCompletion: "on",
+  wordBasedSuggestions: "currentDocument",
+  snippetSuggestions: "inline",
+  inlineSuggest: {
+    enabled: true,
+  },
+
+  padding: {
+    top: 24,
+    bottom: 24,
+  },
+
+  autoClosingBrackets: "always",
+  autoClosingQuotes: "always",
+  matchBrackets: "always",
+
+  scrollBeyondLastLine: false,
+  renderLineHighlight: "none",
+
+  unicodeHighlight: {
+    ambiguousCharacters: false,
+    invisibleCharacters: false,
+    nonBasicASCII: false
+  },
+
+  automaticLayout: true,
+  glyphMargin: false,
+  folding: false,
+
+  find: {
+    addExtraSpaceOnTop: false,
+    autoFindInSelection: 'never',
+    seedSearchStringFromSelection: 'never',
+  },
+
+  readOnly: isGenerating,
+}}
+      />
+
+      {isGenerating && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
+          <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
+            <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
+              {loadingMessages[currentMessageIndex]}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {hasUnsavedChanges && (
+      <button
+        onClick={handleSave}
+        className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
+      >
+        Save
+      </button>
+    )}
+  </div>
+</div>
     </div>
   )
 }

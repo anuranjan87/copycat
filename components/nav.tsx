@@ -3,7 +3,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getEditRedirectPath } from "@/lib/website-actions"; // adjust import path to your actions file
+import { useClerk } from "@clerk/nextjs";
+import { getEditRedirectPath } from "@/lib/website-actions"; // adjust import path
 
 interface NavProps {
   username: string;
@@ -11,10 +12,16 @@ interface NavProps {
 
 export default function Nav({ username }: NavProps) {
   const router = useRouter();
+  const { signOut } = useClerk();
 
   const handleEditClick = async () => {
     const redirectPath = await getEditRedirectPath(username);
     router.push(redirectPath);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/"); // or "/sign-in" depending on your flow
   };
 
   return (
@@ -41,9 +48,12 @@ export default function Nav({ username }: NavProps) {
           <Link href={`/pricing/${username}`} className="transition hover:opacity-70">
             Premium
           </Link>
+          <Link href={`/pricing/${username}`} className="transition hover:opacity-70">
+            FAQ
+          </Link>
         </div>
 
-        <div className="space-x-[4rem]">
+        <div className="space-x-[4rem] flex items-center">
           {/* Live Site – external link */}
           <a
             href={`/${username}`}
@@ -54,12 +64,20 @@ export default function Nav({ username }: NavProps) {
             Live Site
           </a>
 
-          {/* Edit button – conditional redirect */}
+          {/* Edit button */}
           <button
             onClick={handleEditClick}
-            className="bg-red-600 text-white px-[2.8rem] tracking-[0.1rem] py-2.5 rounded-sm text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer"
+            className="bg-red-800 text-white px-[2.8rem] tracking-[0.1rem] py-2.5 rounded-sm text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer"
           >
             Edit
+          </button>
+
+          {/* Sign Out button */}
+          <button
+            onClick={handleSignOut}
+            className="border border-white/50 text-white px-4 py-2 rounded-sm text-sm hover:bg-white/10 transition"
+          >
+            Sign Out
           </button>
         </div>
       </div>
