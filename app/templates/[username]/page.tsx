@@ -227,20 +227,8 @@ const templatesMeta = [
     description: "Focuses on parity, padding, and optic peace to lower mental static and foster user repose",
     mood: "Landing page",
   },
-  {
-    id: "15",
-    localImage: "/15.jpg",
-    title: "Cyber Pulse",
-    description: "Directs neon brightness, punch, and drift to foster vigor and optic drive in the viewport",
-    mood: "cyberpunk / energetic",
-  },
-  {
-    id: "16",
-    localImage: "/16.jpg",
-    title: "Minimal Mono",
-    description: "Employs rigid font weights and gutter uniformity to foster poise, utility, and clear optic path",
-    mood: "minimal / clean",
-  },
+ 
+  
 ];
 
 export default function Page({ params }: PageProps) {
@@ -391,31 +379,31 @@ export default function Page({ params }: PageProps) {
 
           {/* Templates Grid – each card navigates to editor with templateId */}
           <section className="pb-32 mt-4">
-            <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid px-16 gap-12  grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {templatesMeta.map((template) => {
                 const isLoading = isNavigating && selectedTemplateId === template.id;
                 return (
                   <div
                     key={template.id}
                     onClick={() => handleSelectTemplate(template.id)}
-                    className="bg-stone-600/50  px-5 py-3 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-106"
+                    className="relative group bg-stone-600/50 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-[1.02] overflow-hidden p-0"
                   >
-                    {/* Image area - using standard img to match HTML exactly */}
-                    <div className="relative w-full overflow-hidden rounded-xl">
+                    {/* Image area - fills the entire card naturally */}
+                    <div className="relative w-full overflow-hidden">
                       <img
                         src={template.localImage}
                         alt={template.title}
-                        className="rounded-2xl w-full h-auto object-cover"
+                        className="w-full h-auto object-cover rounded-t-3xl block"
                       />
                     </div>
 
-                    {/* Card content */}
-                    <div className="mt-4">
-                      <h2 className="rox  text-white text-xl mt-[1rem] mb-[0.4rem]">{template.title}</h2>
-                      <p className=" text-gray-400    text-sm mb-[1rem] leading-[1.2rem] tracking-[.02rem]">{template.description}</p>
-                      <p className="text-gray-100/50 tracking-[.07rem]  font-thin italic text-xs ">{template.mood}</p>
+                    {/* Hover overlay - covers bottom 80% of the card with same bg color as card */}
+                    <div className="absolute bottom-0 left-0 right-0 h-[80%] bg-stone-600/95 rounded-b-3xl flex flex-col justify-center p-5 opacity-0 translate-y-2 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none">
+                      <h2 className={`${applyRoxFont ? "rox " : ""}text-white text-xl mb-1`}>{template.title}</h2>
+                      <p className="text-gray-300 text-sm mb-2 leading-relaxed">{template.description}</p>
+                      <p className="text-gray-100/50 italic text-xs tracking-wide">{template.mood}</p>
 
-                      {/* Loading indicator inside card */}
+                      {/* Loading indicator inside overlay */}
                       {isLoading && (
                         <div className="mt-3 flex items-center gap-1 text-red-400 text-xs">
                           <Loader2 className="w-3 h-3 animate-spin" />

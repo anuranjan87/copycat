@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { SendIcon, Loader2 } from 'lucide-react'
+import { SendIcon, Loader2, Download } from 'lucide-react'
 import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from "@/lib/website-actions"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"
@@ -298,6 +298,34 @@ ${draftData}
     } catch (error) { console.log("Scroll listener error:", error) }
   }, [finalCode, captureScrollPosition])
 
+
+const handleDownload = () => {
+  // Build the full HTML exactly as it appears in the live preview
+  const fullHtml = savedHtml.replace(
+    '<script type="text/babel">',
+    `<script>
+const data = {
+${savedData}
+};
+</script>
+<script type="text/babel">`
+  );
+  const blob = new Blob([fullHtml], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${username}-website.html`; // e.g., "john-website.html"
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success("Website exported!", {
+    description: "Your HTML file has been downloaded.",
+    position: "top-center",
+  });
+};
+
+
   const handleSave = useCallback(() => {
     captureScrollPosition()
     setSavedHtml(draftHtml)
@@ -550,6 +578,14 @@ const handlePublish = async () => {
               <button onClick={() => setDevMode(!devMode)} className={`relative flex h-5 w-9 items-center rounded-sm transition-colors ${devMode ? 'bg-stone-500' : 'bg-gray-400'}`}>
                 <div className={`h-4 w-4 rounded-sm bg-white shadow transition-transform duration-300 ${devMode ? 'translate-x-full' : ''}`}/>
               </button>
+              {/* Download */}
+                <button
+                  onClick={handleDownload}
+                  title="Download HTML"
+                  className="group flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95"
+                >
+                  <Download className="h-3.5 w-3.5 " />
+                </button>
             </div>
           </div>
 

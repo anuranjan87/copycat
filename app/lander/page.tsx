@@ -20,6 +20,7 @@ export default function Page() {
 <body class="bg-black text-white">
 
 <nav class="fixed top-0 right-0 left-0 z-50 border-b border-white/10 bg-black/40 py-4 px-6 md:px-16 backdrop-blur-xl tracking-[0.08em]">
+
     <div class="mx-auto flex max-w-7xl items-center justify-between">
       <div class="flex items-center">
         <div class="mr-3 h-6 w-[2px] bg-red-600"></div>
@@ -38,6 +39,54 @@ export default function Page() {
       </button>
     </div>
   </nav>
+
+
+
+  <!-- ================= HERO SECTION ================= -->
+  <section
+    class="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat pt-52 scale-93"
+    style="background-image:url('https://i.postimg.cc/PXvcpV7J/Chat-GPT-Image-May-8-2026-04-28-14-PM.png')"
+  >
+
+    <!-- overlay -->
+    <div class="absolute inset-0 bg-black/20"></div>
+
+    <div class="relative z-10 mx-auto grid max-w-7xl items-center gap-16 px-6 py-24 lg:grid-cols-2 lg:px-16">
+
+      <!-- LEFT -->
+      <div class="max-w-2xl">
+
+        <p class="mb-5 text-[11px] uppercase tracking-[0.3em] text-white/40">
+          01 / 7WINKS
+        </p>
+
+        <h1 class="rox text-5xl leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
+          The future of <br />
+          AI powered solutions
+        </h1>
+
+        <p class="mt-8 max-w-xl text-sm leading-relaxed text-white/65 md:text-base">
+          Transform your business with cutting edge AI technology
+          designed for seamless automation.
+        </p>
+
+        <div class="mt-10 flex flex-wrap gap-4">
+
+          <button class="rounded-full bg-[#f5a623] px-7 py-3 text-sm font-medium text-black shadow-lg shadow-orange-500/20 transition duration-300 hover:scale-105">
+            Explore Features
+          </button>
+
+          <button class="rounded-full border border-white/15 px-7 py-3 text-sm text-white transition hover:bg-white/10">
+            Start Building
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
 
 <!-- ================= HERO ================= -->
 <section class="max-w-5xl mx-auto px-6 pt-28 pb-20">
@@ -235,13 +284,7 @@ export default function Page() {
   </div>
 
 
-<div class="flex justify-center mt-10">
-    <img 
-      src="https://i.postimg.cc/ydxdntYX/mat.gif" 
-      alt="footer visual"
-      class="w-43 opacity-90 hover:opacity-100 transition duration-500"
-    />
-  </div>
+
 </footer>
 </body>
 </html>`;
