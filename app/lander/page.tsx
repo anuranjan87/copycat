@@ -103,6 +103,7 @@ export default function Page() {
   <p class="text-white/50 max-w-xl mb-10">
     7Winks gives you structured templates designed to convert —  
     so you spend less time arranging pixels, and more time building something that matters.
+    https://chatgpt.com/share/69ffbcc6-0694-83ab-afa4-0118fdf2c2af
   </p>
 
   <!-- CTA -->
