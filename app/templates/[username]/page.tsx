@@ -262,9 +262,8 @@ export default function Page({ params }: PageProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setApplyRoxFont(true);
-    }, 4000);
+    }, 3500); // Slipped to 3.5s for a slightly faster premium punch
     
-    // Cleanup timeout on component unmount
     return () => clearTimeout(timer);
   }, []);
 
@@ -281,7 +280,6 @@ export default function Page({ params }: PageProps) {
       return;
     }
 
-    // Just navigate to the editor with templateId as a query parameter
     setIsNavigating(true);
     setSelectedTemplateId(templateId);
 
@@ -292,136 +290,212 @@ export default function Page({ params }: PageProps) {
   };
 
   return (
-    <div className="bg-black text-white min-h-screen overflow-x-hidden">
-      {/* Add custom fonts */}
+    <div className="bg-black text-white min-h-screen overflow-x-hidden selection:bg-red-500/30 selection:text-red-200">
+      {/* Add custom fonts & subtle interactive global styles */}
       <style>
         {`
-          @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap');
           @font-face {
             font-family: 'Roxborough CF Thin';
             src: url('https://db.onlinewebfonts.com/c/68b898f6044bbee439423445076f3168?family=Roxborough+CF+Thin');
-            
           }
           .rox {
             font-family: 'Roxborough CF Thin', serif;
           }
           body {
             font-family: 'Montserrat', sans-serif;
+            background-color: #000000;
+          }
+          /* Custom sleek scrollbar */
+          ::-webkit-scrollbar {
+            width: 6px;
+          }
+          ::-webkit-scrollbar-track {
+            background: #000;
+          }
+          ::-webkit-scrollbar-thumb {
+            background: #222;
+            border-radius: 10px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+            background: #333;
           }
         `}
       </style>
 
       {/* Loading Overlay while navigating */}
       {isNavigating && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
-          <div className="bg-black/60 border border-red-500/30 rounded-xl p-6 flex flex-col items-center">
-            <Image src={mat} alt="Loading" width={120} height={120} />
-            <div className="flex items-center gap-2 mt-3">
-              <Loader2 className="w-4 h-4 animate-spin text-red-500" />
-              <span className="text-sm text-white/80">Loading template into editor...</span>
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-50 flex items-center justify-center transition-all duration-500 animate-fade-in">
+          <div className="bg-black/40 border border-red-500/20 rounded-2xl p-8 flex flex-col items-center shadow-[0_0_50px_-12px_rgba(239,68,68,0.3)] backdrop-blur-md">
+            <div className="relative animate-pulse duration-1000">
+              <Image src={mat} alt="Loading" width={110} height={110} className="object-contain" />
+            </div>
+            <div className="flex items-center gap-2 mt-5 bg-stone-900/40 px-4 py-2 rounded-full border border-white/5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-red-500" />
+              <span className="text-xs tracking-wider uppercase text-white/70">Loading Canvas...</span>
             </div>
           </div>
         </div>
       )}
 
-<Nav username={username} />
+      <Nav username={username} />
 
-        {/* Main Content */}
-        <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mt-12 mx-auto">
-          {/* Hero Section */}
-          <section className=" flex flex-col items-center justify-center mb-4 text-center mt-7">
-            <div className="mb-4 w-12 h-[2px] bg-red-600 mx-auto" />
-            <h1 className={`${applyRoxFont ? "rox " : ""}text-5xl md:text-6xl mt-4 text-stone-400 font-light tracking-tight transition-all duration-700 ease-in-out`}>
-              Not a website builder.<br />
-              A starting point.
-            </h1>
-           <div className="mt-8 space-y-1 max-w-lg">
-  <p className="text-white/60 text-sm leading-relaxed tracking-wide">
-    You have an idea. Instead of overthinking design… <br className="hidden md:block" />
-    you just start. 
-  </p>
+      {/* Main Content */}
+      <main className="flex-1 px-6 md:px-12 py-12 max-w-6xl mt-12 mx-auto relative">
+        
+        {/* Soft Radial Backlight behind Hero */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[350px] bg-red-900/10 rounded-full blur-[120px] pointer-events-none" />
 
-  <p className="text-white/60 text-sm leading-relaxed">
-    Pick a template. Change a few words. <strong className="text-white/80 font-medium">Go live.</strong>
-  </p>
-
-  <p className="text-white/60 text-sm leading-relaxed">
-    Now people can find you on Google. They land on your page. <br />
-    They get curious. They leave their email.
-  </p>
-
-  <p className="text-white/60 text-sm leading-relaxed">
-    And just like that—you’re collecting leads. <span className="text-white/60 italic">For free.</span>
-  </p>
-
-  <p className="text-white/60 text-sm leading-relaxed mb-3">
-    You open your dashboard. Real people are visiting. <br />
-    Right now.
-  </p>
-
-  
-</div>
-
-
+        {/* Hero Section */}
+        <section className="flex flex-col items-center justify-center mb-4 text-center mt-7 relative z-10">
           
-          </section><p className="text-white/60 text-sm mx-auto  text-center font-medium border-t border-white/20 pt-3 mt-6 ">
-   Select any template – it will open in the editor as a draft. Publish when you're ready.
+          {/* Breathing Accent Line */}
+          <div className="mb-6 w-12 h-[2px] bg-red-600 mx-auto animate-pulse" />
+          
+          <h1 className={`${applyRoxFont ? "rox tracking-normal text-stone-200" : "tracking-tight text-stone-400"} text-5xl md:text-6.5xl mt-4 font-light leading-tight transition-all duration-1000 ease-in-out`}>
+            Not a website builder.<br />
+            <span className="text-stone-300">A starting point.</span>
+          </h1>
 
+          <div className="mt-8 space-y-3 max-w-xl text-white/50 text-sm leading-relaxed tracking-wide font-light">
+            <p className="animate-fade-in delay-100">
+              You have an idea. Instead of overthinking design… <br className="hidden md:block" />
+              you just start. 
+            </p>
 
-  </p>
+            <p className="animate-fade-in delay-200">
+              Pick a template. Change a few words. <strong className="text-white/80 font-medium tracking-wide">Go live.</strong>
+            </p>
 
-           <Link
-  href={`/edit/${username}`}
-  className="inline-flex items-center gap-2 mt-16 mb-12 px-4 py-2 text-[12px] uppercase tracking-[0.28em] text-white/40 border-y border-dotted border-white/20 hover:text-white/80 hover:border-white/40 transition-all duration-30 backdrop-blur-sm"
->
-  CLICK HERE FOR BLANK EDITOR →
-</Link>
+            <p className="animate-fade-in delay-300">
+              Now people can find you on Google. They land on your page. <br />
+              They get curious. They leave their email.
+            </p>
 
-          {/* Templates Grid – each card navigates to editor with templateId */}
-          <section className="pb-32 mt-4">
-            <div className="grid px-16 gap-12  grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {templatesMeta.map((template) => {
-                const isLoading = isNavigating && selectedTemplateId === template.id;
-                return (
-                  <div
-                    key={template.id}
-                    onClick={() => handleSelectTemplate(template.id)}
-                    className="relative group bg-stone-600/50 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-[1.02] overflow-hidden p-0"
-                  >
-                    {/* Image area - fills the entire card naturally */}
-                    <div className="relative w-full overflow-hidden">
-                      <img
-                        src={template.localImage}
-                        alt={template.title}
-                        className="w-full h-auto object-cover rounded-t-3xl block"
-                      />
-                    </div>
+            <p className="animate-fade-in delay-500">
+              And just like that—you’re collecting leads. <span className="text-white/60 italic font-normal">For free.</span>
+            </p>
 
-                    {/* Hover overlay - covers bottom 80% of the card with same bg color as card */}
-                    <div className="absolute bottom-0 left-0 right-0 h-[80%] bg-stone-600/95 rounded-b-3xl flex flex-col justify-center p-5 opacity-0 translate-y-2 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none">
-                      <h2 className={`${applyRoxFont ? "rox " : ""}text-white text-xl mb-1`}>{template.title}</h2>
-                      <p className="text-gray-300 text-sm mb-2 leading-relaxed">{template.description}</p>
-                      <p className="text-gray-100/50 italic text-xs tracking-wide">{template.mood}</p>
+            <p className="text-stone-400/80 animate-fade-in delay-700 font-normal">
+              You open your dashboard. Real people are visiting. <br />
+              <span className="relative inline-flex items-center gap-1.5 font-semibold text-white/90">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                Right now.
+              </span>
+            </p>
+          </div>
+        </section>
 
-                      {/* Loading indicator inside overlay */}
-                      {isLoading && (
-                        <div className="mt-3 flex items-center gap-1 text-red-400 text-xs">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Loading...
-                        </div>
-                      )}
-                    </div>
+        {/* Blank Editor CTA Button */}
+        <div className="text-center mt-14 mb-16">
+          <Link
+            href={`/edit/${username}`}
+            className="group relative inline-flex items-center gap-3 px-6 py-3 text-[11px] uppercase tracking-[0.3em] text-white/40 border border-dashed border-white/20 hover:border-white/50 hover:text-white transition-all duration-500 bg-white/[0.01] hover:bg-white/[0.03] backdrop-blur-sm rounded"
+          >
+            <span className="relative z-10 flex items-center gap-2">
+              Click here for blank editor 
+              <span className="inline-block transition-transform duration-300 transform group-hover:translate-x-1.5">→</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Templates Grid */}
+        <section className="pb-32 mt-6 relative z-10">
+          <div className="grid grid-cols-1 gap-8 px-4 sm:px-8 lg:px-12 sm:grid-cols-2 lg:grid-cols-3">
+            {templatesMeta.map((template) => {
+              const isLoading = isNavigating && selectedTemplateId === template.id;
+
+              return (
+                <div
+                  key={template.id}
+                  onClick={() => handleSelectTemplate(template.id)}
+                  className="
+                    group
+                    relative
+                    overflow-hidden
+                    rounded-[2rem]
+                    border border-white/[0.08]
+                    bg-[#080808]
+                    shadow-[0_4px_30px_rgba(0,0,0,0.8)]
+                    transition-all
+                    duration-500
+                    ease-out
+                    hover:-translate-y-2
+                    hover:border-red-500/30
+                    hover:shadow-[0_12px_40px_-15px_rgba(239,68,68,0.15)]
+                    cursor-pointer
+                  "
+                >
+                  {/* Image/Screenshot Container */}
+                  <div className="relative aspect-[16/10] overflow-hidden">
+                    <img
+                      src={template.localImage}
+                      alt={template.title}
+                      className="
+                        h-full
+                        w-full
+                        object-cover
+                        transition-transform
+                        duration-1000
+                        ease-out
+                        group-hover:scale-[1.04]
+                        filter brightness-[0.9] group-hover:brightness-100
+                      "
+                    />
+
+                    {/* Rich editorial vignette overlay */}
+                    <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#080808] via-[#080808]/20 to-transparent transition-all duration-500" />
                   </div>
-                );
-              })}
-            </div>
-          </section>
 
-          {/* Footer */}
-          <footer className="border-t border-white/20 pt-8 text-center text-[11px] text-white/30 tracking-wider">
-            <p>Your chosen premium template never expires</p>
-          </footer>
-        </main>
-      </div>
+                  {/* Card content wrapper */}
+                  <div className="space-y-4 p-7">
+                    <h3
+                      className={`
+                        transition-colors duration-300 group-hover:text-red-400
+                        ${applyRoxFont ? "rox" : ""} 
+                        text-2xl font-light text-white
+                      `}
+                    >
+                      {template.title}
+                    </h3>
+
+                    <p className="text-sm leading-6 text-neutral-400/90 font-light min-h-[48px]">
+                      {template.description}
+                    </p>
+
+                    {/* Metadata tags */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className="rounded-full border border-white/5 bg-white/[0.03] px-3.5 py-1 text-[10px] tracking-wide text-neutral-400 transition-all duration-300 group-hover:border-white/10 group-hover:text-neutral-200">
+                        {template.category}
+                      </span>
+
+                      <span className="rounded-full border border-white/5 bg-white/[0.03] px-3.5 py-1 text-[10px] tracking-wide text-neutral-400 transition-all duration-300 group-hover:border-white/10 group-hover:text-neutral-200">
+                        {template.mood}
+                      </span>
+                    </div>
+
+                    {/* Loading status bar */}
+                    {isLoading && (
+                      <div className="flex items-center gap-2 pt-2 text-xs text-red-500 animate-pulse">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Initializing Workspace...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t border-white/10 pt-8 pb-4 text-center text-[10px] text-white/20 tracking-[0.2em] uppercase">
+          <p>Your chosen premium template never expires</p>
+        </footer>
+      </main>
+    </div>
   );
 }

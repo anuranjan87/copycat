@@ -31,12 +31,23 @@ export default function IframeWithLinkHandler({
         const formData = new FormData()
 
         // 🔥 Remove empty fields (FIXES your bug)
-        Object.entries(data.formData).forEach(([key, value]) => {
-          const v = String(value).trim()
-          if (v !== "") {
-            formData.append(key, v)
-          }
-        })
+      Object.entries(data.formData).forEach(([key, value]) => {
+  // skip null/undefined
+  if (value == null) return
+
+  // objects/arrays → JSON
+  if (typeof value === "object") {
+    formData.append(key, JSON.stringify(value))
+    return
+  }
+
+  // normal values
+  const v = String(value).trim()
+
+  if (v !== "") {
+    formData.append(key, v)
+  }
+})
 
         // ❗ If nothing left, don't send
         if ([...formData.keys()].length === 0) return

@@ -3,24 +3,44 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { updateWebsiteContent, generateCodeWithAIBlank, getTemplateById } from "@/lib/website-actions"
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import dynamic from 'next/dynamic'
-import { SendIcon, Loader2, Download } from "lucide-react";
+import {
+  SendIcon,
+  Loader2,
+  Download,
+  Fullscreen,
+  Minimize,
+  Maximize,
+  Eye,
+  EyeOff,
+  AlignLeft,
+  AlignJustify,
+  Layers,
+  Monitor,
+  Smartphone,
+  Sparkles,
+  Zap,
+  Check,
+  Save,
+  Globe,
+  Settings,
+  PanelLeft,
+  PanelRight,
+  XCircle,
+} from "lucide-react"
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
   let cleaned = raw
     .replace(/^```[\w]*\n?/, '')
     .replace(/```$/, '')
-    .trim();
-
-  // Remove wrapping object { ... }
+    .trim()
   if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
-    cleaned = cleaned.slice(1, -1).trim();
+    cleaned = cleaned.slice(1, -1).trim()
   }
-
-  return cleaned;
+  return cleaned
 }
 
 // Dynamically import Monaco Editor (no SSR)
@@ -35,21 +55,19 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 
 // Custom theme + disable error diagnostics
 const handleEditorMount = (editor: any, monaco: any) => {
-  // Disable semantic & syntax validation (red squiggles)
   if (monaco.languages?.typescript?.javascriptDefaults) {
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: true,
       noSyntaxValidation: true,
-    });
+    })
   }
   if (monaco.languages?.html?.htmlDefaults) {
     monaco.languages.html.htmlDefaults.setOptions({
       validate: false,
-    });
+    })
   }
 
-  // Define custom dark theme
-  monaco.editor.defineTheme("custom-dark", {
+  monaco.editor.defineTheme("photoshop-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [
@@ -62,20 +80,19 @@ const handleEditorMount = (editor: any, monaco: any) => {
       { token: "text", foreground: "6fcaf2" },
     ],
     colors: {
-      "editor.background": "#000000",
+      "editor.background": "#0a0a0a",
       "editor.foreground": "#F8F8F2",
-      "editor.lineHighlightBackground": "#44475A",
-      "editorLineNumber.foreground": "#6272A4",
+      "editor.lineHighlightBackground": "#1a1a1a",
+      "editorLineNumber.foreground": "#4a4a4a",
       "editorLineNumber.activeForeground": "#F8F8F2",
     },
-  });
-  monaco.editor.setTheme("custom-dark");
+  })
+  monaco.editor.setTheme("photoshop-dark")
 
-  // Style container (no border, no radius)
-  const container = editor.getContainerDomNode();
-  container.style.borderRadius = "";
-  container.style.overflow = "hidden";
-  container.style.border = "";
+  const container = editor.getContainerDomNode()
+  container.style.borderRadius = ""
+  container.style.overflow = "hidden"
+  container.style.border = ""
 }
 
 export interface CodeEditorProps {
@@ -88,10 +105,11 @@ export interface CodeEditorProps {
 }
 
 export function CodeEditor({ username, initialContent }: CodeEditorProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const templateId = searchParams.get('templateId');
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const templateId = searchParams.get('templateId')
 
+  // Core states
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId)
@@ -103,16 +121,15 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
     }
     return true
   })
-
-  // AI state
   const [aiPrompt, setAiPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
-const [showSignInModal, setShowSignInModal] = useState(false);
+  const [showSignInModal, setShowSignInModal] = useState(false)
 
-  // Word wrap toggle (replaces devMode)
+  // View toggles
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false)
+  const [hidePreview, setHidePreview] = useState(false)
 
-  // Fun jokes and interesting facts to show during AI loading
+  // Loading messages
   const loadingMessages = [
     "The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim",
     "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new  — Steve Jobs",
@@ -123,62 +140,33 @@ const [showSignInModal, setShowSignInModal] = useState(false);
     "How many programmers does it take to change a light bulb? None, that's a hardware problem",
     "The first hard drive weighed over a ton and stored only 5MB of data",
     "People do not want to buy a quarter inch drill, they want a quarterinch hole — Theodore Levitt"
-  ];
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  ]
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
 
-  // Rotate message every 3 seconds while generating
+  // Rotate message every 6s while generating
   useEffect(() => {
-    if (!isGenerating) return;
+    if (!isGenerating) return
     const interval = setInterval(() => {
       setCurrentMessageIndex((prev) => {
-        let newIndex;
+        let newIndex
         do {
-          newIndex = Math.floor(Math.random() * loadingMessages.length);
-        } while (newIndex === prev && loadingMessages.length > 1);
-        return newIndex;
-      });
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [isGenerating]);
+          newIndex = Math.floor(Math.random() * loadingMessages.length)
+        } while (newIndex === prev && loadingMessages.length > 1)
+        return newIndex
+      })
+    }, 6000)
+    return () => clearInterval(interval)
+  }, [isGenerating, loadingMessages.length])
 
-  // Reset message index when generation starts
   useEffect(() => {
     if (isGenerating) {
-      setCurrentMessageIndex(0);
+      setCurrentMessageIndex(0)
     }
-  }, [isGenerating]);
+  }, [isGenerating])
 
   const aiInputRef = useRef<HTMLInputElement>(null)
 
-const handleDownload = () => {
-  // Build the full HTML exactly as it appears in the live preview
-  const fullHtml = savedHtml.replace(
-    '<script type="text/babel">',
-    `<script>
-const data = {
-${savedData}
-};
-</script>
-<script type="text/babel">`
-  );
-  const blob = new Blob([fullHtml], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${username}-website.html`; // e.g., "john-website.html"
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast.success("Website exported!", {
-    description: "Your HTML file has been downloaded.",
-    position: "top-center",
-  });
-};
-
-
-
-  // Auto-focus when input bar becomes visible
+  // Auto-focus AI input
   useEffect(() => {
     if (inputBarVisible) {
       const timer = setTimeout(() => {
@@ -192,6 +180,7 @@ ${savedData}
     localStorage.setItem("inputBarVisible", JSON.stringify(inputBarVisible))
   }, [inputBarVisible])
 
+  // Fullscreen handling
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
@@ -200,6 +189,7 @@ ${savedData}
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
+  // Data extraction and draft state
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
     const match = dataString.match(/const\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i)
@@ -212,6 +202,7 @@ ${savedData}
   const [savedHtml, setSavedHtml] = useState(initialContent.html)
   const [savedData, setSavedData] = useState(extractDataFields(initialContent.data))
 
+  // Load template if templateId present
   useEffect(() => {
     if (!templateId) return
     async function loadTemplate() {
@@ -239,6 +230,7 @@ ${savedData}
 
   const hasUnsavedChanges = draftHtml !== savedHtml
 
+  // Final code for preview
   const finalCode = savedHtml.replace(
     '<script type="text/babel">',
     `<script>
@@ -249,43 +241,10 @@ ${savedData}
 <script type="text/babel">`
   )
 
-  
-  // NEW: Open draft preview tab with current unsaved code
-  const openDraftPreview = () => {
-    // Build the full HTML code from unsaved draft
-    const currentPreviewCode = draftHtml.replace(
-      '<script type="text/babel">',
-      `<script>
-const data = {
-${draftData}
-};
-</script>
-<script type="text/babel">`
-    );
-
-    // Store in sessionStorage with a unique key (timestamp)
-    const key = `draft_preview_${Date.now()}`;
-    sessionStorage.setItem(key, currentPreviewCode);
-
-    // Open new tab with the draft page, passing the key in query params
-    const draftUrl = `/draft/${username}?previewKey=${encodeURIComponent(key)}`;
-    window.open(draftUrl, '_blank');
-  };
+  // Iframe and scroll persistence
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
   const isRestoringScroll = useRef(false)
-
-  const toggleFullscreen = () => {
-    if (!iframeRef.current) return
-    if (!document.fullscreenElement) {
-      iframeRef.current.requestFullscreen().catch(err => {
-        console.error(`Fullscreen error: ${err.message}`)
-        toast.error("Fullscreen failed", { description: "Please check browser permissions", position: "top-center" })
-      })
-    } else {
-      document.exitFullscreen()
-    }
-  }
 
   const captureScrollPosition = useCallback(() => {
     if (iframeRef.current?.contentWindow && !isRestoringScroll.current) {
@@ -354,13 +313,44 @@ ${draftData}
     } catch (error) { console.log("Scroll listener error:", error) }
   }, [finalCode, captureScrollPosition])
 
+  // Open draft preview in new tab
+  const openDraftPreview = () => {
+    const currentPreviewCode = draftHtml.replace(
+      '<script type="text/babel">',
+      `<script>
+const data = {
+${draftData}
+};
+</script>
+<script type="text/babel">`
+    )
+    const key = `draft_preview_${Date.now()}`
+    sessionStorage.setItem(key, currentPreviewCode)
+    const draftUrl = `/draft/${username}?previewKey=${encodeURIComponent(key)}`
+    window.open(draftUrl, '_blank')
+  }
+
+  // Toggle fullscreen for iframe
+  const toggleFullscreen = () => {
+    if (!iframeRef.current) return
+    if (!document.fullscreenElement) {
+      iframeRef.current.requestFullscreen().catch(err => {
+        console.error(`Fullscreen error: ${err.message}`)
+        toast.error("Fullscreen failed", { description: "Please check browser permissions", position: "top-center" })
+      })
+    } else {
+      document.exitFullscreen()
+    }
+  }
+
+  // Save handler
   const handleSave = useCallback(() => {
     captureScrollPosition()
     setSavedHtml(draftHtml)
-    // Also keep savedData in sync (unchanged)
     toast.success("Changes saved", { description: "Your draft has been updated.", position: "top-center", duration: 2000 })
   }, [draftHtml, captureScrollPosition])
 
+  // Keyboard shortcut: Ctrl+S
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -371,48 +361,42 @@ ${draftData}
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleSave])
-const handlePublish = async () => {
-  // If username is "demo", show the sign-in popup instead of publishing
-  if (username === "demo") {
-    setShowSignInModal(true);
-    return;
-  }
 
-  // Normal publish logic for other users
-  setIsPublishing(true);
-  try {
-    const result = await updateWebsiteContent(username, draftHtml, draftData, draftData);
-    if (result.success) {
-      toast.success("Published!", { description: "Your website is now live.", position: "top-center" });
-      router.replace(`/edit_new/${username}`);
-    } else {
-      toast.error(result.error || "Failed to publish website");
+  // Publish handler
+  const handlePublish = async () => {
+    if (username === "demo") {
+      setShowSignInModal(true)
+      return
     }
-  } catch {
-    toast.error("An unexpected error occurred");
-  } finally {
-    setIsPublishing(false);
+    setIsPublishing(true)
+    try {
+      const result = await updateWebsiteContent(username, draftHtml, draftData, draftData)
+      if (result.success) {
+        toast.success("Published!", { description: "Your website is now live.", position: "top-center" })
+        router.replace(`/edit_new/${username}`)
+      } else {
+        toast.error(result.error || "Failed to publish website")
+      }
+    } catch {
+      toast.error("An unexpected error occurred")
+    } finally {
+      setIsPublishing(false)
+    }
   }
-};
 
-  // AI Generation Handler – always uses and updates RAW HTML
+  // AI Generation – updates raw HTML
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
       toast.error("Please enter a prompt for AI assistance", { position: "top-center" })
       return
     }
-
     setIsGenerating(true)
-
     try {
       const result = await generateCodeWithAIBlank(draftHtml, aiPrompt)
-
       if (result.success && result.generatedCode) {
         const cleanedCode = cleanGeneratedCode(result.generatedCode)
-
         setDraftHtml(cleanedCode)
         setSavedHtml(cleanedCode)
-
         setAiPrompt("")
         toast.success("HTML updated with AI!", { description: "Your changes are ready.", position: "top-center" })
         aiInputRef.current?.focus()
@@ -434,6 +418,32 @@ const handlePublish = async () => {
     }
   }
 
+  // Download HTML
+  const handleDownload = () => {
+    const fullHtml = savedHtml.replace(
+      '<script type="text/babel">',
+      `<script>
+const data = {
+${savedData}
+};
+</script>
+<script type="text/babel">`
+    )
+    const blob = new Blob([fullHtml], { type: "text/html" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${username}-website.html`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success("Website exported!", {
+      description: "Your HTML file has been downloaded.",
+      position: "top-center",
+    })
+  }
+
   if (isLoadingTemplate) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -442,347 +452,320 @@ const handlePublish = async () => {
       </div>
     )
   }
-// Add this state near wordWrapEnabled
-const [hidePreview, setHidePreview] = useState(false)
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
-      <nav className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-1 px-[8rem] backdrop-blur-lg shadow-lg tracking-[0.08em]" style={{ zoom: '0.58' }}>
-        <div className="mx-auto flex max-w-9xl items-center justify-between">
-          <div className="hidden items-center space-x-12 text-lg text-black md:flex">
-            <a href={`/dashboard/${username}`} className="transition hover:opacity-70">Dashboard</a>
-            <a href={`/refunds/${username}`} className="transition hover:opacity-70">Refunds</a>
-            <a href={`/templates/${username}`} className="transition hover:opacity-70">Templates</a>
-            <a href="#" className="transition hover:opacity-70">Settings</a>
-            <a href={`/pricing`} className="transition hover:opacity-70">Premium</a>
+    <div className="flex flex-col h-screen bg-[#0a0a0a] text-white overflow-hidden font-sans selection:bg-red-500/30">
+      {/* Photoshop-style top bar with close button */}
+      <header className="flex-shrink-0 flex items-center justify-between px-6 py-1 bg-[#141414] border-b border-white/5 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500/80" />
+            <div className="w-2 h-2 rounded-full bg-yellow-500/80" />
+            <div className="w-2 h-2 rounded-full bg-green-500/80" />
           </div>
-          <div className="space-x-12">
-            <a href={`/${username}`} target="_blank" rel="noopener noreferrer" className="text-xl border-black p-2 text-black transition hover:opacity-70">Live Site</a>
-            <button onClick={handlePublish} className="bg-red-600 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300">
-              {isPublishing ? <Loader2 className=" h-6 w-6 mr-4 animate-spin text-yellow-400" /> : <>Publish</>}
-            </button>
+          <span className="text-xs font-mono tracking-widest text-white/30 select-none">EDITOR</span>
+          <div className="h-4 w-px bg-white/10" />
+          <div className="flex items-center gap-2 text-xs text-white/50">
+            <Monitor className="w-3 h-3" />
+            <span>{username}</span>
           </div>
         </div>
-      </nav>
-<div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
 
-  {/* Preview Panel */}
-  <div
-    className={`transition-[width,opacity,flex] duration-5 delay-100 ease-out overflow-hidden ${
-      hidePreview
-        ? 'w-0 opacity-0 pointer-events-none'
-        : 'flex-[0.59] opacity-100'
-    } flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg`}
-  >
-    <div className="px-4 py-2 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-5">
-        <div className="flex items-center bg-white/10 rounded-md p-0.5">
-          <button
-            onClick={() => setViewMode('mobile')}
-            className={`p-2 rounded transition ${
-              viewMode === 'mobile'
-                ? 'bg-white/20 text-white'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              className="w-4 h-4"
-            >
-              <rect x="7" y="2" width="10" height="20" rx="2" />
-              <circle cx="12" cy="18" r="1" />
-            </svg>
-          </button>
-
-          <button
-            onClick={() => setViewMode('desktop')}
-            className={`p-2 rounded transition ${
-              viewMode === 'desktop'
-                ? 'bg-white/20 text-white'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              className="w-4 h-4"
-            >
-              <rect x="3" y="4" width="18" height="12" rx="2" />
-              <path d="M8 20h8M12 16v4" />
-            </svg>
-          </button>
-        </div>
-
-        <button
-          onClick={openDraftPreview}
-          className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            className="w-4 h-4"
-          >
-            <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="flex items-center flex-1 justify-end">
-        {inputBarVisible ? (
-          <div className="flex items-center gap-2 w-full max-w-md">
-            <div className="relative flex-1">
-              <input
-                ref={aiInputRef}
-                type="text"
-                placeholder="Ask AI to request any website..."
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={isGenerating}
-                className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/20 transition"
-              />
-
-              <button
-                onClick={handleAIGenerate}
-                disabled={isGenerating || !aiPrompt.trim()}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition"
-              >
-                {isGenerating ? (
-                  <Loader2 className="size-3.5 text-white animate-spin" />
-                ) : (
-                  <SendIcon className="size-3.5 text-white" />
-                )}
-              </button>
-            </div>
-
+        <div className="flex items-center gap-3">
+          {/* View toggle group */}
+          <div className="flex items-center bg-white/5 rounded-md p-0.5 border border-white/5">
             <button
-              onClick={() => setInputBarVisible(false)}
-              className="text-xs text-white/70 hover:text-white whitespace-nowrap"
+              onClick={() => setHidePreview(false)}
+              className={`p-1.5 rounded transition-all ${!hidePreview ? 'bg-white/15 text-white shadow-sm' : 'text-white/40 hover:text-white/70'}`}
+              title="Show preview"
             >
-              ✕
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setHidePreview(true)}
+              className={`p-1.5 rounded transition-all ${hidePreview ? 'bg-white/15 text-white shadow-sm' : 'text-white/40 hover:text-white/70'}`}
+              title="Hide preview (focus mode)"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
             </button>
           </div>
-        ) : (
+
+          {/* Word wrap toggle */}
           <button
-            onClick={() => setInputBarVisible(true)}
-            className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition"
+            onClick={() => setWordWrapEnabled(!wordWrapEnabled)}
+            className={`p-1.5 rounded transition-all ${wordWrapEnabled ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'}`}
+            title="Toggle word wrap"
           >
-            + Ask AI
+            <AlignJustify className="w-3.5 h-3.5" />
           </button>
-        )}
-      </div>
-    </div>
 
-    <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7">
-      <div
-        className={`transition-all duration-300 ${
-          viewMode === 'desktop'
-            ? 'w-full max-w-7xl'
-            : 'w-[480px]'
-        }`}
-        style={{ zoom: 0.6 }}
-      >
-        <iframe
-          ref={iframeRef}
-          srcDoc={finalCode}
-          onLoad={handleIframeLoad}
-          className="w-full h-full rounded-lg border-0"
-          title="Live Preview"
-          sandbox="allow-scripts allow-same-origin"
-          style={{
-            aspectRatio:
-              viewMode === 'desktop'
-                ? '16/9'
-                : '9/13',
-            background: 'white',
-          }}
-        />
-      </div>
-    </div>
-  </div>
+          <div className="h-4 w-px bg-white/10" />
 
-  {/* Editor Panel */}
-  <div
-  className={`transition-all duration-300 ${
-    hidePreview
-      ? 'flex-1 max-w-6xl mx-auto w-full px-6 md:px-10 py-2'
-      : 'flex-[0.4]'
-  } flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative`}
->
+          {/* Device preview */}
+          <div className="flex items-center bg-white/5 rounded-md p-0.5 border border-white/5">
+            <button
+              onClick={() => setViewMode('desktop')}
+              className={`p-1.5 rounded transition-all ${viewMode === 'desktop' ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'}`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode('mobile')}
+              className={`p-1.5 rounded transition-all ${viewMode === 'mobile' ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'}`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-    <div className="px-4 py-2 flex items-center justify-between">
+          <button
+            onClick={openDraftPreview}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5"
+            title="Open preview in new tab"
+          >
+            <Layers className="w-3.5 h-3.5" />
+          </button>
 
-      <div className="flex items-center gap-2">
-        <div className="flex gap-1">
-          <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-          <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-          <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
+          <button
+            onClick={toggleFullscreen}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5"
+            title="Fullscreen preview"
+          >
+            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+          </button>
+
+          <div className="h-4 w-px bg-white/10" />
+
+          <button
+            onClick={handleSave}
+            className={`px-3 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${hasUnsavedChanges ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' : 'text-white/30'}`}
+          >
+            <Save className="w-3 h-3" />
+            Save
+            <span className="text-[10px] opacity-50">⌘S</span>
+          </button>
+
+          <button
+            onClick={handlePublish}
+            className="px-4 py-1.5 bg-red-600 hover:bg-red-700 rounded text-xs font-semibold transition-all flex items-center gap-1.5 shadow-lg shadow-red-600/20 hover:shadow-red-600/40"
+          >
+            {isPublishing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <>
+                <Globe className="w-3 h-3" />
+                Publish
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5"
+            title="Download HTML"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Close / Back button */}
+          <button
+            onClick={() => router.back()}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5 hover:scale-110"
+            title="Close editor and go back"
+          >
+            <XCircle className="w-4 h-4" />
+          </button>
         </div>
+      </header>
 
-        <span className="text-xs ml-1 text-gray-400 font-mono">
-          HTML
-        </span>
-      </div>
+      {/* Main workspace - Photoshop-like panels */}
+      <div className="flex-1 flex gap-1 p-1 min-h-0 overflow-hidden bg-[#0d0d0d]">
 
-   <div className="flex items-center gap-3  px-3 py-2">
+        {/* Preview Panel - with Photoshop-style borders */}
+        <div
+          className={`transition-all duration-300 ease-in-out ${
+            hidePreview
+              ? 'w-0 opacity-0 pointer-events-none flex-none'
+              : 'flex-1'
+          } flex flex-col bg-[#0a0a0a] border border-white/5 rounded-sm overflow-hidden shadow-inner`}
+        >
+                <div
+                  className={`w-full h-full transition-all duration-300 flex items-center justify-center ${
+                    viewMode === 'desktop' ? 'max-w-7xl' : 'max-w-[480px]'
+                  } mx-auto`}
+                  style={{ zoom: 0.6 }}
+                >
+                  <div
+                    className={`w-full ${
+                      viewMode === 'desktop' ? 'aspect-[16/9]' : 'aspect-[9/13]'
+                    } max-h-full bg-white rounded-sm shadow-2xl overflow-hidden`}
+                  >
+                    <iframe
+                      ref={iframeRef}
+                      srcDoc={finalCode}
+                      onLoad={handleIframeLoad}
+                      className="w-full h-full border-0"
+                      title="Live Preview"
+                      sandbox="allow-scripts allow-same-origin"
+                    />
+                  </div>
+                </div>
+                        </div>
 
-  {/* Preview Toggle */}
-  <div className="flex items-center gap-2">
-    <span className="text-[11px] font-medium tracking-wide text-white/40">
-      View
-    </span>
+        {/* Editor Panel - Photoshop-style with tool-like feel */}
+        <div
+          className={`transition-all duration-300 ease-in-out ${
+            hidePreview ? 'flex-1' : 'flex-[0.4]'
+          } flex flex-col bg-[#0f0f0f] border border-white/5 rounded-sm overflow-hidden shadow-inner`}
+        >
+          {/* Editor toolbar - Photoshop-like */}
+          <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-mono tracking-widest text-white/30 uppercase">HTML</span>
+              <span className="text-[10px] text-white/20">|</span>
+              <span className="text-[10px] text-white/20">Line {draftHtml.split('\n').length}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-white/20">{draftHtml.length} chars</span>
+              {hasUnsavedChanges && (
+                <span className="flex items-center gap-1 text-[10px] text-amber-400/80 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  unsaved
+                </span>
+              )}
+            </div>
+          </div>
 
-    <button
-      onClick={() => setHidePreview(!hidePreview)}
-      className={`relative flex h-4 w-7 items-center rounded-full border border-white/10 transition-all duration-200 ${
-        hidePreview
-          ? "bg-white/15"
-          : "bg-white/5"
-      }`}
-    >
-      <div
-        className={`h-3 w-3 rounded-full bg-white shadow-md transition-all duration-200 ${
-          hidePreview
-            ? "translate-x-3.5"
-            : "translate-x-0.5"
-        }`}
-      />
-    </button>
-  </div>
+          {/* Monaco Editor */}
+          <div className="flex-1 min-h-0 relative">
+            <MonacoEditor
+              height="100%"
+              language="html"
+              value={draftHtml}
+              onChange={(value) => setDraftHtml(value || "")}
+              theme="photoshop-dark"
+              onMount={handleEditorMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+                lineNumbers: "on",
+                wordWrap: wordWrapEnabled ? "on" : "off",
+                quickSuggestions: true,
+                suggestOnTriggerCharacters: true,
+                acceptSuggestionOnEnter: "on",
+                tabCompletion: "on",
+                wordBasedSuggestions: "currentDocument",
+                snippetSuggestions: "inline",
+                inlineSuggest: { enabled: true },
+                padding: { top: 12, bottom: 12 },
+                autoClosingBrackets: "always",
+                autoClosingQuotes: "always",
+                matchBrackets: "always",
+                scrollBeyondLastLine: false,
+                renderLineHighlight: "none",
+                unicodeHighlight: {
+                  ambiguousCharacters: false,
+                  invisibleCharacters: false,
+                  nonBasicASCII: false
+                },
+                automaticLayout: true,
+                glyphMargin: false,
+                folding: false,
+                find: {
+                  addExtraSpaceOnTop: false,
+                  autoFindInSelection: 'never',
+                  seedSearchStringFromSelection: 'never',
+                },
+                readOnly: isGenerating,
+              }}
+            />
 
-  {/* Wrap Toggle */}
-  <div className="flex items-center gap-2">
-    <span className="text-[11px] font-medium tracking-wide text-white/40">
-      Wrap
-    </span>
+            {/* AI overlay - Photoshop-like loading indicator */}
+            {isGenerating && (
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-20">
+                <div className="flex flex-col items-center gap-4 max-w-xs text-center">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+                    <span className="text-xs font-medium text-white/80 tracking-wide">AI is thinking...</span>
+                  </div>
+                  <p className="text-[11px] text-white/40 italic leading-relaxed transition-opacity duration-300">
+                    {loadingMessages[currentMessageIndex]}
+                  </p>
+                  <div className="w-32 h-0.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 animate-[progress_2s_ease-in-out_infinite]" />
+                  </div>
+                  <style>{`
+                    @keyframes progress {
+                      0% { width: 5%; }
+                      50% { width: 95%; }
+                      100% { width: 5%; }
+                    }
+                  `}</style>
+                </div>
+              </div>
+            )}
+          </div>
 
-    <button
-      onClick={() =>
-        setWordWrapEnabled(!wordWrapEnabled)
-      }
-      className={`relative flex h-4 w-7 items-center rounded-full border border-white/10 transition-all duration-200 ${
-        wordWrapEnabled
-          ? "bg-white/15"
-          : "bg-white/5"
-      }`}
-    >
-      <div
-        className={`h-3 w-3 rounded-full bg-white shadow-md transition-all duration-200 ${
-          wordWrapEnabled
-            ? "translate-x-3.5"
-            : "translate-x-0.5"
-        }`}
-      />
-    </button>
-  </div>
-
-  {/* Divider */}
-  <div className="h-4 w-px bg-white/10" />
-
-  {/* Download */}
-  <button
-    onClick={handleDownload}
-    title="Download HTML"
-    className="group flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95"
-  >
-    <Download className="h-3.5 w-3.5 " />
-  </button>
-
-</div>
-      
-    </div>
-
-    <div className="flex-1 min-h-0 relative">
-
-      <MonacoEditor
-        height="100%"
-        language="html"
-        value={draftHtml}
-        onChange={(value) =>
-          setDraftHtml(value || "")
-        }
-        theme="custom-dark"
-        onMount={handleEditorMount}
-       options={{
-  minimap: { enabled: false },
-  fontSize: 14,
-  fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-  lineNumbers: "off",
-  wordWrap: wordWrapEnabled ? "on" : "off",
-
-  quickSuggestions: true,
-  suggestOnTriggerCharacters: true,
-  acceptSuggestionOnEnter: "on",
-  tabCompletion: "on",
-  wordBasedSuggestions: "currentDocument",
-  snippetSuggestions: "inline",
-  inlineSuggest: {
-    enabled: true,
-  },
-
-  padding: {
-    top: 24,
-    bottom: 24,
-  },
-
-  autoClosingBrackets: "always",
-  autoClosingQuotes: "always",
-  matchBrackets: "always",
-
-  scrollBeyondLastLine: false,
-  renderLineHighlight: "none",
-
-  unicodeHighlight: {
-    ambiguousCharacters: false,
-    invisibleCharacters: false,
-    nonBasicASCII: false
-  },
-
-  automaticLayout: true,
-  glyphMargin: false,
-  folding: false,
-
-  find: {
-    addExtraSpaceOnTop: false,
-    autoFindInSelection: 'never',
-    seedSearchStringFromSelection: 'never',
-  },
-
-  readOnly: isGenerating,
-}}
-      />
-
-      {isGenerating && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
-          <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
-            <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300">
-              {loadingMessages[currentMessageIndex]}
-            </p>
+          {/* AI Input Bar - Photoshop-like footer */}
+          <div className="flex-shrink-0 px-3 py-2 bg-[#141414] border-t border-white/5 flex items-center gap-2">
+            {inputBarVisible ? (
+              <div className="flex-1 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    ref={aiInputRef}
+                    type="text"
+                    placeholder="Ask AI to generate or modify your HTML..."
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    disabled={isGenerating}
+                    className="w-full bg-black/40 border border-white/10 rounded-md px-4 py-1.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-red-500/50 transition-all"
+                  />
+                  <button
+                    onClick={handleAIGenerate}
+                    disabled={isGenerating || !aiPrompt.trim()}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md bg-red-500/20 hover:bg-red-500/40 transition disabled:opacity-40"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                    ) : (
+                      <SendIcon className="w-3.5 h-3.5 text-white" />
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setInputBarVisible(false)}
+                  className="text-xs text-white/40 hover:text-white/70 transition"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setInputBarVisible(true)}
+                className="flex items-center gap-2 text-xs text-white/40 hover:text-white/70 transition px-3 py-1 rounded-full border border-white/10 hover:border-white/30"
+              >
+                <Sparkles className="w-3 h-3" />
+                Ask AI
+              </button>
+            )}
           </div>
         </div>
-      )}
-    </div>
+      </div>
 
-    {hasUnsavedChanges && (
-      <button
-        onClick={handleSave}
-        className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-white/20 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105"
-      >
-        Save
-      </button>
-    )}
-  </div>
-</div>
+      {/* Status Bar - Photoshop-like */}
+      <footer className="flex-shrink-0 px-4 py-1 bg-[#141414] border-t border-white/5 flex items-center justify-between text-[10px] text-white/30">
+        <div className="flex items-center gap-4">
+          <span>Ready</span>
+          <span className="w-px h-3 bg-white/10" />
+          <span>HTML • {draftHtml.split('\n').length} lines</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span>{username}</span>
+          <span className="w-px h-3 bg-white/10" />
+          <span>v1.0</span>
+        </div>
+      </footer>
     </div>
   )
 }
