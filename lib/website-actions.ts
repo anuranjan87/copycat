@@ -19,19 +19,23 @@ const ai = new GoogleGenAI({
 })
 
 
-export async function generateCodeWithAI(currentCode: string, prompt: string) {
+export async function generateCodeWithAI(
+  currentCode: string,
+  prompt: string
+) {
   try {
-    const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
-      contents: `
-You are a helpful JavaScript content editing assistant.
+    const response = await client.responses.create({
+      model: "gpt-4.1-nano",
+      input: `
+You are a JavaScript content editing assistant.
 
 Rules:
-- Always return complete valid JS
-- Do NOT change structure or keys
-- Only edit values
-- No explanations, only code
-- Keep image URLs unchanged
+- Always return complete, valid JavaScript.
+- Do NOT change the object structure or keys.
+- Only modify values required by the user's request.
+- Keep all image URLs unchanged.
+- Return ONLY JavaScript code.
+- Do not wrap the response in markdown.
 
 Current code:
 ${currentCode}
@@ -39,44 +43,60 @@ ${currentCode}
 User request:
 ${prompt}
       `,
-    })
+    });
 
-    const generatedCode = response.text
-    
+    const generatedCode = response.output_text.trim();
 
     if (!generatedCode) {
-      throw new Error("No code generated from Gemini")
+      throw new Error("No code generated.");
     }
-            console.log(generatedCode)
+
+    console.log(generatedCode);
 
     return {
-
       success: true,
-      generatedCode: generatedCode.trim(),
-    }
-  } catch (error: any) {
-    console.error("Gemini error:", error)
+      generatedCode,
+    };
+  } catch (error: unknown) {
+    console.error("OpenAI error:", error);
+
     return {
       success: false,
-      error: error.message || "Failed with Gemini",
-    }
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to generate code.",
+    };
   }
 }
 
-export async function generateCodeWithAIBlank(currentCode: string, prompt: string) {
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export async function generateCodeWithAIBlank(
+  currentCode: string,
+  prompt: string
+) {
   try {
-    const response = await ai.models.generateContent({
-model: "gemini-3.1-pro-preview",
-contents: `
+    const response = await client.responses.create({
+      model: "gpt-4.1-nano",
+      input: `
 Create a stunning single-page HTML5 website using Tailwind CSS.
+
+Include this in the HTML:
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
 Rules:
-- No explanations
-- No markdown
-- No contact section or buttons
-- 
-- Use different random numbers for multiple images
+- Return ONLY valid HTML.
+- No explanations.
+- No markdown.
+- No code fences.
+- No contact section.
+- No contact buttons.
+- Use different random numbers for multiple placeholder images.
+- Produce clean, production-quality HTML.
 
 Current code:
 ${currentCode}
@@ -84,95 +104,67 @@ ${currentCode}
 User request:
 ${prompt}
 
-If current code is empty → create new.
-Otherwise → modify it.
+If the current code is empty, create a completely new webpage.
+Otherwise, modify the existing webpage while preserving its structure whenever possible.
 
+If you create any form, use the following JavaScript submission logic exactly so the parent application receives the submitted data:
 
-if you are making a form have this logic to send it to system, so that he will receive it this is as follow"<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hardcoded Form – Full Object + postMessage</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <style>
-    input:focus, button:focus { outline: none; }
-    input, button { transition: all 0.2s ease; }
-  </style>
-</head>
-<body class="bg-gray-50 antialiased">
+<script>
+(function () {
+  const form = document.getElementById("testForm");
 
-  <div class="flex min-h-screen items-center justify-center px-4">
-    <form id="testForm" class="w-80 rounded-2xl bg-white p-6 shadow-lg border border-gray-200" novalidate>
-      
-      <input type="email" name="email" placeholder="Email" required
-             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+  if (!form) return;
 
-      <input type="text" name="name" placeholder="Name"
-             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
 
-      <input type="text" name="phone" placeholder="Phone"
-             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+    const formData = new FormData(form);
+    const values = Object.fromEntries(formData.entries());
 
-      <input type="text" name="phonee" placeholder="new"
-             class="mb-3 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+    console.log("SENDING DATA:", values);
 
-      <input type="text" name="hello" placeholder="hello"
-             class="mb-4 w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400">
+    try {
+      window.parent.postMessage(
+        {
+          formData: values,
+        },
+        "*"
+      );
 
-      <button type="submit" class="w-full rounded-lg bg-black py-2 text-white hover:bg-gray-800 transition">
-        Submit
-      </button>
-    </form>
-  </div>
+      console.log("✅ postMessage sent to parent");
+    } catch (err) {
+      console.error("❌ Failed to send postMessage:", err);
+    }
+  });
+})();
+</script>
 
-  <script>
-    (function() {
-      const form = document.getElementById('testForm');
+Requirements for forms:
+- The form must have id="testForm".
+- Any field names are acceptable.
+- The submit button must be type="submit".
+- Do not change the submission logic.
+- Return only the finished HTML document.
+`,
+    });
 
-      form.addEventListener('submit', function(event) {
-        event.preventDefault();
-
-        // Collect all fields into a plain object
-        const formData = new FormData(form);
-        const values = Object.fromEntries(formData.entries());
-
-        // Log exactly as the original React code did
-        console.log("SENDING DATA:", values);
-
-        // Send to parent window (same as original)
-        try {
-          window.parent.postMessage({ formData: values }, "*");
-          console.log("✅ postMessage sent to parent");
-        } catch (err) {
-          console.error("❌ Failed to send postMessage:", err);
-        }
-
-        // Optional: show a small toast/alert for testing (only if you want visual feedback)
-      });
-    })();
-  </script>
-</body>
-</html>"
-      `,
-    })
-
-    const generatedCode = response.text
+    const generatedCode = response.output_text;
 
     if (!generatedCode) {
-      throw new Error("No code generated from Gemini")
+      throw new Error("No code generated from OpenAI");
     }
 
     return {
       success: true,
       generatedCode: generatedCode.trim(),
-    }
+    };
   } catch (error: any) {
-    console.error("Gemini error:", error)
+    console.error("OpenAI error:", error);
+
     return {
       success: false,
-      error: error.message || "Failed with Gemini",
-    }
+      error: error.message || "Failed with OpenAI",
+    };
   }
 }
 

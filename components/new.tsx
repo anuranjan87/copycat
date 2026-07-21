@@ -16,6 +16,13 @@ import {
   AlertCircle,
   Zap,
   Fingerprint,
+  Save,
+  Globe,
+  Shield,
+  Clock,
+  HelpCircle,
+  User,
+  Settings,
 } from 'lucide-react'
 import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from '@/lib/website-actions'
 import { useRouter } from 'next/navigation'
@@ -41,8 +48,8 @@ function cleanGeneratedCode(raw: string): string {
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-full bg-[#1e1e1e]">
-      <Loader2 className="h-6 w-6 animate-spin text-white" />
+    <div className="flex items-center justify-center h-full bg-[#0f172a]">
+      <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
     </div>
   ),
 })
@@ -61,27 +68,27 @@ const handleEditorMount = (editor: any, monaco: any) => {
     })
   }
 
-  monaco.editor.defineTheme('custom-dark', {
+  monaco.editor.defineTheme('trust-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'comment', foreground: 'FF79C6', fontStyle: '' },
-      { token: 'tag', foreground: 'FF79C6' },
-      { token: 'delimiter.html', foreground: 'f2ecec' },
-      { token: 'attribute.name', foreground: 'f2ecec' },
-      { token: 'attribute.value', foreground: '6fcaf2' },
-      { token: 'string', foreground: 'f2ecec' },
-      { token: 'text', foreground: '6fcaf2' },
+      { token: 'comment', foreground: '94a3b8', fontStyle: '' },
+      { token: 'tag', foreground: '60a5fa' },
+      { token: 'delimiter.html', foreground: 'e2e8f0' },
+      { token: 'attribute.name', foreground: 'f472b6' },
+      { token: 'attribute.value', foreground: '34d399' },
+      { token: 'string', foreground: '34d399' },
+      { token: 'text', foreground: 'e2e8f0' },
     ],
     colors: {
-      'editor.background': '#000000',
-      'editor.foreground': '#F8F8F2',
-      'editor.lineHighlightBackground': '#44475A',
-      'editorLineNumber.foreground': '#6272A4',
-      'editorLineNumber.activeForeground': '#F8F8F2',
+      'editor.background': '#0f172a',
+      'editor.foreground': '#e2e8f0',
+      'editor.lineHighlightBackground': '#1e293b',
+      'editorLineNumber.foreground': '#475569',
+      'editorLineNumber.activeForeground': '#94a3b8',
     },
   })
-  monaco.editor.setTheme('custom-dark')
+  monaco.editor.setTheme('trust-dark')
 
   const container = editor.getContainerDomNode()
   container.style.borderRadius = ''
@@ -117,6 +124,10 @@ export default function New({ username, initialContent }: NewMobileProps) {
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [showSignInModal, setShowSignInModal] = useState(false)
+
+  // Last saved timestamp
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [lastPublished, setLastPublished] = useState<Date | null>(null)
 
   const loadingMessages = [
     'The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim',
@@ -214,7 +225,7 @@ export default function New({ username, initialContent }: NewMobileProps) {
           setSavedHtml(result.html)
           setSavedData(extracted)
           toast.info('Template loaded', {
-            description: 'Edit and click Publish to make it live.',
+            description: 'Ready to customise. Click Publish to make it live.',
             position: 'bottom-left',
           })
         } else {
@@ -373,6 +384,7 @@ ${savedData}
     captureScrollPosition()
     setSavedHtml(draftHtml)
     setSavedData(draftData)
+    setLastSaved(new Date())
     toast.success('Changes saved', {
       description: 'Your draft has been updated.',
       position: 'top-center',
@@ -396,10 +408,15 @@ ${savedData}
       setShowSignInModal(true)
       return
     }
+
+    // Confirm publish action to avoid accidental
+    if (!confirm('Publishing will make your website public. Are you sure?')) return
+
     setIsPublishing(true)
     try {
       const result = await updateWebsiteContent(username, draftHtml, draftData, draftData)
       if (result.success) {
+        setLastPublished(new Date())
         toast.success('Published!', {
           description: 'Your website is now live.',
           position: 'top-center',
@@ -462,17 +479,22 @@ ${savedData}
     }
   }
 
+  // Format time
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  }
+
   if (isLoadingTemplate) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black text-white">
-        <Loader2 className="h-8 w-8 animate-spin text-red-500 mr-2" />
+      <div className="flex items-center justify-center h-screen bg-slate-900 text-white">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-400 mr-2" />
         <span>Loading template into editor...</span>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-900 text-slate-200 overflow-hidden">
       <SignInModal open={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
       <style jsx>{`
@@ -480,20 +502,20 @@ ${savedData}
           width: 8px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
+          background: rgba(148, 163, 184, 0.3);
           border-radius: 10px;
         }
         .custom-scrollbar {
           scrollbar-width: thin;
-          scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+          scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
         }
         @keyframes glow-pulse {
           0%,
           100% {
-            box-shadow: 0 0 8px rgba(239, 68, 68, 0.2);
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
           }
           50% {
-            box-shadow: 0 0 25px rgba(239, 68, 68, 0.5);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
           }
         }
         .glow-pulse {
@@ -515,7 +537,7 @@ ${savedData}
           transition: all 0.3s ease;
         }
         .save-indicator.saved {
-          background: rgba(34, 197, 94, 0.2);
+          background: rgba(34, 197, 94, 0.15);
           border-color: rgb(34, 197, 94);
           color: rgb(34, 197, 94);
         }
@@ -524,88 +546,116 @@ ${savedData}
           border-color: rgb(251, 146, 60);
           color: rgb(251, 146, 60);
         }
+        .trust-border {
+          border-color: rgba(148, 163, 184, 0.1);
+        }
       `}</style>
 
-      {/* Top Navigation – Enhanced with subtle glow */}
-      <nav
-        className="flex-shrink-0 border-b border-slate-200/50 bg-white/80 py-1 px-[8rem] backdrop-blur-lg shadow-lg tracking-[0.08em] relative z-10"
-        style={{ zoom: '0.58' }}
-      >
-        <div className="mx-auto  flex max-w-9xl items-center justify-between">
-          <div className="items-center space-x-1 text-lg text-black md:flex">
+      {/* Trust-focused Top Navigation */}
+      <nav className="flex-shrink-0 border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-2 flex items-center justify-between z-10">
+        <div className="flex items-center gap-6">
+          {/* Brand / Logo */}
+         
 
-              <a
-              href={`/templates/${username}`}
-              className="flex items-center gap-3 mr-8 transition hover:opacity-70 group"
-            >
-              <Pickaxe className="h-6 w-6 stroke-[1.5] group-hover:rotate-12 transition-transform" />
-              <span>Tools & templates</span>
-            </a>
-
-
-
-            <a
-              href={`/docs`}
-              className="flex items-center gap-3 transition hover:opacity-70 group"
-            >
-              <Drum className="h-6 w-6 stroke-[1.5] group-hover:rotate-12 transition-transform" />
-              <span>Documentation</span>
-            </a>
-
-           
+          {/* Trust indicators */}
+          <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
+                          <div className="flex items-center gap-1">
+                  <img
+                    src="https://i.postimg.cc/4NQdKMq5/e54598bb-7c66-4f95-af44-fe2a2d3ba44a-removebg-preview.png"
+                    alt="Secure"
+                    className="h-6 w-6 object-contain"
+                  />
+                  <span>Secure</span>
+                </div>
+            <div className="h-4 w-px bg-slate-700" />
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3 text-slate-400" />
+              {lastPublished ? (
+                <span>Last published: {formatTime(lastPublished)}</span>
+              ) : (
+                <span>Not published yet</span>
+              )}
+            </div>
+            {lastSaved && (
+              <>
+                <div className="h-4 w-px bg-slate-700" />
+                <div className="flex items-center gap-1">
+                  <Save className="h-3 w-3 text-slate-400" />
+                  <span>Saved: {formatTime(lastSaved)}</span>
+                </div>
+              </>
+            )}
           </div>
+        </div>
 
-          <div className="flex items-center space-x-8">
-            <a
-              href={`/${username}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xl border-black p-2 text-black transition hover:opacity-70 hover:scale-105"
-            >
-              Live Site
-            </a>
+        <div className="flex items-center gap-4">
+          {/* Quick links */}
+          <a
+            href={`/templates/${username}`}
+            className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
+          >
+            <Pickaxe className="h-4 w-4" />
+            <span className="hidden sm:inline">Templates</span>
+          </a>
+          <a
+            href={`/docs`}
+            className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
+          >
+            <Drum className="h-4 w-4" />
+            <span className="hidden sm:inline">Docs</span>
+          </a>
+          <a
+            href={`/${username}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
+          >
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Live</span>
+          </a>
 
-            <button
-              onClick={handlePublish}
-              className="bg-red-700 mt-1 text-white px-7 py-2.5 rounded-md text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 relative overflow-hidden group"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                {isPublishing ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-yellow-400" />
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    Make Public
-                  </>
-                )}
-              </span>
-              <span className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            </button>
+          <div className="h-6 w-px bg-slate-700" />
 
-            <button
-              onClick={() => router.back()}
-              className="absolute right-4 top-1/2 -translate-y-1/2 hover:opacity-70 transition-transform hover:scale-110"
-            >
-              <XCircle className="h-10 w-10 text-black/50 stroke-[1.5]" />
-            </button>
-          </div>
+          {/* Publish button */}
+          <button
+            onClick={handlePublish}
+            disabled={isPublishing}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-md text-sm font-medium shadow-md shadow-blue-500/20 transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-70 flex items-center gap-2"
+          >
+            {isPublishing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Zap className="h-4 w-4" />
+                Publish
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => router.back()}
+            className="text-slate-400 hover:text-white transition-transform hover:scale-110"
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
         </div>
       </nav>
 
-      <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden">
+      <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden px-2 sm:px-4">
         {/* Preview Panel */}
-        <div className="flex-[0.59] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
+        <div className="flex-[0.59] flex flex-col min-w-0 bg-slate-900 border border-slate-800 rounded-lg relative shadow-2xl shadow-black/30">
           {/* Header with view controls */}
-          <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-gray-800/50">
-            <div className="flex items-center gap-5">
-              <div className="flex items-center bg-white/10 rounded-md p-0.5">
+          <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-slate-800/50 bg-slate-900/50 rounded-t-lg">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center bg-slate-800/50 rounded-md p-0.5">
                 <button
                   onClick={() => setViewMode('mobile')}
-                  className={`p-2 rounded transition ${
+                  className={`p-1.5 rounded transition ${
                     viewMode === 'mobile'
-                      ? 'bg-white/20 text-white shadow-lg'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
                   }`}
+                  aria-label="Mobile view"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -621,11 +671,12 @@ ${savedData}
                 </button>
                 <button
                   onClick={() => setViewMode('desktop')}
-                  className={`p-2 rounded transition ${
+                  className={`p-1.5 rounded transition ${
                     viewMode === 'desktop'
-                      ? 'bg-white/20 text-white shadow-lg'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
                   }`}
+                  aria-label="Desktop view"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -642,7 +693,7 @@ ${savedData}
 
                 <button
                   onClick={toggleFullscreen}
-                  className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+                  className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/30 transition"
                   title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                 >
                   {isFullscreen ? <Minimize className="w-4 h-4" /> : <Fullscreen className="w-4 h-4" />}
@@ -651,7 +702,7 @@ ${savedData}
 
               <button
                 onClick={openDraftPreview}
-                className="p-2 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition flex items-center gap-1 text-xs"
+                className="text-xs text-slate-400 hover:text-white hover:bg-slate-700/30 px-2 py-1 rounded transition flex items-center gap-1"
                 title="Open full screen preview in new tab"
               >
                 <svg
@@ -670,33 +721,33 @@ ${savedData}
 
             <div className="flex items-center flex-1 justify-end">
               {inputBarVisible ? (
-                <div className="flex items-center gap-2 w-full max-w-md relative">
+                <div className="flex items-center gap-2 w-full max-w-md">
                   <div className="relative flex-1 group">
                     <input
                       ref={aiInputRef}
                       type="text"
-                      placeholder="Ask AI to tailor the content..."
+                      placeholder="Ask AI to tailor your content..."
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       onKeyDown={handleKeyPress}
                       disabled={isGenerating}
-                      className="w-full rounded-full pr-10 pl-4 py-2 text-white text-sm bg-black/40 border border-white/30 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all duration-300 group-hover:border-white/50"
+                      className="w-full rounded-full bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
                     />
                     <button
                       onClick={handleAIGenerate}
                       disabled={isGenerating || !aiPrompt.trim()}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-red-500/20 hover:bg-red-500/40 transition disabled:opacity-50"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-blue-500/20 hover:bg-blue-500/40 transition disabled:opacity-50"
                     >
                       {isGenerating ? (
-                        <Loader2 className="size-3.5 text-white animate-spin" />
+                        <Loader2 className="size-3.5 text-blue-400 animate-spin" />
                       ) : (
-                        <SendIcon className="size-3.5 text-white" />
+                        <SendIcon className="size-3.5 text-blue-400" />
                       )}
                     </button>
                   </div>
                   <button
                     onClick={() => setInputBarVisible(false)}
-                    className="text-xs text-white/70 hover:text-white whitespace-nowrap transition hover:scale-110"
+                    className="text-xs text-slate-500 hover:text-slate-300 transition hover:scale-110"
                   >
                     ✕
                   </button>
@@ -704,7 +755,7 @@ ${savedData}
               ) : (
                 <button
                   onClick={() => setInputBarVisible(true)}
-                  className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30 transition hover:scale-105 flex items-center gap-1"
+                  className="text-xs bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 px-3 py-1 rounded-full transition hover:scale-105 flex items-center gap-1"
                 >
                   <Sparkles className="w-3 h-3" /> Ask AI
                 </button>
@@ -713,66 +764,67 @@ ${savedData}
           </div>
 
           {/* Preview iframe area */}
-          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-7 relative">
+          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/60 p-6 relative">
             <div
               className={`transition-all duration-300 ${
-                viewMode === 'desktop' ? 'w-full max-w-7xl' : 'w-[480px]'
+                viewMode === 'desktop' ? 'w-full max-w-6xl' : 'w-[420px]'
               }`}
-              style={{ zoom: 0.6 }}
+              style={{ zoom: 0.65 }}
             >
               <iframe
                 ref={iframeRef}
                 srcDoc={finalCode}
                 onLoad={handleIframeLoad}
-                className="w-full h-full rounded-lg border-0 shadow-2xl"
+                className="w-full h-full rounded-lg border border-slate-800 shadow-2xl"
                 title="Live Preview"
                 sandbox="allow-scripts allow-same-origin"
                 style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'black' }}
               />
             </div>
-            {/* Glow effect around iframe */}
-            <div className="absolute inset-0 pointer-events-none rounded-lg border border-white/5 shadow-[inset_0_0_80px_rgba(239,68,68,0.08)]" />
+            {/* Subtle glow */}
+            <div className="absolute inset-0 pointer-events-none rounded-lg border border-blue-500/5 shadow-[inset_0_0_80px_rgba(59,130,246,0.05)]" />
           </div>
         </div>
 
         {/* Code Editor Panel */}
-        <div className="flex-[0.4] flex flex-col min-w-0 bg-[#030712] border-t border-gray-800 rounded-t-lg relative">
-          <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
-                <span className="w-2 h-2 bg-green-400 rounded-full" />
-                <span className="w-2 h-2 bg-yellow-400 rounded-full" />
+        <div className="flex-[0.4] flex flex-col min-w-0 bg-slate-900 border border-slate-800 rounded-lg relative shadow-2xl shadow-black/30">
+          <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 rounded-t-lg">
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1.5">
+                <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" />
+                <span className="w-2.5 h-2.5 bg-green-500 rounded-full" />
+                <span className="w-2.5 h-2.5 bg-yellow-500 rounded-full" />
               </div>
-              <span className="text-xs ml-1 text-gray-400 font-mono">
-                {devMode ? 'RAW HTML' : 'DATA.JS'}
+              <span className="text-xs text-slate-400 font-mono">
+                {devMode ? 'HTML' : 'Data (JS)'}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-white/50 text-xs">Dev mode</span>
+              <span className="text-slate-500 text-xs">Dev mode</span>
               <button
                 onClick={() => setDevMode(!devMode)}
                 className={`relative flex h-5 w-9 items-center rounded-sm transition-colors ${
-                  devMode ? 'bg-red-500' : 'bg-gray-400'
+                  devMode ? 'bg-blue-500' : 'bg-slate-600'
                 }`}
+                aria-label="Toggle dev mode"
               >
                 <div
                   className={`h-4 w-4 rounded-sm bg-white shadow transition-transform duration-300 ${
-                    devMode ? 'translate-x-full' : ''
+                    devMode ? 'translate-x-[18px]' : 'translate-x-1'
                   }`}
                 />
               </button>
               <button
                 onClick={handleDownload}
                 title="Download HTML"
-                className="group flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] text-white/50 transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95"
+                className="group flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700/50 bg-slate-800/30 text-slate-400 transition-all duration-200 hover:bg-slate-700 hover:text-white active:scale-95"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 relative">
+          <div className="flex-1 min-h-0 relative mt-2">
             <MonacoEditor
               height="100%"
               language={devMode ? 'html' : 'javascript'}
@@ -781,11 +833,11 @@ ${savedData}
                 if (devMode) setDraftHtml(value || '')
                 else setDraftData(value || '')
               }}
-              theme="custom-dark"
+              theme="trust-dark"
               onMount={handleEditorMount}
               options={{
                 minimap: { enabled: false },
-                fontSize: 14,
+                fontSize: 13,
                 fontFamily: "Menlo, Monaco, 'Courier New', monospace",
                 lineNumbers: 'off',
                 autoClosingBrackets: 'never',
@@ -807,22 +859,23 @@ ${savedData}
                   seedSearchStringFromSelection: 'never',
                 },
                 readOnly: isGenerating,
+                padding: { top: 8, bottom: 8 },
               }}
             />
 
             {isGenerating && (
-              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
+              <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
                 <div className="flex flex-col items-center gap-3 max-w-[80%] text-center">
                   <img
                     src="https://i.postimg.cc/ydxdntYX/mat.gif"
-                    alt="footer visual"
-                    className="w-43 opacity-90 hover:opacity-100 transition duration-500"
+                    alt="AI working"
+                    className="w-40 opacity-90"
                   />
-                  <p className="text-white text-xs font-extralight tracking-[0.09rem] transition-opacity duration-300 animate-pulse">
+                  <p className="text-slate-300 text-xs font-light tracking-wide animate-pulse">
                     {loadingMessages[currentMessageIndex]}
                   </p>
-                  <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 animate-[progress_2s_ease-in-out_infinite]" />
+                  <div className="w-32 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 animate-[progress_2s_ease-in-out_infinite]" />
                   </div>
                   <style>{`
                     @keyframes progress {
@@ -836,23 +889,43 @@ ${savedData}
             )}
           </div>
 
-          {/* Save indicator - enhanced */}
-          {hasUnsavedChanges && (
-            <button
-              onClick={handleSave}
-              className="absolute top-12 right-6 px-3 py-1 border-orange-500 backdrop-blur-lg bg-orange-600 rounded-full hover:bg-orange-700 text-white text-xs font-semibold shadow-lg transition-all duration-300 z-30 flex items-center justify-center gap-2 hover:scale-105 group"
-            >
-              <AlertCircle className="w-3 h-3 animate-pulse" />
-              <span>Save</span>
-              <span className="text-[10px] opacity-70 group-hover:opacity-100">(⌘S)</span>
-            </button>
-          )}
-          {!hasUnsavedChanges && (
-            <div className="absolute top-12 right-6 px-3 py-1 border-green-500/30 backdrop-blur-lg bg-green-500/10 rounded-full text-green-400 text-xs font-semibold shadow-lg flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3" />
-              <span>Saved</span>
-            </div>
-          )}
+          {/* Save indicator - enhanced with trust messaging */}
+          <div className="absolute bottom-4 right-4 z-30">
+            {hasUnsavedChanges ? (
+              <button
+                onClick={handleSave}
+                className="px-3 py-1.5 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-medium backdrop-blur-sm hover:bg-orange-500/30 transition-all flex items-center gap-2 shadow-lg hover:scale-105"
+              >
+                <AlertCircle className="w-3.5 h-3.5 animate-pulse" />
+                <span>Save changes</span>
+                <span className="text-[10px] opacity-70">⌘S</span>
+              </button>
+            ) : (
+              <div className="px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium flex items-center gap-1.5 backdrop-blur-sm">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>All saved</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer trust bar */}
+      <div className="flex-shrink-0 border-t border-slate-800/50 bg-slate-900/50 px-6 py-1.5 flex items-center justify-between text-xs text-slate-500 backdrop-blur-sm">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1">
+            <Shield className="h-3 w-3 text-blue-400" />
+            Secure connection
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <span className="hidden sm:inline">Your data is encrypted</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <a href="#" className="hover:text-slate-300 transition">Privacy</a>
+          <a href="#" className="hover:text-slate-300 transition">Terms</a>
+          <a href="#" className="hover:text-slate-300 transition flex items-center gap-1">
+            <HelpCircle className="h-3 w-3" /> Help
+          </a>
         </div>
       </div>
     </div>
