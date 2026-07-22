@@ -1,38 +1,57 @@
-"use client";
+'use client'
 
-import { useUser } from "@clerk/nextjs";
-import { useRouter, useParams } from "next/navigation";
-import { useEffect } from "react";
-import { usernameChecker } from "@/lib/website-actions";
-
+import { useEffect, useState } from 'react'
+import { useUser, SignInButton } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
+import { usernameChecker } from '@/lib/website-actions'
 
 export default function DashboardPage() {
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
-  const params = useParams();
+  const { user, isLoaded } = useUser()
+  const router = useRouter()
 
-  const urlUsername = params.username as string;
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded) return
 
-    // ❌ Not logged in → go to demo
+    // Not signed in
     if (!user) {
-      router.replace("/templates/demo");
-      return;
+      setLoading(false)
+      return
     }
 
-    const verifyUser = async () => {
-      const actualUsername = await usernameChecker(user.id);
+    const fetchUsername = async () => {
+      try {
+        const username = await usernameChecker(user.id)
 
-      // 🚨 mismatch → block access
-      if (actualUsername !== urlUsername) {
-        router.replace(`/edit_new/demo`);
+        if (username) {
+          router.replace(`/templates/${username}`)
+          return
+        }
+
+        // Fallback if no username exists
+        router.replace('/templates/demo')
+      } catch (err) {
+        console.error(err)
+        router.replace('/templates/demo')
+      } finally {
+        setLoading(false)
       }
-    };
+    }
 
-    verifyUser();
-  }, [user, isLoaded, urlUsername]);
+    fetchUsername()
+  }, [user, isLoaded, router])
 
-  return <div>Your dashboard</div>;
+  if (!isLoaded || loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        Loading...
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+Redirecting...    </div>
+  )
 }

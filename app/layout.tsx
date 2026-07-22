@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import "./globals.css"
+import "./globals.css";
 import { Montserrat } from "next/font/google";
 
 import { Toaster } from "sonner" // Import sonner's Toaster
