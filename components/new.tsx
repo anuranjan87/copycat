@@ -563,9 +563,8 @@ ${savedData}
                   <img
                     src="https://i.postimg.cc/4NQdKMq5/e54598bb-7c66-4f95-af44-fe2a2d3ba44a-removebg-preview.png"
                     alt="Secure"
-                    className="h-6 w-6 object-contain"
+                    className="h-8 w-8 object-contain"
                   />
-                  <span>Secure</span>
                 </div>
             <div className="h-4 w-px bg-slate-700" />
             <div className="flex items-center gap-1">
@@ -921,10 +920,13 @@ ${savedData}
           <span className="hidden sm:inline">Your data is encrypted</span>
         </div>
         <div className="flex items-center gap-4">
-          <a href="#" className="hover:text-slate-300 transition">Privacy</a>
-          <a href="#" className="hover:text-slate-300 transition">Terms</a>
-          <a href="#" className="hover:text-slate-300 transition flex items-center gap-1">
-            <HelpCircle className="h-3 w-3" /> Help
+          <a href="/legal/privacy" className="hover:text-slate-300 transition">Privacy</a>
+          <a href="/legal/terms" className="hover:text-slate-300 transition">Terms</a>
+          <a href="/legal/support" className="hover:text-slate-300 transition flex items-center gap-1">
+             Support
+          </a>
+          <a href="/legal/refund" className="hover:text-slate-300 transition flex items-center gap-1">
+             Refund
           </a>
         </div>
       </div>

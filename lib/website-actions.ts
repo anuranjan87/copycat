@@ -24,15 +24,18 @@ export async function generateCodeWithAI(
   prompt: string
 ) {
   try {
+    console.log("im working")
     const response = await client.responses.create({
       model: "gpt-4.1-nano",
       input: `
 You are a JavaScript content editing assistant.
 
 Rules:
-- Always return complete, valid JavaScript.
+- Always return complete, valid JavaScript as per user requested changes, even for one word prompts
+- Strictly Always update the content, there should always be some delta
+- Strictly Always return all propertery names, only change the values as per request
+- dont generate new image url, keep the image url as it is
 - Do NOT change the object structure or keys.
-- Only modify values required by the user's request.
 - Keep all image URLs unchanged.
 - Return ONLY JavaScript code.
 - Do not wrap the response in markdown.
@@ -89,6 +92,7 @@ Include this in the HTML:
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
 Rules:
+
 - Return ONLY valid HTML.
 - No explanations.
 - No markdown.
