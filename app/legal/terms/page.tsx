@@ -6,7 +6,7 @@ export default function terms(){
         <div className="bg-gray-100 py-16 px-4">
           <div className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Terms & Conditions</h1>
-            <p className="text-gray-600 mb-4">Last updated on Aug 5th 2024</p>
+            <p className="text-gray-600 mb-4">Last updated on July 5th 2026</p>
             
             <h2 className="text-xl font-semibold text-gray-800 mb-2">1. Introduction</h2>
             <p className="text-gray-600 mb-4">For the purpose of these Terms and Conditions, The term "we", "us", "our" used anywhere on this page shall mean ANURANJAN TIRKEY, whose registered/operational office is 857/10, Dhanora Road, Saraswati Kunj East, Risali Durg CHHATTISGARH 490006. "you", “your”, "user", “visitor” shall mean any natural or legal person who is visiting our website and/or agreed to purchase from us.</p>

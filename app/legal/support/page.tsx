@@ -7,7 +7,7 @@ export default function support () {
     <h2 className="text-xs font-semibold text-gray-800 mb-2">1. Getting Started</h2> {/* Section title with extra small font */}
     <p className="text-gray-600 mb-4 text-xs">To get started with our product, please refer to our user guide available on our website.</p> {/* Getting started information */}
     <h2 className="text-xs font-semibold text-gray-800 mb-2">2. Frequently Asked Questions</h2> {/* Section title with extra small font */}
-    <p className="text-gray-600 mb-4 text-xs">Check our FAQ section for answers to common questions about our services and troubleshooting tips.</p> {/* FAQ information */}
+    <p className="text-gray-600 mb-4 text-xs">Check our <a href="/docs" className="text-blue-500">Documentation</a> section for answers to common questions about our services and troubleshooting tips.</p> {/* FAQ information */}
     <h2 className="text-xs font-semibold text-gray-800 mb-2">3. Contact Support</h2> {/* Section title with extra small font */}
     <p className="text-gray-600 mb-4 text-xs">If you need further assistance, please reach out to our support team at anuranjan.pgp2013@iimkashipur.ac.in.</p> {/* Contact support information */}
     <h2 className="text-xs font-semibold text-gray-800 mb-2">4. Live Chat</h2> {/* Section title with extra small font */}

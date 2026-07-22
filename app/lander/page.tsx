@@ -19,10 +19,10 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden items-center space-x-12 text-[11px] uppercase tracking-widest font-medium md:flex">
-            <Link href="/" className="transition hover:text-white text-white/50">Dashboard</Link>
-            <Link href="/" className="transition hover:text-white text-white/50">Templates</Link>
-            <Link href="/" className="transition hover:text-white text-white/50">Service Tiers</Link>
-            <Link href="/" className="transition hover:text-white text-white/50">Settings</Link>
+            <Link href="/legal/privacy" className="transition hover:text-white text-white/50">Privacy</Link>
+            <Link href="/legal/terms" className="transition hover:text-white text-white/50">Terms</Link>
+            <Link href="/legal/support" className="transition hover:text-white text-white/50">Support</Link>
+            <Link href="/legal/refund" className="transition hover:text-white text-white/50">Refund</Link>
           </div>
 
           <button
