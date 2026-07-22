@@ -186,7 +186,7 @@ export default function AIPage() {
       <div className="mt-6 flex flex-col sm:flex-row gap-4 items-end">
         <div className="flex-1 w-full">
           <label htmlFor="prompt" className="block text-sm font-medium mb-1">
-            Describe your change
+            Describe your chang
           </label>
           <textarea
             id="prompt"
