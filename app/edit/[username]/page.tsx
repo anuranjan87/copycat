@@ -1,6 +1,6 @@
 import { getLatestPublishedSiteWithNullData  } from "@/lib/website-actions"
 import { notFound } from "next/navigation"
-import { CodeEditor } from "@/components/code-editor"
+import  { CodeEditor }  from "@/components/code-editor"
 import  {Origami, Globe2Icon, LayoutDashboard, Link, CirclePlayIcon }  from "lucide-react";
 
 
