@@ -23,6 +23,7 @@ export async function generateCodeWithAI(
   currentCode: string,
   prompt: string
 ) {
+  
   try {
     console.log("im working")
     const response = await client.responses.create({
