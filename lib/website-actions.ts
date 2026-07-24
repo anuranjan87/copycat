@@ -26,7 +26,7 @@ export async function generateCodeWithAI(
   try {
     console.log("im working")
     const response = await client.responses.create({
-      model: "gpt-4.1-nano",
+      model: "gpt-5-nano",
       input: `
 You are a JavaScript content editing assistant.
 

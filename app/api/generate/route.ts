@@ -43,6 +43,15 @@ Follow this format:
 - Never wrap the response inside Markdown code fences.
 - Never include explanations.
 - Always use real images from the image_search tool or inline SVGs.
+You MUST ONLY use image URLs from the supplied JSON.
+
+Never generate or modify an Unsplash URL.
+
+Never invent photo IDs.
+
+If more images are required than provided, reuse existing images.
+
+If only 5 images exist, use only those 5 repeatedly.
 
 Use Tailwind CDN:
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
