@@ -14,9 +14,9 @@ export default async function Page({ searchParams }: PageProps) {
   return (
     <div className="flex min-h-screen items-center justify-center">
       {params.mode === "signup" ? (
-        <SignUp forceRedirectUrl="/" signInUrl="/sign-in" />
+        <SignUp forceRedirectUrl="/" signInUrl="/sign-up" />
       ) : (
-        <SignIn forceRedirectUrl="/" signUpUrl="/sign-in?mode=signup" />
+        <SignIn forceRedirectUrl="/"  />
       )}
     </div>
   );
