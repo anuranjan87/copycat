@@ -13,6 +13,7 @@
     "@google/genai": "^1.51.0",
     "@monaco-editor/react": "latest",
     "@neondatabase/serverless": "latest",
+    "@next/third-parties": "^16.2.11",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
     "@radix-ui/react-aspect-ratio": "latest",

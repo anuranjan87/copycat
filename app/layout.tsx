@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { GoogleAnalytics } from '@next/third-parties/google'
 import "./globals.css";
 import { Montserrat } from "next/font/google";
 import { Toaster } from "sonner";
@@ -23,24 +24,15 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
+        <head>
+        <meta name="google-site-verification" content="eKZJHeOuWmsFOraC7yxPTuFhnroqlyJGxO0bLX4MUaE" />
+        </head>
         <body className={montserrat.className}>
           <main>{children}</main>
           <Toaster />
-        </body>
+          <GoogleAnalytics gaId="G-ZH37SY7SDF" />
 
-        {/* Google Analytics */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-83X5FKB3W8"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-83X5FKB3W8');
-          `}
-        </Script>
+        </body>      
       </html>
     </ClerkProvider>
   );
