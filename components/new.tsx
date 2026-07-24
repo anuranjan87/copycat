@@ -402,7 +402,12 @@ ${savedData}
 
   const handlePublish = async () => {
     // Confirm publish action to avoid accidental
-    if (!confirm('Publishing will make your website public. Are you sure?')) return
+const message =
+  username.toLowerCase() === "demo"
+    ? "You need to onboard first. We'll send you to the signup page. Continue?"
+    : "Publishing will make your website public. Are you sure?";
+
+if (!confirm(message)) return;
 
     setIsPublishing(true)
     try {

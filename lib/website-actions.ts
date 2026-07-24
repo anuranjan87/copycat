@@ -23,7 +23,7 @@ export async function generateCodeWithAI(
   currentCode: string,
   prompt: string
 ) {
-  
+
   try {
     console.log("im working")
     const response = await client.responses.create({
@@ -305,29 +305,39 @@ export async function getWebsiteHTML(username: string): Promise<string | null> {
 }
 
 
-export async function updateWebsiteContent(username: string, html: string, script: string, data: string) {
-  try {
-    const tableName = `${username.toLowerCase()}_website`
+import { redirect } from "next/navigation";
 
-    // Insert new content (creates a new version)
+export async function updateWebsiteContent(
+  username: string,
+  html: string,
+  script: string,
+  data: string
+) {
+  if (username.toLowerCase() === "demo") {
+    redirect("/lander");
+  }
+
+  try {
+    const tableName = `${username.toLowerCase()}_website`;
+
     await sql.query(
       `
-      INSERT INTO ${tableName} (code, code_script, code_data) 
+      INSERT INTO ${tableName} (code, code_script, code_data)
       VALUES ($1, $2, $3)
-    `,
-      [html, script, data],
-    )
+      `,
+      [html, script, data]
+    );
 
     return {
       success: true,
       message: "Website content updated successfully!",
-    }
+    };
   } catch (error) {
-    console.error("Error updating website content:", error)
+    console.error(error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to update website content",
-    }
+      error: "Failed to update website content",
+    };
   }
 }
 
