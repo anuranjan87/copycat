@@ -1,19 +1,23 @@
-'use client'
+// app/sign-in/page.tsx
 
-import { SignIn, SignUp } from '@clerk/nextjs'
-import { useSearchParams } from 'next/navigation'
+import { SignIn, SignUp } from "@clerk/nextjs";
 
-export default function AuthPage() {
-  const params = useSearchParams()
-  const mode = params.get('mode')
+interface PageProps {
+  searchParams: Promise<{
+    mode?: string;
+  }>;
+}
+
+export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams;
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      {mode === 'signup' ? (
+      {params.mode === "signup" ? (
         <SignUp forceRedirectUrl="/" signInUrl="/sign-in" />
       ) : (
         <SignIn forceRedirectUrl="/" signUpUrl="/sign-in?mode=signup" />
       )}
     </div>
-  )
+  );
 }
