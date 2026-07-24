@@ -22,6 +22,8 @@ import {
   Save,
   Globe,
   XCircle,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 // Dynamically import Monaco Editor (no SSR)
@@ -104,7 +106,7 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   });
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isStreamingEdits, setIsStreamingEdits] = useState(false); // new: shows while applying edits
+  const [hasReceivedData, setHasReceivedData] = useState(false);
 
   // View toggles
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
@@ -124,9 +126,9 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   ];
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
 
-  // Rotate message every 6s while generating
+  // Rotate message every 6s while generating (only before first chunk)
   useEffect(() => {
-    if (!isGenerating) return;
+    if (!isGenerating || hasReceivedData) return;
     const interval = setInterval(() => {
       setCurrentMessageIndex((prev) => {
         let newIndex;
@@ -137,7 +139,7 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
       });
     }, 6000);
     return () => clearInterval(interval);
-  }, [isGenerating, loadingMessages.length]);
+  }, [isGenerating, hasReceivedData, loadingMessages.length]);
 
   useEffect(() => {
     if (isGenerating) {
@@ -183,6 +185,72 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   const [savedHtml, setSavedHtml] = useState(initialContent.html);
   const [savedData, setSavedData] = useState(extractDataFields(initialContent.data));
 
+  // ----- UNDO / REDO HISTORY -----
+  const [history, setHistory] = useState<{ html: string; data: string }[]>(() => [
+    { html: initialContent.html, data: extractDataFields(initialContent.data) },
+  ]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+
+  // Push a new snapshot (truncates any future states)
+  const pushHistory = useCallback(
+    (html: string, data: string) => {
+      setHistory((prev) => {
+        const newHistory = prev.slice(0, historyIndex + 1);
+        newHistory.push({ html, data });
+        return newHistory;
+      });
+      setHistoryIndex((prev) => prev + 1);
+    },
+    [historyIndex]
+  );
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const snapshot = history[newIndex];
+      setDraftHtml(snapshot.html);
+      setDraftData(snapshot.data);
+      setHistoryIndex(newIndex);
+      toast.info('Undo', { description: 'Reverted to previous state.', position: 'top-center' });
+    }
+  }, [history, historyIndex]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const snapshot = history[newIndex];
+      setDraftHtml(snapshot.html);
+      setDraftData(snapshot.data);
+      setHistoryIndex(newIndex);
+      toast.info('Redo', { description: 'Restored to next state.', position: 'top-center' });
+    }
+  }, [history, historyIndex]);
+
+  // Keyboard shortcuts for Undo/Redo (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isCtrlZ = (e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey;
+      const isCtrlY = (e.ctrlKey || e.metaKey) && e.key === 'y';
+      const isCtrlShiftZ = (e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z';
+
+      if (isCtrlZ) {
+        if (historyIndex > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+        // else: let Monaco handle it
+      } else if (isCtrlY || isCtrlShiftZ) {
+        if (historyIndex < history.length - 1) {
+          e.preventDefault();
+          handleRedo();
+        }
+        // else: let Monaco handle it
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [historyIndex, history.length, handleUndo, handleRedo]);
+
   // Load template if templateId present
   useEffect(() => {
     if (!templateId) return;
@@ -195,6 +263,9 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
           setDraftData(extracted);
           setSavedHtml(result.html);
           setSavedData(extracted);
+          // Reset history with template as the initial state
+          setHistory([{ html: result.html, data: extracted }]);
+          setHistoryIndex(0);
           toast.info('Template loaded', {
             description: 'Edit and click Publish to make it live.',
             position: 'top-center',
@@ -229,10 +300,11 @@ ${savedData}
     );
   }, [draftHtml, savedData]);
 
-  // Iframe and scroll persistence (same as before, simplified for brevity)
+  // Iframe and scroll persistence
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 });
   const isRestoringScroll = useRef(false);
+  const shouldScrollToBottom = useRef(false);
 
   const captureScrollPosition = useCallback(() => {
     if (iframeRef.current?.contentWindow && !isRestoringScroll.current) {
@@ -242,6 +314,25 @@ ${savedData}
       } catch (error) {
         console.log('Could not capture scroll position:', error);
       }
+    }
+  }, []);
+
+  const scrollIframeToBottom = useCallback(() => {
+    if (!iframeRef.current?.contentWindow) return;
+    try {
+      const win = iframeRef.current.contentWindow;
+      const doc = win.document;
+      const height = Math.max(
+        doc.body.scrollHeight,
+        doc.documentElement.scrollHeight,
+        doc.body.offsetHeight,
+        doc.documentElement.offsetHeight,
+        doc.body.clientHeight,
+        doc.documentElement.clientHeight
+      );
+      win.scrollTo(0, height);
+    } catch (e) {
+      // ignore
     }
   }, []);
 
@@ -287,7 +378,16 @@ ${savedData}
         console.log('Scroll script injection failed:', error);
       }
     }
-    restoreScrollPosition();
+
+    // Prioritise auto‑scroll to bottom during AI generation
+    if (shouldScrollToBottom.current) {
+      setTimeout(() => {
+        scrollIframeToBottom();
+        shouldScrollToBottom.current = false;
+      }, 50);
+    } else {
+      restoreScrollPosition();
+    }
   };
 
   useEffect(() => {
@@ -310,6 +410,13 @@ ${savedData}
       console.log('Scroll listener error:', error);
     }
   }, [previewCode, captureScrollPosition]);
+
+  // Whenever draftHtml changes during generation, flag that we want to scroll to bottom
+  useEffect(() => {
+    if (isGenerating && hasReceivedData) {
+      shouldScrollToBottom.current = true;
+    }
+  }, [draftHtml, isGenerating, hasReceivedData]);
 
   // Open draft preview in new tab
   const openDraftPreview = () => {
@@ -344,18 +451,20 @@ ${draftData}
     }
   };
 
-  // Save handler
+  // Save handler – also pushes a history snapshot
   const handleSave = useCallback(() => {
     captureScrollPosition();
     setSavedHtml(draftHtml);
+    setSavedData(draftData);
+    pushHistory(draftHtml, draftData); // snapshot for undo/redo
     toast.success('Changes saved', {
       description: 'Your draft has been updated.',
       position: 'top-center',
       duration: 2000,
     });
-  }, [draftHtml, captureScrollPosition]);
+  }, [draftHtml, draftData, captureScrollPosition, pushHistory]);
 
-  // Keyboard shortcut: Ctrl+S
+  // Keyboard shortcut: Ctrl+S (save)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -369,9 +478,8 @@ ${draftData}
 
   // Publish handler
   const handlePublish = async () => {
-    // (demo sign-in modal handling omitted for brevity)
     if (username === 'demo') {
-      // showSignInModal set to true (you can add that)
+      // You can add sign-in modal logic here
       return;
     }
     setIsPublishing(true);
@@ -394,8 +502,10 @@ ${draftData}
   };
 
   // ============================================================
-  // ** STREAMING AI GENERATION – MAIN FEATURE **
+  // STREAMING AI GENERATION
   // ============================================================
+  const editorRef = useRef<any>(null);
+
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
       toast.error('Please enter a prompt for AI assistance', { position: 'top-center' });
@@ -403,7 +513,7 @@ ${draftData}
     }
 
     setIsGenerating(true);
-    setIsStreamingEdits(false); // reset
+    setHasReceivedData(false);
 
     try {
       const response = await fetch('/api/generate', {
@@ -416,64 +526,24 @@ ${draftData}
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-      let editCount = 0;
+      let fullCode = '';
 
-      // We'll update draftHtml on each edit.
-      // The editor and preview will re‑render automatically.
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        fullCode += chunk;
+        setDraftHtml(fullCode);
 
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          try {
-            const edit = JSON.parse(line);
-            // Apply the edit
-            setDraftHtml((prev) => {
-              if (!prev.includes(edit.find)) {
-                console.warn('Find string not found:', edit.find);
-                return prev;
-              }
-              return prev.replace(edit.find, edit.replace);
-            });
-            editCount++;
-            if (editCount === 1) {
-              setIsStreamingEdits(true); // show streaming indicator after first edit
-            }
-          } catch (e) {
-            console.error('Failed to parse JSON line:', line, e);
-          }
-        }
+        if (!hasReceivedData) setHasReceivedData(true);
       }
 
-      // Process remaining buffer
-      if (buffer.trim()) {
-        try {
-          const edit = JSON.parse(buffer);
-          setDraftHtml((prev) => {
-            if (!prev.includes(edit.find)) {
-              console.warn('Find string not found:', edit.find);
-              return prev;
-            }
-            return prev.replace(edit.find, edit.replace);
-          });
-          editCount++;
-          if (editCount === 1) setIsStreamingEdits(true);
-        } catch (e) {
-          console.error('Failed to parse final buffer:', buffer, e);
-        }
-      }
+      // AI generation finished – push snapshot for undo/redo
+      pushHistory(fullCode, draftData);
 
-      // All edits applied
       setAiPrompt('');
-      setIsStreamingEdits(false);
-      toast.success(`AI applied ${editCount} edit${editCount > 1 ? 's' : ''}!`, {
+      toast.success('AI generated new code!', {
         description: 'Review changes and save if you like.',
         position: 'top-center',
       });
@@ -481,12 +551,11 @@ ${draftData}
     } catch (error) {
       console.error('AI generation error:', error);
       toast.error('An unexpected error occurred', { position: 'top-center' });
-      setIsStreamingEdits(false);
     } finally {
       setIsGenerating(false);
+      setHasReceivedData(false);
     }
   };
-  // ============================================================
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -622,6 +691,26 @@ ${savedData}
 
           <div className="h-4 w-px bg-white/10" />
 
+          {/* Undo / Redo buttons */}
+          <button
+            onClick={handleUndo}
+            disabled={historyIndex <= 0}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Undo AI change (Ctrl+Z)"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={historyIndex >= history.length - 1}
+            className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Redo AI change (Ctrl+Shift+Z)"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="h-4 w-px bg-white/10" />
+
           <button
             onClick={handleSave}
             className={`px-3 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
@@ -722,11 +811,10 @@ ${savedData}
                   unsaved
                 </span>
               )}
-              {/* Show streaming indicator while edits are applied */}
-              {isStreamingEdits && (
+              {isGenerating && hasReceivedData && (
                 <span className="flex items-center gap-1 text-[10px] text-green-400/80">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  streaming edits...
+                  streaming updates...
                 </span>
               )}
             </div>
@@ -740,7 +828,10 @@ ${savedData}
               value={draftHtml}
               onChange={(value) => setDraftHtml(value || '')}
               theme="photoshop-dark"
-              onMount={handleEditorMount}
+              onMount={(editor, monaco) => {
+                editorRef.current = editor;
+                handleEditorMount(editor, monaco);
+              }}
               options={{
                 minimap: { enabled: false },
                 fontSize: 13,
@@ -773,12 +864,12 @@ ${savedData}
                   autoFindInSelection: 'never',
                   seedSearchStringFromSelection: 'never',
                 },
-                readOnly: isGenerating, // editor is read-only while generating
+                readOnly: isGenerating,
               }}
             />
 
-            {/* AI overlay – shown while waiting for the first edit */}
-            {isGenerating && !isStreamingEdits && (
+            {/* AI overlay – shown only while waiting for the first chunk */}
+            {isGenerating && !hasReceivedData && (
               <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-20">
                 <div className="flex flex-col items-center gap-4 max-w-xs text-center">
                   <div className="flex items-center gap-3">
@@ -799,14 +890,6 @@ ${savedData}
                     }
                   `}</style>
                 </div>
-              </div>
-            )}
-
-            {/* Optional: show a subtle "applying" overlay while streaming edits */}
-            {isStreamingEdits && (
-              <div className="absolute top-2 right-2 z-10 bg-green-500/20 text-green-300 text-[10px] px-2 py-1 rounded-full border border-green-500/30 backdrop-blur-sm flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                applying
               </div>
             )}
           </div>

@@ -28,8 +28,6 @@ import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from '@/lib
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
-import { SignInModal } from '@/components/SignInModal'
-import { CharacterForm } from '@/components/character-form'
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -123,7 +121,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
 
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [showSignInModal, setShowSignInModal] = useState(false)
 
   // Last saved timestamp
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -404,11 +401,6 @@ ${savedData}
   }, [handleSave])
 
   const handlePublish = async () => {
-    if (username === 'demo') {
-      setShowSignInModal(true)
-      return
-    }
-
     // Confirm publish action to avoid accidental
     if (!confirm('Publishing will make your website public. Are you sure?')) return
 
@@ -495,7 +487,6 @@ ${savedData}
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200 overflow-hidden">
-      <SignInModal open={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -547,26 +538,23 @@ ${savedData}
           color: rgb(251, 146, 60);
         }
         .trust-border {
-          border-color: rgba(148, 163, 184, 0.1);
+          border-color: rgba(148, 163, 184, 0.08);
         }
       `}</style>
 
-      {/* Trust-focused Top Navigation */}
-      <nav className="flex-shrink-0 border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-2 flex items-center justify-between z-10">
+      {/* Top Navigation - subtle visible border */}
+      <nav className="flex-shrink-0 border-b border-slate-700/20 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-2 flex items-center justify-between z-10">
         <div className="flex items-center gap-6">
-          {/* Brand / Logo */}
-         
-
           {/* Trust indicators */}
           <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
-                          <div className="flex items-center gap-1">
-                  <img
-                    src="https://i.postimg.cc/4NQdKMq5/e54598bb-7c66-4f95-af44-fe2a2d3ba44a-removebg-preview.png"
-                    alt="Secure"
-                    className="h-8 w-8 object-contain"
-                  />
-                </div>
-            <div className="h-4 w-px bg-slate-700" />
+            <div className="flex items-center gap-1">
+              <img
+                src="https://i.postimg.cc/4NQdKMq5/e54598bb-7c66-4f95-af44-fe2a2d3ba44a-removebg-preview.png"
+                alt="Secure"
+                className="h-8 w-8 object-contain"
+              />
+            </div>
+            <div className="h-4 w-px bg-slate-700/20" />
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3 text-slate-400" />
               {lastPublished ? (
@@ -577,7 +565,7 @@ ${savedData}
             </div>
             {lastSaved && (
               <>
-                <div className="h-4 w-px bg-slate-700" />
+                <div className="h-4 w-px bg-slate-700/20" />
                 <div className="flex items-center gap-1">
                   <Save className="h-3 w-3 text-slate-400" />
                   <span>Saved: {formatTime(lastSaved)}</span>
@@ -613,7 +601,7 @@ ${savedData}
             <span className="hidden sm:inline">Live</span>
           </a>
 
-          <div className="h-6 w-px bg-slate-700" />
+          <div className="h-6 w-px bg-slate-700/20" />
 
           {/* Publish button */}
           <button
@@ -641,18 +629,18 @@ ${savedData}
       </nav>
 
       <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden px-2 sm:px-4">
-        {/* Preview Panel */}
-        <div className="flex-[0.59] flex flex-col min-w-0 bg-slate-900 border border-slate-800 rounded-lg relative shadow-2xl shadow-black/30">
-          {/* Header with view controls */}
-          <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-slate-800/50 bg-slate-900/50 rounded-t-lg">
+        {/* Preview Panel - visible subtle border */}
+        <div className="flex-[0.59] flex flex-col min-w-0 bg-slate-900/50 border border-slate-700/20 rounded-lg relative shadow-2xl shadow-black/20">
+          {/* Header with internal subtle divider */}
+          <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-slate-700/10 bg-slate-900/30 rounded-t-lg">
             <div className="flex items-center gap-4">
-              <div className="flex items-center bg-slate-800/50 rounded-md p-0.5">
+              <div className="flex items-center bg-slate-800/20 rounded-md p-0.5">
                 <button
                   onClick={() => setViewMode('mobile')}
                   className={`p-1.5 rounded transition ${
                     viewMode === 'mobile'
                       ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/20'
                   }`}
                   aria-label="Mobile view"
                 >
@@ -673,7 +661,7 @@ ${savedData}
                   className={`p-1.5 rounded transition ${
                     viewMode === 'desktop'
                       ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/20'
                   }`}
                   aria-label="Desktop view"
                 >
@@ -692,7 +680,7 @@ ${savedData}
 
                 <button
                   onClick={toggleFullscreen}
-                  className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/30 transition"
+                  className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/20 transition"
                   title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                 >
                   {isFullscreen ? <Minimize className="w-4 h-4" /> : <Fullscreen className="w-4 h-4" />}
@@ -701,7 +689,7 @@ ${savedData}
 
               <button
                 onClick={openDraftPreview}
-                className="text-xs text-slate-400 hover:text-white hover:bg-slate-700/30 px-2 py-1 rounded transition flex items-center gap-1"
+                className="text-xs text-slate-400 hover:text-white hover:bg-slate-700/20 px-2 py-1 rounded transition flex items-center gap-1"
                 title="Open full screen preview in new tab"
               >
                 <svg
@@ -730,7 +718,7 @@ ${savedData}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       onKeyDown={handleKeyPress}
                       disabled={isGenerating}
-                      className="w-full rounded-full bg-slate-800/60 border border-slate-700/50 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200"
+                      className="w-full rounded-full bg-slate-800/30 border border-slate-700/30 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-transparent transition-all duration-200"
                     />
                     <button
                       onClick={handleAIGenerate}
@@ -762,8 +750,8 @@ ${savedData}
             </div>
           </div>
 
-          {/* Preview iframe area */}
-          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/60 p-6 relative">
+          {/* Preview iframe area - subtle inner border on iframe */}
+          <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-6 relative">
             <div
               className={`transition-all duration-300 ${
                 viewMode === 'desktop' ? 'w-full max-w-6xl' : 'w-[420px]'
@@ -774,20 +762,20 @@ ${savedData}
                 ref={iframeRef}
                 srcDoc={finalCode}
                 onLoad={handleIframeLoad}
-                className="w-full h-full rounded-lg border border-slate-800 shadow-2xl"
+                className="w-full h-full rounded-lg border border-slate-700/20 shadow-2xl"
                 title="Live Preview"
                 sandbox="allow-scripts allow-same-origin"
                 style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'black' }}
               />
             </div>
             {/* Subtle glow */}
-            <div className="absolute inset-0 pointer-events-none rounded-lg border border-blue-500/5 shadow-[inset_0_0_80px_rgba(59,130,246,0.05)]" />
+            <div className="absolute inset-0 pointer-events-none rounded-lg border border-blue-500/5 shadow-[inset_0_0_80px_rgba(59,130,246,0.03)]" />
           </div>
         </div>
 
-        {/* Code Editor Panel */}
-        <div className="flex-[0.4] flex flex-col min-w-0 bg-slate-900 border border-slate-800 rounded-lg relative shadow-2xl shadow-black/30">
-          <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 rounded-t-lg">
+        {/* Code Editor Panel - visible subtle border */}
+        <div className="flex-[0.4] flex flex-col min-w-0 bg-slate-900/50 border border-slate-700/20 rounded-lg relative shadow-2xl shadow-black/20">
+          <div className="px-4 py-2 border-b border-slate-700/10 flex items-center justify-between bg-slate-900/30 rounded-t-lg">
             <div className="flex items-center gap-3">
               <div className="flex gap-1.5">
                 <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" />
@@ -816,7 +804,7 @@ ${savedData}
               <button
                 onClick={handleDownload}
                 title="Download HTML"
-                className="group flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700/50 bg-slate-800/30 text-slate-400 transition-all duration-200 hover:bg-slate-700 hover:text-white active:scale-95"
+                className="group flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700/20 bg-slate-800/20 text-slate-400 transition-all duration-200 hover:bg-slate-700/30 hover:text-white active:scale-95"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
@@ -888,12 +876,12 @@ ${savedData}
             )}
           </div>
 
-          {/* Save indicator - enhanced with trust messaging */}
+          {/* Save indicator */}
           <div className="absolute bottom-4 right-4 z-30">
             {hasUnsavedChanges ? (
               <button
                 onClick={handleSave}
-                className="px-3 py-1.5 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-medium backdrop-blur-sm hover:bg-orange-500/30 transition-all flex items-center gap-2 shadow-lg hover:scale-105"
+                className="px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-medium backdrop-blur-sm hover:bg-orange-500/20 transition-all flex items-center gap-2 shadow-lg hover:scale-105"
               >
                 <AlertCircle className="w-3.5 h-3.5 animate-pulse" />
                 <span>Save changes</span>
@@ -909,11 +897,11 @@ ${savedData}
         </div>
       </div>
 
-      {/* Footer trust bar */}
-      <div className="flex-shrink-0 border-t border-slate-800/50 bg-slate-900/50 px-6 py-1.5 flex items-center justify-between text-xs text-slate-500 backdrop-blur-sm">
+      {/* Footer trust bar - visible subtle border */}
+      <div className="flex-shrink-0 border-t border-slate-700/20 bg-slate-900/30 px-6 py-1.5 flex items-center justify-between text-xs text-slate-500 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <Shield className="h-3 w-3 text-blue-400" />
+            <Shield className="h-3 w-3 text-blue-400/70" />
             Secure connection
           </span>
           <span className="hidden sm:inline">•</span>
@@ -926,7 +914,7 @@ ${savedData}
              Support
           </a>
           <a href="/legal/refund" className="hover:text-slate-300 transition flex items-center gap-1">
-             Refund
+             Refunds
           </a>
         </div>
       </div>

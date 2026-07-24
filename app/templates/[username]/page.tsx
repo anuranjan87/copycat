@@ -179,9 +179,9 @@ export default function Page({ params }: PageProps) {
 
         <Nav username={username} />
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-16">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-10">
           {/* ─── Header ───────────────────────────────────────────── */}
-          <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
+          <header className="flex flex-col mt-12 md:flex-row md:items-center md:justify-between gap-4 mb-10">
             <div>
               <h1 className={`text-3xl md:text-4xl font-light tracking-tight ${applyRoxFont ? "rox" : ""}`}>
                 Choose your <span className="text-cyan-400/90">starting point</span>

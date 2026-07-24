@@ -113,13 +113,7 @@ export function CharacterForm() {
 
       <div className="relative w-full max-w-md animate-in fade-in zoom-in duration-300">
 
-        {/* close */}
-        <button
-          onClick={() => router.back()}
-          className="absolute -right-3 -top-3 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-zinc-900 text-white/70 transition hover:scale-105 hover:text-white"
-        >
-          ✕
-        </button>
+       
 
         <Card className="relative overflow-hidden border border-zinc-800/70 bg-zinc-950/95 shadow-2xl backdrop-blur-2xl">
 

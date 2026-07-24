@@ -654,35 +654,68 @@ export async function getEditRedirectPath(username: string): Promise<string> {
 }
 
 // actions.tsx
-export async function getLatestPublishedSiteWithNullData(username: string): Promise<WebsiteContent | null> {
+export async function getLatestPublishedSiteWithNullData(
+  username: string
+): Promise<WebsiteContent | null> {
   try {
     const tableName = `${username.toLowerCase()}_website`;
 
-    // Check if table exists
+    console.log("Table:", tableName);
+
+    // Check if the user's table exists
     const tableExists = await sql.query(
-      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = $1
+      ) AS exists
+      `,
       [tableName]
     );
-    if (!tableExists[0]?.exists) return null;
 
-    // Get the most recent row where code_data IS NULL (or empty string)
+    if (!tableExists[0]?.exists) {
+      console.log("Table does not exist.");
+      return null;
+    }
+
+    // Always fetch ONLY the latest row
     const result = await sql.query(
-      `SELECT code, code_script, code_data
-       FROM ${tableName}
-       WHERE code_data IS NULL OR code_data = ''
-       ORDER BY created_at DESC
-       LIMIT 1`
+      `
+      SELECT code, code_script, code_data
+      FROM ${tableName}
+      ORDER BY created_at DESC
+      LIMIT 1
+      `
     );
 
-    if (result.length === 0) return null;
+    if (result.length === 0) {
+      console.log("No rows found.");
+      return null;
+    }
 
+    const latest = result[0];
+
+    console.log("Latest row:", latest);
+
+    // If the latest row has data.js content, don't load it.
+    // Return null so the editor starts with empty values.
+    if (
+      latest.code_data !== null &&
+      String(latest.code_data).trim() !== ""
+    ) {
+      console.log("Latest row has code_data. Returning empty editor.");
+      return null;
+    }
+
+    // Latest row has NULL/empty code_data, so load it.
     return {
-      html: result[0].code || "",
-      script: result[0].code_script || "",
-      data: result[0].code_data || "",
+      html: latest.code ?? "",
+      script: latest.code_script ?? "",
+      data: latest.code_data ?? "",
     };
   } catch (error) {
-    console.error("Error fetching latest null‑data site:", error);
+    console.error("Error fetching latest published site:", error);
     return null;
   }
 }

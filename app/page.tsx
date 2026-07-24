@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { useUser, SignInButton } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { usernameChecker } from '@/lib/website-actions'
+import {CharacterForm} from '@/components/character-form'
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser()
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
+  const [showCharacterForm, setShowCharacterForm] = useState(false)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -29,11 +31,11 @@ export default function DashboardPage() {
           return
         }
 
-        // Fallback if no username exists
-        router.replace('/templates/demo')
+        // No username -> show the form
+        setShowCharacterForm(true)
       } catch (err) {
         console.error(err)
-        router.replace('/templates/demo')
+        setShowCharacterForm(true)
       } finally {
         setLoading(false)
       }
@@ -50,8 +52,21 @@ export default function DashboardPage() {
     )
   }
 
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <SignInButton />
+      </div>
+    )
+  }
+
+  if (showCharacterForm) {
+    return <CharacterForm />
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center">
-Redirecting...    </div>
+      Redirecting...
+    </div>
   )
 }

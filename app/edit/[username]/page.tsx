@@ -1,46 +1,45 @@
-import { getLatestPublishedSiteWithNullData  } from "@/lib/website-actions"
-import { notFound } from "next/navigation"
-import  { CodeEditor }  from "@/components/code-editor"
-import  {Origami, Globe2Icon, LayoutDashboard, Link, CirclePlayIcon }  from "lucide-react";
-
+import { getLatestPublishedSiteWithNullData } from "@/lib/website-actions";
+import { notFound } from "next/navigation";
+import { CodeEditor } from "@/components/code-editor";
 
 interface PageProps {
-  params: {
-    username: string
-  }
+  params: Promise<{
+    username: string;
+  }>;
 }
 
 export default async function EditPage({ params }: PageProps) {
-  const { username } = await params
+  const { username } = await params;
 
   try {
-    const content = await getLatestPublishedSiteWithNullData (username)
-    if (!content) {
-      notFound()
-    }
+    const content =
+      (await getLatestPublishedSiteWithNullData(username)) ?? {
+        html: "",
+        script: "",
+        data: "",
+      };
 
     return (
       <div className="flex h-screen bg-[#030712] relative">
-        {/* Sidebar */}
-
-        {/* Main Content */}
-        <main className="flex-1 ">
-          <CodeEditor username={username} initialContent={content} />
+        <main className="flex-1">
+          <CodeEditor
+            username={username}
+            initialContent={content}
+          />
         </main>
       </div>
-    )
+    );
   } catch (error) {
-    console.error("Error loading edit page:", error)
-    notFound()
+    console.error("Error loading edit page:", error);
+    notFound();
   }
-
 }
 
 export async function generateMetadata({ params }: PageProps) {
-  const { username } = await params
+  const { username } = await params;
 
   return {
     title: `Edit ${username}'s Website`,
     description: `Edit the website for ${username}`,
-  }
+  };
 }
