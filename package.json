@@ -62,6 +62,7 @@
     "react-split": "^2.0.14",
     "react-split-pane": "^2.0.3",
     "recharts": "latest",
+    "resend": "^6.18.0",
     "sonner": "latest",
     "splitpanes": "^4.0.4",
     "tailwind-merge": "^2.5.5",

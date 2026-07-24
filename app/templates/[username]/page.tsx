@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2, Plus, Search, User } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles, ArrowRight, LayoutGrid } from "lucide-react";
 
 import Nav from "@/components/nav";
 import mat from "@/asset/mat.gif";
@@ -17,6 +17,7 @@ interface TemplateMeta {
   title: string;
   description: string;
   mood: string;
+  category: string;
 }
 
 interface PageProps {
@@ -31,13 +32,15 @@ const templatesMeta: TemplateMeta[] = [
     title: "Light House",
     description: "Warm, inviting landing page with a bold hero section.",
     mood: "Landing page",
+    category: "Landing Page",
   },
   {
     id: "2",
     localImage: "/2.png",
     title: "Silent Ink",
     description: "Minimalist and clean, perfect for SaaS marketing.",
-    mood: "Sass marketing",
+    mood: "SaaS marketing",
+    category: "SaaS",
   },
   {
     id: "3",
@@ -45,6 +48,7 @@ const templatesMeta: TemplateMeta[] = [
     title: "Darjeeling",
     description: "Story‑driven layout for blogs and long‑form content.",
     mood: "Blog",
+    category: "Blog & Content",
   },
   {
     id: "4",
@@ -52,6 +56,7 @@ const templatesMeta: TemplateMeta[] = [
     title: "Slow",
     description: "Futuristic, vibrant, and immersive for creative brands.",
     mood: "Landing Page",
+    category: "Landing Page",
   },
   {
     id: "5",
@@ -59,20 +64,23 @@ const templatesMeta: TemplateMeta[] = [
     title: "Stokebury",
     description: "Sharp, asymmetric layout for agencies and creators.",
     mood: "Agencies & creators",
+    category: "Portfolio",
   },
   {
     id: "6",
     localImage: "/3.png",
     title: "Copy Cat",
     description: "Bold, founder‑friendly design with a strong narrative.",
-    mood: "founder vibe",
+    mood: "Founder vibe",
+    category: "SaaS",
   },
   {
     id: "7",
     localImage: "/6.png",
     title: "Peekaboo",
     description: "Subtle, corporate‑ready with clever micro‑interactions.",
-    mood: "company website",
+    mood: "Company website",
+    category: "Corporate",
   },
   {
     id: "8",
@@ -80,13 +88,15 @@ const templatesMeta: TemplateMeta[] = [
     title: "Pixel Perfect",
     description: "Playful, retro grid system for product launches.",
     mood: "Product Launch",
+    category: "Landing Page",
   },
   {
     id: "9",
     localImage: "/14.jpg",
     title: "Dark Luxe",
     description: "Luxurious dark theme for experimental brands.",
-    mood: "experimenting",
+    mood: "Experimenting",
+    category: "Portfolio",
   },
   {
     id: "10",
@@ -94,6 +104,7 @@ const templatesMeta: TemplateMeta[] = [
     title: "Blocks",
     description: "Clean, block‑based layout for blogs and portfolios.",
     mood: "Blog",
+    category: "Blog & Content",
   },
   {
     id: "11",
@@ -101,20 +112,23 @@ const templatesMeta: TemplateMeta[] = [
     title: "Negative Space",
     description: "Bold, disruptive design with a focus on white space.",
     mood: "Landing page",
+    category: "Landing Page",
   },
   {
     id: "12",
     localImage: "/9.png",
     title: "Thrift Mode",
     description: "Warm, nostalgic portfolio style with a vintage touch.",
-    mood: "Porfolio",
+    mood: "Portfolio",
+    category: "Portfolio",
   },
   {
     id: "13",
     localImage: "/11.png",
     title: "Retro VHS",
     description: "Grainy, nostalgic aesthetic for creative projects.",
-    mood: "nostalgic",
+    mood: "Nostalgic",
+    category: "Portfolio",
   },
   {
     id: "14",
@@ -122,8 +136,11 @@ const templatesMeta: TemplateMeta[] = [
     title: "Zen Garden",
     description: "Calm, balanced landing page with nature‑inspired tones.",
     mood: "Landing page",
+    category: "Landing Page",
   },
 ];
+
+const CATEGORIES = ["All", "Landing Page", "SaaS", "Portfolio", "Blog & Content", "Corporate"];
 
 // ─── Page Component ──────────────────────────────────────────────────
 export default function Page({ params }: PageProps) {
@@ -133,6 +150,8 @@ export default function Page({ params }: PageProps) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [applyRoxFont, setApplyRoxFont] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
     const timer = setTimeout(() => setApplyRoxFont(true), 3500);
@@ -154,65 +173,120 @@ export default function Page({ params }: PageProps) {
     }, 300);
   };
 
+  const filteredTemplates = useMemo(() => {
+    return templatesMeta.filter((template) => {
+      const matchesSearch =
+        template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.mood.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesCategory =
+        activeCategory === "All" || template.category === activeCategory;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [searchQuery, activeCategory]);
+
   return (
-    <>
-      {/* ─── Scanline & Vignette Overlay ───────────────────────── */}
-      <div className="fixed inset-0 pointer-events-none z-50 scanline-overlay" />
-      <div className="fixed inset-0 pointer-events-none z-40 vignette-overlay" />
-
-      <div className="game-layout min-h-screen bg-[#0b0e14] -mt-7 text-white selection:bg-cyan-500/30 selection:text-cyan-100">
-
-        {/* ─── Loading Overlay ────────────────────────────────────── */}
-        {isNavigating && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex items-center justify-center transition-opacity duration-300">
-            <div className="bg-[#181818] border border-white/5 rounded-xl p-8 flex flex-col items-center shadow-2xl min-w-[200px]">
-              <div className="relative">
-                <Image src={mat} alt="Loading" width={50} height={50} className="object-contain opacity-80" />
-              </div>
-              <div className="flex items-center gap-2 mt-5 text-sm text-white/40">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="tracking-wide">Preparing your workspace…</span>
-              </div>
+    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* ─── Loading Overlay ────────────────────────────────────── */}
+      {isNavigating && (
+        <div className="fixed inset-0 bg-[#0d1117]/80 backdrop-blur-md z-50 flex items-center justify-center transition-all duration-300">
+          <div className="bg-[#161b22] border border-slate-800 rounded-2xl p-8 flex flex-col items-center shadow-2xl min-w-[240px] animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative mb-4">
+              <Image src={mat} alt="Loading" width={48} height={48} className="object-contain opacity-90" />
+            </div>
+            <div className="flex items-center gap-2.5 text-sm text-slate-300 font-medium">
+              <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+              <span>Setting up workspace…</span>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        <Nav username={username} />
+      <Nav username={username} />
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-10">
-          {/* ─── Header ───────────────────────────────────────────── */}
-          <header className="flex flex-col mt-12 md:flex-row md:items-center md:justify-between gap-4 mb-10">
-            <div>
-              <h1 className={`text-3xl md:text-4xl font-light tracking-tight ${applyRoxFont ? "rox" : ""}`}>
-                Choose your <span className="text-cyan-400/90">starting point</span>
-              </h1>
-              <p className="text-white/30 text-sm mt-1 max-w-lg">
-                Pick a template and start editing instantly — no design skills required.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                <input
-                  type="text"
-                  placeholder="Search templates…"
-                  className="w-48 bg-white/5 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder-white/20 focus:outline-none focus:border-cyan-400/40 transition-colors"
-                />
-              </div>
-              <Link
-                href={`/edit/${username}`}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black text-sm font-medium rounded-full transition-colors duration-200 shadow-[0_0_12px_rgba(0,255,255,0.3)] hover:shadow-[0_0_20px_rgba(0,255,255,0.5)]"
+      <main className="max-w-7xl mx-auto mt-12 px-4 sm:px-6 lg:px-8 py-10 w-full flex-1">
+        {/* ─── Header Section ───────────────────────────────────── */}
+        <header className="mb-10 text-center max-w-3xl mx-auto space-y-4">
+          <div className="inline-flex mb-2 items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Choose a starting point</span>
+          </div>
+
+          <h1 className={`text-3xl sm:text-4xl -mb-2 md:text-5xl font-semibold tracking-tight text-white ${applyRoxFont ? "rox" : ""}`}>
+            What would you like to build today?
+          </h1>
+
+          <p className="text-slate-400 mb-3  text-base sm:text-lg leading-relaxed">
+            Select a pre-built template to customize, or launch a clean slate to build from scratch.
+          </p>
+        </header>
+
+        {/* ─── Action Bar & Search ────────────────────────────── */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-none">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-4 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                  activeCategory === cat
+                    ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+                    : "bg-[#161b22] text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700"
+                }`}
               >
-                <Plus className="w-4 h-4" />
-                Blank Editor
-              </Link>
-            </div>
-          </header>
+                {cat}
+              </button>
+            ))}
+          </div>
 
-          {/* ─── Templates Grid ──────────────────────────────────── */}
-          <section className="pb-20">
+          {/* Search & Blank Editor CTA */}
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search templates…"
+                className="w-full bg-[#161b22] border border-slate-800 rounded-full py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+              />
+            </div>
+
+            <Link
+              href={`/edit/${username}`}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap shadow-sm hover:text-white"
+            >
+              <Plus className="w-4 h-4 text-cyan-400" />
+              <span>Blank Editor</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* ─── Templates Grid ──────────────────────────────────── */}
+        <section className="pb-16">
+          {filteredTemplates.length === 0 ? (
+            <div className="text-center py-20 bg-[#161b22]/50 border border-slate-800/80 rounded-2xl max-w-md mx-auto my-8 space-y-3">
+              <LayoutGrid className="w-10 h-10 text-slate-500 mx-auto opacity-50" />
+              <h3 className="text-base font-medium text-slate-300">No templates found</h3>
+              <p className="text-sm text-slate-500 max-w-xs mx-auto">
+                Try searching for a different keyword or change your category filter.
+              </p>
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setActiveCategory("All");
+                }}
+                className="text-xs text-cyan-400 hover:underline pt-2 inline-block font-medium"
+              >
+                Reset filters
+              </button>
+            </div>
+          ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {templatesMeta.map((template) => (
+              {filteredTemplates.map((template) => (
                 <TemplateCard
                   key={template.id}
                   template={template}
@@ -222,99 +296,12 @@ export default function Page({ params }: PageProps) {
                 />
               ))}
             </div>
-          </section>
+          )}
+        </section>
 
-          <Footer />
-        </main>
-      </div>
-
-      <style jsx>{`
-        /* ─── Game Layout Styles ────────────────────────────── */
-        .game-layout {
-          position: relative;
-          box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 255, 255, 0.05);
-        }
-
-        .scanline-overlay {
-          background: repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 2px,
-            rgba(0, 0, 0, 0.03) 2px,
-            rgba(0, 0, 0, 0.03) 4px
-          );
-          animation: scanlines 0.1s linear infinite;
-        }
-
-        @keyframes scanlines {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 4px; }
-        }
-
-        .vignette-overlay {
-          background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.3) 100%);
-          pointer-events: none;
-        }
-
-        /* ─── Pixel‑style border accents ────────────────────── */
-        .game-layout :global(.group) {
-          border: 1px solid rgba(0, 255, 255, 0.05);
-          transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        .game-layout :global(.group:hover) {
-          border-color: rgba(0, 255, 255, 0.3);
-          box-shadow: 0 0 20px rgba(0, 255, 255, 0.08), inset 0 0 20px rgba(0, 255, 255, 0.02);
-        }
-
-        /* subtle corner pixel decorations */
-        .game-layout :global(.group::before),
-        .game-layout :global(.group::after) {
-          content: '';
-          position: absolute;
-          width: 12px;
-          height: 12px;
-          border-color: rgba(0, 255, 255, 0.15);
-          border-style: solid;
-          border-width: 0;
-          transition: border-color 0.3s;
-          pointer-events: none;
-          opacity: 0.6;
-        }
-
-        .game-layout :global(.group::before) {
-          top: 6px;
-          left: 6px;
-          border-top-width: 1px;
-          border-left-width: 1px;
-        }
-
-        .game-layout :global(.group::after) {
-          bottom: 6px;
-          right: 6px;
-          border-bottom-width: 1px;
-          border-right-width: 1px;
-        }
-
-        .game-layout :global(.group:hover::before),
-        .game-layout :global(.group:hover::after) {
-          border-color: rgba(0, 255, 255, 0.5);
-        }
-
-        /* custom scrollbar (optional game feel) */
-        .game-layout ::-webkit-scrollbar {
-          width: 6px;
-          background: #0b0e14;
-        }
-        .game-layout ::-webkit-scrollbar-thumb {
-          background: rgba(0, 255, 255, 0.2);
-          border-radius: 3px;
-        }
-        .game-layout ::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 255, 255, 0.4);
-        }
-      `}</style>
-    </>
+        <Footer />
+      </main>
+    </div>
   );
 }
 
@@ -336,50 +323,61 @@ function TemplateCard({
       onClick={() => onSelect(template.id)}
       className="
         group relative rounded-2xl overflow-hidden
-        bg-[#14181f] border border-white/5
+        bg-[#161b22] border border-slate-800/80
         transition-all duration-300 ease-out
-        hover:border-cyan-400/30 hover:shadow-2xl hover:shadow-cyan-500/10
-        cursor-pointer
+        hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-950/20 hover:-translate-y-1
+        cursor-pointer flex flex-col
       "
     >
-      {/* Image */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-[#0f131a]">
+      {/* Image Preview Area */}
+      <div className="relative aspect-[16/10] overflow-hidden bg-slate-900 border-b border-slate-800/50">
         <img
           src={template.localImage}
           alt={template.title}
           className="
-            h-full w-full object-cover
+            h-full w-full object-cover object-top
             transition-transform duration-500 ease-out
             group-hover:scale-105
-            filter brightness-90 group-hover:brightness-100
           "
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#14181f] via-transparent to-transparent" />
-      </div>
-
-      {/* Content */}
-      <div className="p-5 space-y-2">
-        <h3
-          className={`
-            text-lg font-medium text-white/90
-            transition-colors duration-200 group-hover:text-cyan-300
-            ${applyRoxFont ? "rox" : ""}
-          `}
-        >
-          {template.title}
-        </h3>
-        <p className="text-sm text-white/40 line-clamp-2 leading-relaxed">
-          {template.description}
-        </p>
-        <div className="pt-2 flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-white/20 border border-white/10 rounded-full px-3 py-1">
-            {template.mood}
+        
+        {/* Subtle Hover Overlay with Action Button */}
+        <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+          <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-cyan-500 text-slate-950 text-xs font-semibold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200">
+            Use Template
+            <ArrowRight className="w-3.5 h-3.5" />
           </span>
         </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <h3
+              className={`
+                text-base font-semibold text-slate-100
+                transition-colors duration-200 group-hover:text-cyan-400
+                ${applyRoxFont ? "rox" : ""}
+              `}
+            >
+              {template.title}
+            </h3>
+            <span className="text-[10px] uppercase tracking-wide text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/50 shrink-0">
+              {template.mood}
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+            {template.description}
+          </p>
+        </div>
+
+        {/* Loading Indicator */}
         {isLoading && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-cyan-400 animate-pulse">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            <span>Loading…</span>
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-800 text-xs text-cyan-400 font-medium animate-pulse">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Loading editor…</span>
           </div>
         )}
       </div>
@@ -389,11 +387,13 @@ function TemplateCard({
 
 function Footer() {
   return (
-    <footer className="border-t border-white/5 pt-6 pb-4 text-center text-[10px] text-white/20 tracking-widest uppercase flex justify-center items-center gap-6">
-      <span>All templates are fully customizable</span>
-      <span className="hidden sm:inline">•</span>
-      <span className="hidden sm:inline text-[8px] opacity-40 tracking-[0.2em]">v1.0.3</span>
-      <span className="hidden sm:inline text-[8px] opacity-40">FPS 60</span>
+    <footer className="border-t border-slate-800/60 py-8 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <p>© Workspace Templates. All layouts are fully customizable.</p>
+      <div className="flex items-center gap-4 text-slate-600">
+        <span>Ready to publish</span>
+        <span>•</span>
+        <span>Drag & Drop Ready</span>
+      </div>
     </footer>
   );
 }

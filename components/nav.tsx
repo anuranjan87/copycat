@@ -25,10 +25,10 @@ export default function Nav({ username }: NavProps) {
   };
 
   return (
-    <nav className="fixed right-0 left-0 z-50 top-0 bg-black/70 backdrop-blur-lg shadow-lg tracking-[0.08em] py-2 px-12" style={{ zoom: '0.58' }}>
+    <nav className="fixed right-0 left-0 z-50 top-0 bg-black/70 backdrop-blur-lg shadow-lg tracking-[0.1em] py-2 px-4" style={{ zoom: '0.55' }}>
       <div className="mx-auto flex max-w-9xl flex-col items-center justify-between px-6 md:flex-row">
         
-        <div className="hidden items-center space-x-[4rem] text-lg text-white md:flex tracking-[0.1rem]">
+        <div className="hidden items-center space-x-[6rem] text-lg text-white md:flex tracking-[0.1rem]">
           <div className="px-2"></div>
  <Link href="/lander" className="transition hover:opacity-70">
             Home
