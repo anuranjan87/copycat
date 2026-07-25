@@ -14,7 +14,7 @@ export default function IframeWithLinkHandler({
 
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
-      // ✅ Only accept messages from THIS iframe
+      // ✅ Only accept mesbsages from THIS iframe
       if (event.source !== iframeRef.current?.contentWindow) return
 
       const data = event.data
