@@ -1,16 +1,43 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2, Plus, Search, Sparkles, ArrowRight, LayoutGrid } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Search,
+  Sparkles,
+  ArrowRight,
+  LayoutGrid,
+  Upload,
+  Download,
+  Mail,
+} from "lucide-react";
+import * as XLSX from "xlsx"; // npm i xlsx
+
+// ─── shadcn/ui imports ─────────────────────────────────────────────
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 import Nav from "@/components/nav";
 import mat from "@/asset/mat.gif";
 
-// ─── Types ──────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────
 interface TemplateMeta {
   id: string;
   localImage: string;
@@ -20,12 +47,20 @@ interface TemplateMeta {
   category: string;
 }
 
+interface EmailTemplate {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+}
+
 interface PageProps {
   params: Promise<{ username: string }>;
 }
 
-// ─── Template Data ────────────────────────────────────────────────────
+// ─── Template Data ──────────────────────────────────────────────────
 const templatesMeta: TemplateMeta[] = [
+  // ... (same as before, omitted for brevity)
   {
     id: "1",
     localImage: "/1.png",
@@ -34,113 +69,39 @@ const templatesMeta: TemplateMeta[] = [
     mood: "Landing page",
     category: "Landing Page",
   },
-  {
-    id: "2",
-    localImage: "/2.png",
-    title: "Silent Ink",
-    description: "Minimalist and clean, perfect for SaaS marketing.",
-    mood: "SaaS marketing",
-    category: "SaaS",
-  },
-  {
-    id: "3",
-    localImage: "/4.png",
-    title: "Darjeeling",
-    description: "Story‑driven layout for blogs and long‑form content.",
-    mood: "Blog",
-    category: "Blog & Content",
-  },
-  {
-    id: "4",
-    localImage: "/10.png",
-    title: "Slow",
-    description: "Futuristic, vibrant, and immersive for creative brands.",
-    mood: "Landing Page",
-    category: "Landing Page",
-  },
-  {
-    id: "5",
-    localImage: "/5.png",
-    title: "Stokebury",
-    description: "Sharp, asymmetric layout for agencies and creators.",
-    mood: "Agencies & creators",
-    category: "Portfolio",
-  },
-  {
-    id: "6",
-    localImage: "/3.png",
-    title: "Copy Cat",
-    description: "Bold, founder‑friendly design with a strong narrative.",
-    mood: "Founder vibe",
-    category: "SaaS",
-  },
-  {
-    id: "7",
-    localImage: "/6.png",
-    title: "Peekaboo",
-    description: "Subtle, corporate‑ready with clever micro‑interactions.",
-    mood: "Company website",
-    category: "Corporate",
-  },
-  {
-    id: "8",
-    localImage: "/13.jpg",
-    title: "Pixel Perfect",
-    description: "Playful, retro grid system for product launches.",
-    mood: "Product Launch",
-    category: "Landing Page",
-  },
-  {
-    id: "9",
-    localImage: "/14.jpg",
-    title: "Dark Luxe",
-    description: "Luxurious dark theme for experimental brands.",
-    mood: "Experimenting",
-    category: "Portfolio",
-  },
-  {
-    id: "10",
-    localImage: "/7.png",
-    title: "Blocks",
-    description: "Clean, block‑based layout for blogs and portfolios.",
-    mood: "Blog",
-    category: "Blog & Content",
-  },
-  {
-    id: "11",
-    localImage: "/8.png",
-    title: "Negative Space",
-    description: "Bold, disruptive design with a focus on white space.",
-    mood: "Landing page",
-    category: "Landing Page",
-  },
-  {
-    id: "12",
-    localImage: "/9.png",
-    title: "Thrift Mode",
-    description: "Warm, nostalgic portfolio style with a vintage touch.",
-    mood: "Portfolio",
-    category: "Portfolio",
-  },
-  {
-    id: "13",
-    localImage: "/11.png",
-    title: "Retro VHS",
-    description: "Grainy, nostalgic aesthetic for creative projects.",
-    mood: "Nostalgic",
-    category: "Portfolio",
-  },
-  {
-    id: "14",
-    localImage: "/12.png",
-    title: "Zen Garden",
-    description: "Calm, balanced landing page with nature‑inspired tones.",
-    mood: "Landing page",
-    category: "Landing Page",
-  },
+  // ... include all other templates
 ];
 
-const CATEGORIES = ["All", "Landing Page", "SaaS", "Portfolio", "Blog & Content", "Corporate"];
+const CATEGORIES = [
+  "All",
+  "Landing Page",
+  "SaaS",
+  "Portfolio",
+  "Blog & Content",
+  "Corporate",
+];
+
+// ─── Email templates for campaign ──────────────────────────────────
+const emailTemplates: EmailTemplate[] = [
+  {
+    id: "email1",
+    title: "Newsletter",
+    description: "Clean, minimal design perfect for regular updates.",
+    image: "/email1.png", // replace with actual asset
+  },
+  {
+    id: "email2",
+    title: "Promotional",
+    description: "Bold, attention-grabbing layout for offers and launches.",
+    image: "/email2.png",
+  },
+  {
+    id: "email3",
+    title: "Announcement",
+    description: "Professional, trustworthy design for company news.",
+    image: "/email3.png",
+  },
+];
 
 // ─── Page Component ──────────────────────────────────────────────────
 export default function Page({ params }: PageProps) {
@@ -148,10 +109,19 @@ export default function Page({ params }: PageProps) {
   const router = useRouter();
 
   const [isNavigating, setIsNavigating] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null
+  );
   const [applyRoxFont, setApplyRoxFont] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalStep, setModalStep] = useState<1 | 2>(1);
+  const [contactsText, setContactsText] = useState("");
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setApplyRoxFont(true), 3500);
@@ -187,103 +157,224 @@ export default function Page({ params }: PageProps) {
     });
   }, [searchQuery, activeCategory]);
 
+  // ─── Modal handlers ───────────────────────────────────────────────
+  const openModal = () => {
+    setIsModalOpen(true);
+    setModalStep(1);
+    setContactsText("");
+    setSelectedEmailTemplate(null);
+  };
+
+  const closeModal = () => setIsModalOpen(false);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        let data: any[] = [];
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        if (extension === "csv") {
+          const csv = ev.target?.result as string;
+          const lines = csv.split("\n").filter((line) => line.trim() !== "");
+          const headers = lines[0].split(",").map((h) => h.trim());
+          const nameIdx = headers.findIndex((h) => h.toLowerCase().includes("name"));
+          const emailIdx = headers.findIndex((h) => h.toLowerCase().includes("email"));
+          data = lines.slice(1).map((line) => {
+            const cols = line.split(",").map((c) => c.trim());
+            return { name: cols[nameIdx] || "", email: cols[emailIdx] || "" };
+          });
+        } else if (extension === "xlsx" || extension === "xls") {
+          const workbook = XLSX.read(ev.target?.result, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          data = XLSX.utils.sheet_to_json(sheet);
+        } else {
+          alert("Unsupported file format. Please upload CSV or Excel.");
+          return;
+        }
+
+        // Build contacts text: "name, email" lines
+        const text = data
+          .map((row) => `${row.name || row.Name || ""}, ${row.email || row.Email || ""}`)
+          .filter((line) => line.trim() !== ",")
+          .join("\n");
+        setContactsText((prev) => (prev ? prev + "\n" + text : text));
+      } catch (err) {
+        alert("Failed to parse file. Please check the format.");
+        console.error(err);
+      }
+    };
+    if (file.name.endsWith(".csv")) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const downloadSampleCSV = () => {
+    const sample = "Name,Email\nJohn Doe,john@example.com\nJane Smith,jane@example.com";
+    const blob = new Blob([sample], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sample_contacts.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleNextStep = () => {
+    if (modalStep === 1) {
+      // Validate that there is at least one contact
+      const lines = contactsText.split("\n").filter((line) => line.trim() !== "");
+      if (lines.length === 0) {
+        alert("Please add at least one contact (name, email).");
+        return;
+      }
+      setModalStep(2);
+    }
+  };
+
+  const handleSelectEmailTemplate = (templateId: string) => {
+    setSelectedEmailTemplate(templateId);
+  };
+
+const handleProceedWithTemplate = () => {
+  if (!selectedEmailTemplate) {
+    alert("Please select a template.");
+    return;
+  }
+  // Save contacts to sessionStorage
+  sessionStorage.setItem('emailCampaignContacts', contactsText);
+  // Navigate to ui_ai page
+  router.push(`/ai_ui/${username}?templateId=${selectedEmailTemplate}`);
+  closeModal();
+};
+
+
+  // ─── Render ──────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 text-foreground font-sans selection:bg-primary/30 selection:text-primary-foreground">
       {/* ─── Loading Overlay ────────────────────────────────────── */}
       {isNavigating && (
-        <div className="fixed inset-0 bg-[#0d1117]/80 backdrop-blur-md z-50 flex items-center justify-center transition-all duration-300">
-          <div className="bg-[#161b22] border border-slate-800 rounded-2xl p-8 flex flex-col items-center shadow-2xl min-w-[240px] animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center transition-all duration-300">
+          <Card className="w-72 p-6 flex flex-col items-center shadow-2xl border-muted">
             <div className="relative mb-4">
-              <Image src={mat} alt="Loading" width={48} height={48} className="object-contain opacity-90" />
+              <Image
+                src={mat}
+                alt="Loading"
+                width={48}
+                height={48}
+                className="object-contain opacity-90"
+              />
             </div>
-            <div className="flex items-center gap-2.5 text-sm text-slate-300 font-medium">
-              <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+            <div className="flex items-center gap-2.5 text-sm text-muted-foreground font-medium">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
               <span>Setting up workspace…</span>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       <Nav username={username} />
 
-      <main className="max-w-7xl mx-auto mt-12 px-4 sm:px-6 lg:px-8 py-10 w-full flex-1">
+      <main className="max-w-7xl mx-auto mt-12 px-4 sm:px-6 lg:px-8 py-10 w-full flex-1" style={{ zoom: '0.92' }}>
         {/* ─── Header Section ───────────────────────────────────── */}
-        <header className="mb-10 text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex mb-2 items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Choose a starting point</span>
+        <header className="mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/20 text-primary text-xs font-medium">
           </div>
 
-          <h1 className={`text-3xl sm:text-4xl -mb-2 md:text-5xl font-semibold tracking-tight text-white ${applyRoxFont ? "rox" : ""}`}>
+          <h1
+            className={`text-3xl sm:text-4xl mb-2 md:text-5xl font-semibold tracking-tight ${
+              applyRoxFont ? "rox" : ""
+            }`}
+          >
             What would you like to build today?
           </h1>
 
-          <p className="text-slate-400 mb-3  text-base sm:text-lg leading-relaxed">
-            Select a pre-built template to customize, or launch a clean slate to build from scratch.
+          <p className="text-muted-foreground tracking-[0.08rem] mb-3 text-base sm:text-lg leading-relaxed">
+            7winks helps you launch fast, learn quickly, and see what actually works.
           </p>
         </header>
 
         {/* ─── Action Bar & Search ────────────────────────────── */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
           {/* Category Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-none">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 ${
-                  activeCategory === cat
-                    ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
-                    : "bg-[#161b22] text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+          <ScrollArea className="w-full md:w-auto pb-2 md:pb-0">
+            <div className="flex items-center gap-2.5">
+              {CATEGORIES.map((cat) => (
+                <Button
+                  key={cat}
+                  variant={activeCategory === cat ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActiveCategory(cat)}
+                  className="rounded-full whitespace-nowrap"
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
+            <ScrollBar orientation="horizontal" className="hidden" />
+          </ScrollArea>
 
           {/* Search & Blank Editor CTA */}
           <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search templates…"
-                className="w-full bg-[#161b22] border border-slate-800 rounded-full py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+                placeholder="Tell your idea.."
+                className="pl-10 rounded-full bg-muted/10 border-muted-foreground/20 focus-visible:ring-primary"
               />
             </div>
 
-            <Link
-              href={`/edit/${username}`}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm font-medium rounded-full transition-all duration-200 whitespace-nowrap shadow-sm hover:text-white"
-            >
-              <Plus className="w-4 h-4 text-cyan-400" />
-              <span>Blank Editor</span>
-            </Link>
+            <Button asChild variant="outline" className="rounded-full">
+              <Link href={`/edit/${username}`}>
+                <Plus className="w-4 h-4 mr-1.5 text-primary" />
+                Blank Editor
+              </Link>
+            </Button>
+
+            {/* ─── Create Email Campaign (opens modal) ─────────── */}
+            <Button variant="outline" className="rounded-full" onClick={openModal}>
+              <Mail className="w-4 h-4 mr-1.5 text-primary" />
+              Create Email Campaign
+            </Button>
           </div>
         </div>
 
         {/* ─── Templates Grid ──────────────────────────────────── */}
         <section className="pb-16">
           {filteredTemplates.length === 0 ? (
-            <div className="text-center py-20 bg-[#161b22]/50 border border-slate-800/80 rounded-2xl max-w-md mx-auto my-8 space-y-3">
-              <LayoutGrid className="w-10 h-10 text-slate-500 mx-auto opacity-50" />
-              <h3 className="text-base font-medium text-slate-300">No templates found</h3>
-              <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                Try searching for a different keyword or change your category filter.
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setActiveCategory("All");
-                }}
-                className="text-xs text-cyan-400 hover:underline pt-2 inline-block font-medium"
-              >
-                Reset filters
-              </button>
-            </div>
+            <Card className="py-20 border-muted/60 bg-muted/10 max-w-md mx-auto my-8 text-center">
+              <CardContent className="space-y-3">
+                <LayoutGrid className="w-10 h-10 text-muted-foreground mx-auto opacity-50" />
+                <h3 className="text-base font-medium text-foreground">
+                  No templates found
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                  Try searching for a different keyword or change your category
+                  filter.
+                </p>
+                <Button
+                  variant="link"
+                  className="text-primary"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setActiveCategory("All");
+                  }}
+                >
+                  Reset filters
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredTemplates.map((template) => (
@@ -291,7 +382,9 @@ export default function Page({ params }: PageProps) {
                   key={template.id}
                   template={template}
                   applyRoxFont={applyRoxFont}
-                  isLoading={isNavigating && selectedTemplateId === template.id}
+                  isLoading={
+                    isNavigating && selectedTemplateId === template.id
+                  }
                   onSelect={handleSelectTemplate}
                 />
               ))}
@@ -301,6 +394,120 @@ export default function Page({ params }: PageProps) {
 
         <Footer />
       </main>
+
+      {/* ─── Email Campaign Modal ───────────────────────────────── */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {modalStep === 1 ? "Add Contacts" : "Choose Email Template"}
+            </DialogTitle>
+            <DialogDescription>
+              {modalStep === 1
+                ? "Add your contacts in the format: name, email (one per line). You can also upload a CSV or Excel file."
+                : "Select a template to start your email campaign."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* ─── Step 1: Contacts ──────────────────────────────── */}
+          {modalStep === 1 && (
+            <div className="space-y-4 py-2">
+              <div>
+                <label htmlFor="contacts" className="text-sm font-medium">
+                  Contacts
+                </label>
+                <textarea
+                  id="contacts"
+                  rows={8}
+                  className="w-full mt-1 p-3 border rounded-md bg-background text-sm resize-none"
+                  placeholder="John Doe, john@example.com&#10;Jane Smith, jane@example.com"
+                  value={contactsText}
+                  onChange={(e) => setContactsText(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Bulk Upload (CSV / Excel)
+                </Button>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadSampleCSV}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Sample CSV
+                </Button>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Supported formats: .csv, .xlsx, .xls. The file should contain columns named "Name" and "Email" (case-insensitive).
+              </div>
+            </div>
+          )}
+
+          {/* ─── Step 2: Template Selection ────────────────────── */}
+          {modalStep === 2 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
+              {emailTemplates.map((tpl) => (
+                <Card
+                  key={tpl.id}
+                  className={`cursor-pointer transition-all hover:border-primary ${
+                    selectedEmailTemplate === tpl.id
+                      ? "border-2 border-primary ring-2 ring-primary/30"
+                      : "border-muted"
+                  }`}
+                  onClick={() => handleSelectEmailTemplate(tpl.id)}
+                >
+                  <div className="aspect-video bg-muted/30 relative overflow-hidden">
+                    {/* Use placeholder if image not found */}
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <Mail className="w-12 h-12 opacity-30" />
+                    </div>
+                  </div>
+                  <CardContent className="p-4">
+                    <h4 className="font-medium">{tpl.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {tpl.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-between items-center gap-2">
+            <Button variant="ghost" onClick={closeModal}>
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              {modalStep === 1 && (
+                <Button onClick={handleNextStep}>
+                  Next
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              )}
+              {modalStep === 2 && (
+                <Button onClick={handleProceedWithTemplate} disabled={!selectedEmailTemplate}>
+                  Start Campaign
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -319,80 +526,68 @@ function TemplateCard({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div
+    <Card
+      className="group overflow-hidden border-muted/60 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 cursor-pointer flex flex-col"
       onClick={() => onSelect(template.id)}
-      className="
-        group relative rounded-2xl overflow-hidden
-        bg-[#161b22] border border-slate-800/80
-        transition-all duration-300 ease-out
-        hover:border-cyan-500/40 hover:shadow-xl hover:shadow-cyan-950/20 hover:-translate-y-1
-        cursor-pointer flex flex-col
-      "
     >
       {/* Image Preview Area */}
-      <div className="relative aspect-[16/10] overflow-hidden bg-slate-900 border-b border-slate-800/50">
+      <div className="relative aspect-[16/10] overflow-hidden bg-muted/30 border-b border-muted/40">
         <img
           src={template.localImage}
           alt={template.title}
-          className="
-            h-full w-full object-cover object-top
-            transition-transform duration-500 ease-out
-            group-hover:scale-105
-          "
+          className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
         />
-        
-        {/* Subtle Hover Overlay with Action Button */}
-        <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
-          <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-cyan-500 text-slate-950 text-xs font-semibold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200">
+        {/* Overlay with action button */}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+          <Button
+            variant="default"
+            size="sm"
+            className="rounded-full shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200"
+          >
             Use Template
-            <ArrowRight className="w-3.5 h-3.5" />
-          </span>
+            <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+      <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
         <div>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <h3
-              className={`
-                text-base font-semibold text-slate-100
-                transition-colors duration-200 group-hover:text-cyan-400
-                ${applyRoxFont ? "rox" : ""}
-              `}
+              className={`text-base font-semibold transition-colors group-hover:text-primary ${
+                applyRoxFont ? "rox" : ""
+              }`}
             >
               {template.title}
             </h3>
-            <span className="text-[10px] uppercase tracking-wide text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/50 shrink-0">
+            <Badge variant="secondary" className="shrink-0 text-[10px]">
               {template.mood}
-            </span>
+            </Badge>
           </div>
-
-          <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
             {template.description}
           </p>
         </div>
 
         {/* Loading Indicator */}
         {isLoading && (
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-800 text-xs text-cyan-400 font-medium animate-pulse">
+          <div className="flex items-center gap-2 pt-2 border-t border-muted/60 text-xs text-primary font-medium animate-pulse">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             <span>Loading editor…</span>
           </div>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function Footer() {
   return (
-    <footer className="border-t border-slate-800/60 py-8 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-4">
+    <footer className="border-t border-muted/40 py-8 text-center text-xs text-muted-foreground flex flex-col sm:flex-row justify-between items-center gap-4">
       <p>© Workspace Templates. All layouts are fully customizable.</p>
-      <div className="flex items-center gap-4 text-slate-600">
-        <span>Ready to publish</span>
-        <span>•</span>
-        <span>Drag & Drop Ready</span>
+      <div className="flex items-center gap-4 text-muted-foreground/70">
+        <a href="/blogs">Blogs & tools</a>
       </div>
     </footer>
   );

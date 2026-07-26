@@ -15,7 +15,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center">
             <div className="mr-3 h-6 w-[2px] bg-red-600"></div>
-            <span className="text-xs font-extrabold tracking-[0.2em] uppercase">7WINKS</span>
+            <span className="text-xs font-extrabold tracking-[0.2em] uppercase">7Wingz</span>
           </div>
 
           <div className="hidden items-center space-x-12 text-[11px] uppercase tracking-widest font-medium md:flex">
@@ -43,7 +43,7 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-16 px-6 py-24 lg:grid-cols-2 lg:px-16">
           <div className="max-w-2xl">
-            <p className="mb-5 text-[11px] uppercase tracking-[0.3em] text-white/40">01 / 7WINKS</p>
+            <p className="mb-5 text-[11px] uppercase tracking-[0.3em] text-white/40">01 / 7Wingz</p>
             <h1 className="rox text-5xl leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
               The future of <br />
               AI powered solutions
@@ -71,13 +71,13 @@ export default function LandingPage() {
 
       {/* Second Hero */}
       <section className="max-w-5xl mx-auto px-6 pt-28 pb-20">
-        <p className="text-[11px] tracking-[0.2em] text-white/40 mb-4">01 / 7WINKS</p>
+        <p className="text-[11px] tracking-[0.2em] text-white/40 mb-4">01 / 7Wingz</p>
         <h1 className="rox text-4xl md:text-8xl leading-tight mb-6">
-          Not a website builder.<br />
-          A starting point.
+          Marketing tool.<br />
+          & website builder.
         </h1>
         <p className="text-white/50 max-w-xl mb-10">
-          7Winks gives you structured templates designed to convert — so you spend less time arranging pixels,
+          7Wingz gives you structured templates designed to convert — so you spend less time arranging pixels,
           and more time building something that matters.
         </p>
         <div className="flex gap-4">
@@ -120,9 +120,9 @@ export default function LandingPage() {
       {/* About */}
       <section className="py-32 px-6 bg-black border-t border-white/5">
         <div className="max-w-5xl mx-auto text-center">
-          <h2 className="rox text-[30px] md:text-[40px] text-white mb-12 tracking-tight">About 7Winks</h2>
+          <h2 className="rox text-[30px] md:text-[40px] text-white mb-12 tracking-tight">About 7Wingz</h2>
           <p className="text-[16px] md:text-[19px] text-white/50 leading-[1.8] font-light tracking-wide">
-            As a specialized creative ecosystem, 7WINKS empowers creators to build with precision. By merging
+            As a specialized creative ecosystem, 7Wingz empowers creators to build with precision. By merging
             high-end design aesthetics with your voice. We don’t just offer tools, we provide the architecture
             for digital visionaries. Headquartered in Berlin and serving a global network of visionaries, our
             mission is to ensure that every pixel tells a story of quality and intent.
@@ -228,7 +228,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-6 border-t border-white/5 text-center">
         <div className="text-white/20 text-[10px] tracking-[0.5em] uppercase">
-          7WINKS // Built for clarity. // 2026
+          7Wingz // Built for clarity. // 2026
         </div>
       </footer>
     </div>

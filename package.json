@@ -67,7 +67,8 @@
     "splitpanes": "^4.0.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "vaul": "latest"
+    "vaul": "latest",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/estree": "^1.0.8",

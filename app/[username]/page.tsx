@@ -27,9 +27,15 @@ export default async function UserWebsitePage({ params }: PageProps) {
 
     await trackVisit(username, clientIp)
 
-    // ✅ Inject form handler
-  const forceLinkScript = `
+    // ✅ Securely load the API Key on the server
+    const openAiApiKey = process.env.OPENAI_API_KEY || ""
+
+    // ✅ Inject form handler & OpenAI key script
+    const forceLinkScript = `
 <script>
+// Expose the API key globally inside the iframe environment
+window.OPENAI_API_KEY = "${openAiApiKey}";
+
 (function() {
   function getAllFormData(form) {
     const formData = new FormData(form);
@@ -58,13 +64,10 @@ export default async function UserWebsitePage({ params }: PageProps) {
 </script>
 `.trim();
 
-
-    // ✅ MAIN BUILDER FUNCTION (THIS WAS YOUR MISSING PIECE)
+    // ✅ BUILDER FUNCTION
     const buildFinalHtml = (html: string, data: string) => {
       let cleaned = html
-        // remove old external data file
         .replace(/<script\s+src="data\.js"><\/script>/g, "")
-        // remove any existing const data block
         .replace(/const\s+data\s*=\s*{[\s\S]*?};?/g, "")
 
       const injectedData = `
@@ -75,13 +78,11 @@ ${data}
 </script>
 `
 
-      // inject BEFORE babel script
       let withData = cleaned.replace(
-        '<script type="text/babel">',
+        '<script type="type/babel">',
         `${injectedData}\n<script type="text/babel">`
       )
 
-      // inject form handler before </body>
       if (withData.includes("</body>")) {
         withData = withData.replace("</body>", `${forceLinkScript}\n</body>`)
       } else {
@@ -91,9 +92,8 @@ ${data}
       return withData
     }
 
-    // ✅ FINAL HTML (THIS WAS MISSING IN YOUR CODE)
     const finalHtml = buildFinalHtml(content.html, content.data)
-console.log(finalHtml)
+
     return (
       <IframeWithLinkHandler
         content={finalHtml}

@@ -57,7 +57,6 @@ export default function Page({ params }: { params: { username: string } }) {
       <p class="max-w-xl text-white/40 text-[15px] leading-[1.9] font-light">
         Some people want attention.
         Some people just want their work to look right.
-        7Wings is built for the second kind.
       </p>
 
     </div>

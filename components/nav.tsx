@@ -25,31 +25,41 @@ export default function Nav({ username }: NavProps) {
   };
 
   return (
-    <nav className="fixed right-0 left-0 z-50 top-0 bg-black/70 backdrop-blur-lg shadow-lg tracking-[0.1em] py-2 px-4" style={{ zoom: '0.55' }}>
+    <nav className="fixed right-0 left-0 z-50 top-0 bg-black/75 backdrop-blur-lg shadow-lg tracking-[0.1em] py-2 px-4" style={{ zoom: '0.56' }}>
       <div className="mx-auto flex max-w-9xl flex-col items-center justify-between px-6 md:flex-row">
         
-        <div className="hidden items-center space-x-[6rem] text-lg text-white md:flex tracking-[0.1rem]">
-          <div className="px-2"></div>
- <Link href="/lander" className="transition hover:opacity-70">
-            Home
-          </Link>
+       <div className="hidden px-[5rem] md:flex items-center space-x-9 text-lg tracking-[0.1rem] text-white">
 
-          <a href={`/dashboard/${username}`} className="transition hover:opacity-70">
-            Dashboard
-          </a>
+  <Link href="/lander" className="transition hover:opacity-70">
+    Home
+  </Link>
+
+  <span className="text-white/30">|</span>
+
+  <a href={`/dashboard/${username}`} className="transition hover:opacity-70">
+    Dashboard
+  </a>
+
+  <span className="text-white/30">|</span>
+
+  <Link href={`/templates/${username}`} className="transition hover:opacity-70">
+    Templates
+  </Link>
+
+  <span className="text-white/30">|</span>
+
+  <Link href={`/pricing/${username}`} className="transition hover:opacity-70">
+    Premium
+  </Link>
+  
+  <span className="text-white/30">|</span>
 
 
-          <Link href={`/templates/${username}`} className="transition hover:opacity-70">
-            Templates
-          </Link>
+  <Link href={`/pricing/${username}`} className="transition hover:opacity-70">
+    Marketing
+  </Link>
 
-         
-
-          <Link href={`/pricing/${username}`} className="transition hover:opacity-70">
-            Premium
-          </Link>
-        
-        </div>
+</div>
 
         <div className="space-x-[4rem] flex items-center">
           {/* Live Site – external link */}
@@ -57,7 +67,7 @@ export default function Nav({ username }: NavProps) {
             href={`/${username}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition text-lg hover:opacity-70"
+            className="transition text-white text-lg hover:opacity-70"
           >
             Live Site
           </a>
