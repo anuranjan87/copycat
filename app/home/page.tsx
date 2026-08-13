@@ -108,7 +108,7 @@ return (
               <ImageIcon className="h-12 w-12 mb-4 text-primary" />
               <h3 className="text-xl font-bold">Comprehensive Design Tools</h3>
               <p className="text-muted-foreground mt-2">
-                Access a suite of design tools including advanced photo editors, image hosting, and AI-assisted design inspiration generators.
+                Access suite of design tools including advanced photo editors, image hosting, and AI-assisted design inspiration generators.
               </p>
             </div>
           </div>
