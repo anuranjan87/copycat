@@ -224,6 +224,23 @@ const templatesMeta: TemplateMeta[] = [
     mood: "Landing page",
     category: "AI Agent",
   },
+  {
+    id: "28",
+    localImage: "/28.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Blog & Content",
+  },{
+    id: "29",
+    localImage: "/29.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Blog & Content",
+  },
 ];
 
 const CATEGORIES = [
