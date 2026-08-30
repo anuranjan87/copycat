@@ -29,5 +29,5 @@ export default async function AfterSignInPage() {
   const username = result[0].name;
 
   // Redirect to /username
-  redirect(`/${encodeURIComponent(username)}`);
+  redirect(`/templates/${encodeURIComponent(username)}`);
 }

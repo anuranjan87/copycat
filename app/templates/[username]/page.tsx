@@ -60,25 +60,179 @@ interface PageProps {
 
 // ─── Template Data ──────────────────────────────────────────────────
 const templatesMeta: TemplateMeta[] = [
-  // ... (same as before, omitted for brevity)
   {
     id: "1",
     localImage: "/1.png",
     title: "Light House",
-    description: "Warm, inviting landing page with a bold hero section.",
+    description:
+      "Warm, inviting landing page with a bold hero section.",
     mood: "Landing page",
     category: "Landing Page",
   },
-  // ... include all other templates
+
+  {
+    id: "2",
+    localImage: "/2.png",
+    title: "Modern SaaS",
+    description:
+      "Clean SaaS landing page designed for modern digital products.",
+    mood: "SaaS",
+    category: "SaaS",
+  },
+
+  {
+    id: "3",
+    localImage: "/3.png",
+    title: "Creative Studio",
+    description:
+      "Bold creative layout for agencies, studios and digital teams.",
+    mood: "Creative",
+    category: "Portfolio",
+  },
+
+  {
+    id: "4",
+    localImage: "/4.png",
+    title: "Personal Portfolio",
+    description:
+      "Minimal portfolio experience for showcasing your work and skills.",
+    mood: "Portfolio",
+    category: "Portfolio",
+  },
+
+  {
+    id: "5",
+    localImage: "/5.png",
+    title: "Digital Journal",
+    description:
+      "Elegant editorial layout for articles, stories and personal writing.",
+    mood: "Editorial",
+    category: "Blog & Content",
+  },
+
+  {
+    id: "6",
+    localImage: "/6.png",
+    title: "Business Pro",
+    description:
+      "Professional business website with a clear and trustworthy layout.",
+    mood: "Corporate",
+    category: "SaaS",
+  },
+
+  {
+    id: "7",
+    localImage: "/7.png",
+    title: "Product Launch",
+    description:
+      "High-impact product landing page built for launches and campaigns.",
+    mood: "Landing page",
+    category: "SaaS",
+  },
+
+  {
+    id: "8",
+    localImage: "/8.png",
+    title: "Startup Flow",
+    description:
+      "Modern startup website focused on clarity, conversion and growth.",
+    mood: "SaaS",
+    category: "SaaS",
+  },
+
+  {
+    id: "9",
+    localImage: "/9.png",
+    title: "Designer Portfolio",
+    description:
+      "Visual-first portfolio for designers, creators and freelancers.",
+    mood: "Portfolio",
+    category: "Portfolio",
+  },
+
+  {
+    id: "10",
+    localImage: "/10.png",
+    title: "Insight",
+    description:
+      "Content-focused website for publishing ideas, insights and stories.",
+    mood: "Editorial",
+    category: "Blog & Content",
+  },
+
+  {
+    id: "11",
+    localImage: "/11.png",
+    title: "Enterprise",
+    description:
+      "Structured corporate layout for established companies and teams.",
+    mood: "Corporate",
+    category: "SaaS",
+  },
+
+  {
+    id: "12",
+    localImage: "/12.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "SaaS",
+  },
+  {
+    id: "15",
+    localImage: "/15.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "SaaS",
+  },
+   {
+    id: "16",
+    localImage: "/16.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "SaaS",
+  },
+   {
+    id: "18",
+    localImage: "/18.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "SaaS",
+  },
+   {
+    id: "19",
+    localImage: "/19.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Portfolio",
+  },
+   {
+    id: "27",
+    localImage: "/27.png",
+    title: "Simple Launch",
+    description:
+      "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "AI Agent",
+  },
 ];
 
 const CATEGORIES = [
-  "All",
+  
   "Landing Page",
   "SaaS",
   "Portfolio",
   "Blog & Content",
-  "Corporate",
+  "AI Agent"
 ];
 
 // ─── Email templates for campaign ──────────────────────────────────
@@ -114,7 +268,7 @@ export default function Page({ params }: PageProps) {
   );
   const [applyRoxFont, setApplyRoxFont] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState("Landing Page");
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
