@@ -730,3 +730,27 @@ export async function getLatestPublishedSiteWithNullData(
     return null;
   }
 }
+
+export async function getUsernames(userId: string) {
+  try {
+    const rows = await sql`
+      SELECT id, name
+      FROM alias
+      WHERE user_id = ${userId}
+      ORDER BY created_at ASC
+    `;
+
+    return {
+      success: true,
+      usernames: rows,
+    };
+  } catch (error) {
+    console.error("Failed to fetch usernames:", error);
+
+    return {
+      success: false,
+      usernames: [],
+      error: "Failed to load usernames",
+    };
+  }
+}
