@@ -609,7 +609,7 @@ ${prompt}
 
     const finalResponse =
       await openai.responses.create({
-        model: "gpt-5.5",
+        model: "gpt-5.6-luna",
 
         stream: false,
 
