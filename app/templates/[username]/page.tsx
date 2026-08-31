@@ -591,7 +591,7 @@ const handleProceedWithTemplate = () => {
                   id="contacts"
                   rows={8}
                   className="w-full mt-1 p-3 border rounded-md bg-background text-sm resize-none"
-                  placeholder="John Doe, john@example.com&#10;Jane Smith, jane@example.com"
+placeholder={"John Doe, john@example.com"}
                   value={contactsText}
                   onChange={(e) => setContactsText(e.target.value)}
                 />

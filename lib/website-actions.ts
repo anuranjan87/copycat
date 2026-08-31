@@ -27,7 +27,7 @@ export async function generateCodeWithAI(
   try {
     console.log("im working")
     const response = await client.responses.create({
-      model: "gpt-5-nano",
+      model: "gpt-5.4-nano",
       input: `
 You are a JavaScript content editing assistant.
 
@@ -40,12 +40,13 @@ Rules:
 - Keep all image URLs unchanged.
 - Return ONLY JavaScript code.
 - Do not wrap the response in markdown.
+- Return only the updated content object, with no variable declaration whatsoever (const data =, const updatedContent =, let, var, or any other wrapper), no code fences, and no explanations.
 
 Current code:
 ${currentCode}
 
 User request:
-${prompt}
+replace whole site text for ${prompt}
       `,
     });
 

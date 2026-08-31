@@ -736,11 +736,14 @@ export default function AIPage({ params }: { params: { username: string } }) {
                 <label htmlFor="contacts" className="text-sm font-medium">
                   Contacts
                 </label>
-              <textarea
-  placeholder={"John Doe, john@example.com"}
-  value={contactsText}
-  onChange={(e) => setContactsText(e.target.value)}
-/>
+                <textarea
+                  id="contacts"
+                  rows={8}
+                  className="w-full mt-1 p-3 border rounded-md bg-slate-800 border-slate-700 text-white text-sm resize-none"
+                  placeholder="John Doe, john@example.com&#10;Jane Smith, jane@example.com"
+                  value={contactsText}
+                  onChange={(e) => setContactsText(e.target.value)}
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
