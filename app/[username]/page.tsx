@@ -19,80 +19,189 @@ export default async function UserWebsitePage({ params }: PageProps) {
       return notFound()
     }
 
-    // ✅ Get client IP
+    // Get client IP
     const headersList = await headers()
+
     const forwardedFor = headersList.get("x-forwarded-for")
     const realIp = headersList.get("x-real-ip")
-    const clientIp = forwardedFor?.split(",")[0] || realIp || "unknown"
 
+    const clientIp =
+      forwardedFor?.split(",")[0]?.trim() ||
+      realIp ||
+      "unknown"
+
+    // Track visitor
     await trackVisit(username, clientIp)
 
-    // ✅ Securely load the API Key on the server
-    const openAiApiKey = process.env.OPENAI_API_KEY || ""
+    /*
+     * IMPORTANT:
+     * The OpenAI API key is NOT safe to expose to the browser.
+     *
+     * If your generated website needs AI functionality,
+     * call your own server API instead of exposing OPENAI_API_KEY.
+     */
 
-    // ✅ Inject form handler & OpenAI key script
     const forceLinkScript = `
 <script>
-// Expose the API key globally inside the iframe environment
-window.OPENAI_API_KEY = "${openAiApiKey}";
+(function () {
 
-(function() {
   function getAllFormData(form) {
-    const formData = new FormData(form);
-    const values = {};
-    for (let [key, value] of formData.entries()) {
-      values[key] = value;
+    const formData = new FormData(form)
+    const values = {}
+
+    for (const [key, value] of formData.entries()) {
+      values[key] = value
     }
-    return values;
+
+    return values
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    const form = document.querySelector("form");
-    if (!form) return;
+  document.addEventListener("DOMContentLoaded", function () {
 
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const formData = getAllFormData(form);
-      window.parent.postMessage({
-        formData: formData,
-        username: "${username}"
-      }, "*");
-      console.log("SENDING DATA:", formData);
-    });
-  });
-})();
+    const form = document.querySelector("form")
+
+    if (!form) return
+
+    form.addEventListener("submit", function (e) {
+
+      e.preventDefault()
+
+      const formData = getAllFormData(form)
+
+      window.parent.postMessage(
+        {
+          type: "formSubmit",
+          formData: formData,
+          username: "${username}"
+        },
+        "*"
+      )
+
+      console.log("SENDING DATA:", formData)
+
+    })
+
+  })
+
+})()
 </script>
-`.trim();
+`.trim()
 
-    // ✅ BUILDER FUNCTION
-    const buildFinalHtml = (html: string, data: string) => {
+    /*
+     * Builds the final HTML that will be placed
+     * inside the iframe.
+     */
+    const buildFinalHtml = (
+      html: string,
+      data: string
+    ) => {
+
       let cleaned = html
-        .replace(/<script\s+src="data\.js"><\/script>/g, "")
-        .replace(/const\s+data\s*=\s*{[\s\S]*?};?/g, "")
 
+      /*
+       * Remove external data.js reference if present.
+       */
+      cleaned = cleaned.replace(
+        /<script\s+src=["']data\.js["']\s*><\/script>/gi,
+        ""
+      )
+
+      /*
+       * Remove an existing const data = {...}
+       * so we don't create duplicate declarations.
+       */
+      cleaned = cleaned.replace(
+        /const\s+data\s*=\s*{[\s\S]*?};?\s*/g,
+        ""
+      )
+
+      /*
+       * Inject the database data.
+       *
+       * content.data should contain:
+       *
+       * nav: {...},
+       * hero: {...},
+       * slider: {...}
+       *
+       * NOT:
+       *
+       * const data = {...}
+       */
       const injectedData = `
 <script>
 const data = {
 ${data}
 };
 </script>
-`
+`.trim()
 
-      let withData = cleaned.replace(
-        '<script type="type/babel">',
-        `${injectedData}\n<script type="text/babel">`
-      )
+      /*
+       * IMPORTANT:
+       *
+       * Your HTML contains:
+       *
+       * <script type="text/babel">
+       *
+       * So we must replace THAT exact tag.
+       */
+      const babelTagRegex =
+        /<script\s+type=["']text\/babel["']\s*>/i
 
-      if (withData.includes("</body>")) {
-        withData = withData.replace("</body>", `${forceLinkScript}\n</body>`)
+      if (babelTagRegex.test(cleaned)) {
+
+        cleaned = cleaned.replace(
+          babelTagRegex,
+          `${injectedData}\n<script type="text/babel">`
+        )
+
       } else {
-        withData += forceLinkScript
+
+        /*
+         * If there is no Babel script,
+         * add the data before </body>.
+         */
+        if (cleaned.includes("</body>")) {
+
+          cleaned = cleaned.replace(
+            "</body>",
+            `${injectedData}\n</body>`
+          )
+
+        } else {
+
+          cleaned += injectedData
+
+        }
+
       }
 
-      return withData
+      /*
+       * Inject form handling script.
+       */
+      if (cleaned.includes("</body>")) {
+
+        cleaned = cleaned.replace(
+          "</body>",
+          `${forceLinkScript}\n</body>`
+        )
+
+      } else {
+
+        cleaned += forceLinkScript
+
+      }
+
+      return cleaned
     }
 
-    const finalHtml = buildFinalHtml(content.html, content.data)
+    /*
+     * Build final website HTML.
+     */
+    const finalHtml = buildFinalHtml(
+      content.html,
+      content.data || ""
+    )
 
     return (
       <IframeWithLinkHandler
@@ -102,12 +211,20 @@ ${data}
     )
 
   } catch (error) {
-    console.error("Error loading user website:", error)
+
+    console.error(
+      "Error loading user website:",
+      error
+    )
+
     return notFound()
   }
 }
 
-export async function generateMetadata({ params }: PageProps) {
+export async function generateMetadata({
+  params,
+}: PageProps) {
+
   const { username } = await params
 
   return {

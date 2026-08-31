@@ -3,82 +3,230 @@
 import { useEffect, useRef } from "react"
 import { sendEnquiry } from "@/lib/website-actions"
 
+interface IframeWithLinkHandlerProps {
+  content: string
+  username: string
+}
+
 export default function IframeWithLinkHandler({
   content,
   username,
-}: {
-  content: string
-  username: string
-}) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+}: IframeWithLinkHandlerProps) {
+
+  const iframeRef =
+    useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      // ✅ Only accept mesbsages from THIS iframe
-      if (event.source !== iframeRef.current?.contentWindow) return
 
-      const data = event.data
-      if (!data) return
+    const handleMessage = async (
+      event: MessageEvent
+    ) => {
 
-      // 🔗 Open links
-      if (data.openLink) {
-        window.open(data.openLink, "_blank", "noopener,noreferrer")
+      /*
+       * Only accept messages coming from
+       * our iframe.
+       */
+      if (
+        event.source !==
+        iframeRef.current?.contentWindow
+      ) {
         return
       }
 
-      // 📩 Handle form submission
-      if (data.formData) {
-        const formData = new FormData()
+      const message = event.data
 
-        // 🔥 Remove empty fields (FIXES your bug)
-      Object.entries(data.formData).forEach(([key, value]) => {
-  // skip null/undefined
-  if (value == null) return
-
-  // objects/arrays → JSON
-  if (typeof value === "object") {
-    formData.append(key, JSON.stringify(value))
-    return
-  }
-
-  // normal values
-  const v = String(value).trim()
-
-  if (v !== "") {
-    formData.append(key, v)
-  }
-})
-
-        // ❗ If nothing left, don't send
-        if ([...formData.keys()].length === 0) return
-
-        try {
-          await sendEnquiry(username, formData)
-console.log(Object.fromEntries(formData.entries()));
-
-iframeRef.current?.contentWindow?.postMessage(
-            { status: "success" },
-            "*"
-          )
-        } catch {
-          iframeRef.current?.contentWindow?.postMessage(
-            { status: "error" },
-            "*"
-          )
-        }
+      if (!message) {
+        return
       }
+
+      /*
+       * Handle links.
+       *
+       * Generated website can send:
+       *
+       * window.parent.postMessage({
+       *   openLink: "https://example.com"
+       * }, "*")
+       */
+      if (message.openLink) {
+
+        const url = String(message.openLink)
+
+        /*
+         * Basic URL validation.
+         */
+        try {
+
+          const parsedUrl = new URL(url)
+
+          if (
+            parsedUrl.protocol === "http:" ||
+            parsedUrl.protocol === "https:"
+          ) {
+
+            window.open(
+              parsedUrl.href,
+              "_blank",
+              "noopener,noreferrer"
+            )
+
+          }
+
+        } catch {
+
+          console.warn(
+            "Invalid URL:",
+            url
+          )
+
+        }
+
+        return
+      }
+
+      /*
+       * Handle form submission.
+       */
+      if (
+        message.type !== "formSubmit" ||
+        !message.formData
+      ) {
+        return
+      }
+
+      const formData = new FormData()
+
+      /*
+       * Convert iframe form data
+       * into a real FormData object.
+       */
+      Object.entries(
+        message.formData as Record<string, unknown>
+      ).forEach(([key, value]) => {
+
+        /*
+         * Ignore null/undefined.
+         */
+        if (value == null) {
+          return
+        }
+
+        /*
+         * Objects/arrays → JSON.
+         */
+        if (typeof value === "object") {
+
+          formData.append(
+            key,
+            JSON.stringify(value)
+          )
+
+          return
+        }
+
+        /*
+         * Normal values.
+         */
+        const stringValue =
+          String(value).trim()
+
+        /*
+         * Ignore empty fields.
+         */
+        if (stringValue !== "") {
+
+          formData.append(
+            key,
+            stringValue
+          )
+
+        }
+
+      })
+
+      /*
+       * Don't send empty submissions.
+       */
+      if (
+        [...formData.keys()].length === 0
+      ) {
+        return
+      }
+
+      try {
+
+        /*
+         * Send enquiry to your backend.
+         */
+        await sendEnquiry(
+          username,
+          formData
+        )
+
+        console.log(
+          "ENQUIRY SENT:",
+          Object.fromEntries(
+            formData.entries()
+          )
+        )
+
+        /*
+         * Tell iframe that submission
+         * was successful.
+         */
+        iframeRef.current?.contentWindow?.postMessage(
+          {
+            type: "formResponse",
+            status: "success",
+          },
+          "*"
+        )
+
+      } catch (error) {
+
+        console.error(
+          "Error sending enquiry:",
+          error
+        )
+
+        /*
+         * Tell iframe that submission
+         * failed.
+         */
+        iframeRef.current?.contentWindow?.postMessage(
+          {
+            type: "formResponse",
+            status: "error",
+          },
+          "*"
+        )
+
+      }
+
     }
 
-    window.addEventListener("message", handleMessage)
-    return () => window.removeEventListener("message", handleMessage)
+    window.addEventListener(
+      "message",
+      handleMessage
+    )
+
+    return () => {
+
+      window.removeEventListener(
+        "message",
+        handleMessage
+      )
+
+    }
+
   }, [username])
 
   return (
     <iframe
       ref={iframeRef}
-      key={content}
       srcDoc={content}
       className="w-full h-screen border-0"
-   />
+      title={`${username}'s website`}
+    />
   )
 }
