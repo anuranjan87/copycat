@@ -132,7 +132,7 @@ const templatesMeta: TemplateMeta[] = [
 
   {
     id: "8",
-    localImage: "/8.png",
+    localImage: "/8.jpg",
     title: "Startup Flow",
     description:
       "Modern startup website focused on clarity, conversion and growth.",
