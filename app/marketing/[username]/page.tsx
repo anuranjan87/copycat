@@ -2,7 +2,46 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const API_BASE = "https://marketing.7wingz.com";
+const API_PROXY = "/api/marketing-proxy";
+
+async function apiRequest<T = any>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_PROXY}?path=${encodeURIComponent(path)}`;
+
+  const response = await fetch(url, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+
+  let data: any;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      `Marketing API returned invalid JSON (${response.status})`
+    );
+  }
+
+  if (!response.ok || data?.success === false) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `Marketing API request failed (${response.status})`
+    );
+  }
+
+  return data;
+}
 
 type Campaign = {
   id: string;
@@ -394,14 +433,9 @@ export default function GoogleAdsPage() {
     setCampaignsError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/google-ads/campaigns`, {
-        method: "GET",
-        cache: "no-store",
-      });
+      const data = await apiRequest("/api/google-ads/campaigns");
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to fetch campaigns");
       }
 
@@ -437,14 +471,11 @@ export default function GoogleAdsPage() {
     setLocationError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/google-ads/location?query=${encodeURIComponent(query)}`,
-        { method: "GET", cache: "no-store" }
+      const data = await apiRequest(
+        `/api/google-ads/location?query=${encodeURIComponent(query)}`
       );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to search locations");
       }
 
@@ -569,15 +600,15 @@ export default function GoogleAdsPage() {
         locations: form.locations,
       };
 
-      const response = await fetch(`${API_BASE}/api/google-ads/create-campaign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const data = await apiRequest(
+        "/api/google-ads/create-campaign",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }
+      );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         const step = data.step ? ` (${data.step})` : "";
         throw new Error(
           `${data.error || "Failed to create campaign"}${step}`
@@ -603,15 +634,15 @@ export default function GoogleAdsPage() {
     try {
       setCampaignsError("");
 
-      const response = await fetch(`${API_BASE}/api/google-ads/campaigns/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignResourceName, status }),
-      });
+      const data = await apiRequest(
+        "/api/google-ads/campaigns/status",
+        {
+          method: "POST",
+          body: JSON.stringify({ campaignResourceName, status }),
+        }
+      );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to update campaign");
       }
 
@@ -627,17 +658,17 @@ export default function GoogleAdsPage() {
     setDeleteError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/google-ads/campaigns/delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaignResourceName: campaign.resourceName,
-        }),
-      });
+      const data = await apiRequest(
+        "/api/google-ads/campaigns/delete",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            campaignResourceName: campaign.resourceName,
+          }),
+        }
+      );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to remove campaign");
       }
 
