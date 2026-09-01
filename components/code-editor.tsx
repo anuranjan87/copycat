@@ -506,56 +506,135 @@ ${draftData}
   // ============================================================
   const editorRef = useRef<any>(null);
 
-  const handleAIGenerate = async () => {
-    if (!aiPrompt.trim()) {
-      toast.error('Please enter a prompt for AI assistance', { position: 'top-center' });
-      return;
+const handleAIGenerate = async () => {
+  if (!aiPrompt.trim()) {
+    toast.error('Please enter a prompt for AI assistance', {
+      position: 'top-center',
+    });
+    return;
+  }
+
+  setIsGenerating(true);
+  setHasReceivedData(false);
+
+  // Generate the job ID BEFORE starting the background function
+  const jobId = crypto.randomUUID();
+
+  try {
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jobId,
+        currentCode: draftHtml,
+        prompt: aiPrompt,
+      }),
+    });
+
+    // Background Function should return 202
+    if (!response.ok && response.status !== 202) {
+      const errorText = await response.text();
+
+      throw new Error(
+        errorText || `Generation failed (${response.status})`
+      );
     }
 
-    setIsGenerating(true);
-    setHasReceivedData(false);
+    console.log('Generation started:', jobId);
 
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentCode: draftHtml, prompt: aiPrompt }),
-      });
+    // Now poll the status endpoint
+    const maxAttempts = 180;
 
-      if (!response.body) throw new Error('No response body');
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      );
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let fullCode = '';
+      const statusResponse = await fetch(
+        `/api/generate/status?jobId=${encodeURIComponent(jobId)}`,
+        {
+          method: 'GET',
+          cache: 'no-store',
+        }
+      );
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        fullCode += chunk;
-        setDraftHtml(fullCode);
-
-        if (!hasReceivedData) setHasReceivedData(true);
+      if (!statusResponse.ok) {
+        // Don't immediately kill the job for a temporary status error
+        console.warn(
+          `Status request returned ${statusResponse.status}`
+        );
+        continue;
       }
 
-      // AI generation finished – push snapshot for undo/redo
-      pushHistory(fullCode, draftData);
+      const result = await statusResponse.json();
 
-      setAiPrompt('');
-      toast.success('AI generated new code!', {
-        description: 'Review changes and save if you like.',
-        position: 'top-center',
-      });
-      aiInputRef.current?.focus();
-    } catch (error) {
-      console.error('AI generation error:', error);
-      toast.error('An unexpected error occurred', { position: 'top-center' });
-    } finally {
-      setIsGenerating(false);
-      setHasReceivedData(false);
+      console.log(
+        `Generation status: ${result.status}`
+      );
+
+      if (result.status === 'processing') {
+        continue;
+      }
+
+      if (result.status === 'completed') {
+        if (!result.html) {
+          throw new Error(
+            'Generation completed but no HTML was returned'
+          );
+        }
+
+        const fullCode = result.html;
+
+        setDraftHtml(fullCode);
+        setHasReceivedData(true);
+
+        pushHistory(fullCode, draftData);
+
+        setAiPrompt('');
+
+        toast.success('AI generated new code!', {
+          description:
+            'Review changes and save if you like.',
+          position: 'top-center',
+        });
+
+        aiInputRef.current?.focus();
+
+        return;
+      }
+
+      if (result.status === 'failed') {
+        throw new Error(
+          result.error || 'AI generation failed'
+        );
+      }
+
+      if (result.status === 'not_found') {
+        throw new Error(
+          'Generation job was not found'
+        );
+      }
     }
-  };
+
+    throw new Error(
+      'Generation is taking longer than expected.'
+    );
+  } catch (error: any) {
+    console.error('AI generation error:', error);
+
+    toast.error('AI generation failed', {
+      description:
+        error?.message ||
+        'An unexpected error occurred.',
+      position: 'top-center',
+    });
+  } finally {
+    setIsGenerating(false);
+    setHasReceivedData(false);
+  }
+};
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
