@@ -1,9 +1,6 @@
 import { getStore } from "@netlify/blobs";
-import type { Config } from "@netlify/functions";
 
 export const dynamic = "force-dynamic";
-
-const jobs = getStore("website-generation-jobs");
 
 type GenerationJob =
   | {
@@ -21,8 +18,12 @@ type GenerationJob =
       failedAt?: string;
     };
 
-export default async function handler(request: Request) {
+export async function GET(request: Request) {
   try {
+    // IMPORTANT:
+    // Initialize Netlify Blobs only when the request happens.
+    const jobs = getStore("website-generation-jobs");
+
     const url = new URL(request.url);
     const jobId = url.searchParams.get("jobId")?.trim() || "";
 
@@ -65,8 +66,3 @@ export default async function handler(request: Request) {
     );
   }
 }
-
-export const config: Config = {
-  path: "/api/generate/status",
-  method: "GET",
-};
