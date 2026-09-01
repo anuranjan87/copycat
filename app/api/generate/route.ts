@@ -1,15 +1,35 @@
-  
 import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const UNSPLASH_API = "https://api.unsplash.com";
+
+const UNSPLASH_SOURCE =
+  process.env.UNSPLASH_UTM_SOURCE ||
+  process.env.NEXT_PUBLIC_APP_NAME ||
+  "your_app_name";
+
+type UnsplashImage = {
+  id: number;
+  photoId: string;
+  url: string;
+  thumb: string;
+  alt: string;
+  photographer: string;
+  photographerUrl: string;
+  unsplashUrl: string;
+  downloadLocation: string;
+};
+
 // -----------------------------------------------------------------------------
 // Unsplash image search
 // -----------------------------------------------------------------------------
 
-async function searchUnsplash(query: string) {
+async function searchUnsplash(
+  query: string
+): Promise<UnsplashImage[]> {
   const accessKey = process.env.UNSPLASH_ACCESS_KEY;
 
   if (!accessKey) {
@@ -18,7 +38,7 @@ async function searchUnsplash(query: string) {
   }
 
   const url =
-    `https://api.unsplash.com/search/photos` +
+    `${UNSPLASH_API}/search/photos` +
     `?query=${encodeURIComponent(query)}` +
     `&per_page=20`;
 
@@ -36,6 +56,7 @@ async function searchUnsplash(query: string) {
       console.error(
         `Unsplash API error: ${res.status} ${res.statusText}`
       );
+
       return [];
     }
 
@@ -49,28 +70,134 @@ async function searchUnsplash(query: string) {
       )
       .map((photo: any, index: number) => ({
         id: index + 1,
+
+        photoId: photo.id || "",
+
+        // IMPORTANT:
+        // This is the exact URL returned by Unsplash.
         url: photo.urls.regular,
+
         thumb:
           photo.urls.small ||
           photo.urls.regular,
+
         alt:
           photo.alt_description ||
           photo.description ||
           query,
+
         photographer:
-          photo.user?.name || "",
+          photo.user?.name ||
+          "Unsplash photographer",
+
+        photographerUrl:
+          photo.user?.links?.html ||
+          "https://unsplash.com",
+
+        unsplashUrl:
+          photo.links?.html ||
+          "https://unsplash.com",
+
+        // IMPORTANT:
+        // Used only for download tracking.
+        downloadLocation:
+          photo.links?.download_location ||
+          "",
       }));
   } catch (error) {
-    console.error("Unsplash search failed:", error);
+    console.error(
+      "Unsplash search failed:",
+      error
+    );
+
     return [];
   }
 }
 
 // -----------------------------------------------------------------------------
-// Extract image URLs from HTML
+// Track Unsplash download / usage event
 // -----------------------------------------------------------------------------
 
-function extractImageUrls(html: string): string[] {
+async function trackUnsplashDownload(
+  downloadLocation: string
+) {
+  const accessKey =
+    process.env.UNSPLASH_ACCESS_KEY;
+
+  if (!accessKey || !downloadLocation) {
+    return;
+  }
+
+  try {
+    const parsed =
+      new URL(downloadLocation);
+
+    /*
+     * Security:
+     * Never allow an arbitrary URL to be fetched.
+     *
+     * We only allow the exact Unsplash API origin.
+     */
+    if (
+      parsed.origin !==
+      UNSPLASH_API
+    ) {
+      console.warn(
+        "Rejected non-Unsplash download location:",
+        downloadLocation
+      );
+
+      return;
+    }
+
+    /*
+     * Preserve all query parameters returned by Unsplash
+     * and add our access key.
+     */
+    parsed.searchParams.set(
+      "client_id",
+      accessKey
+    );
+
+    const response =
+      await fetch(
+        parsed.toString(),
+        {
+          method: "GET",
+
+          headers: {
+            Accept:
+              "application/json",
+          },
+
+          cache: "no-store",
+        }
+      );
+
+    if (!response.ok) {
+      console.warn(
+        `Unsplash download tracking failed: ${response.status} ${response.statusText}`
+      );
+    }
+  } catch (error) {
+    /*
+     * Tracking failure must NEVER
+     * break website generation.
+     */
+    console.warn(
+      "Unsplash download tracking error:",
+      error
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Extract image URLs from generated HTML
+// -----------------------------------------------------------------------------
+
+function extractImageUrls(
+  html: string
+): string[] {
   const urls: string[] = [];
 
   const regex =
@@ -78,7 +205,9 @@ function extractImageUrls(html: string): string[] {
 
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(html)) !== null) {
+  while (
+    (match = regex.exec(html)) !== null
+  ) {
     urls.push(match[1]);
   }
 
@@ -98,13 +227,16 @@ function removeInvalidImageUrls(
 
   return html.replace(
     /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+
     (
       fullMatch: string,
       prefix: string,
       url: string,
       suffix: string
     ) => {
-      if (allowedUrls.has(url)) {
+      if (
+        allowedUrls.has(url)
+      ) {
         return fullMatch;
       }
 
@@ -119,49 +251,257 @@ function removeInvalidImageUrls(
 }
 
 // -----------------------------------------------------------------------------
+// Add required Unsplash UTM parameters
+// -----------------------------------------------------------------------------
+
+function addUnsplashUtm(
+  url: string
+): string {
+  try {
+    const parsed =
+      new URL(url);
+
+    if (
+      parsed.hostname !==
+        "unsplash.com" &&
+      parsed.hostname !==
+        "www.unsplash.com"
+    ) {
+      return url;
+    }
+
+    parsed.searchParams.set(
+      "utm_source",
+      UNSPLASH_SOURCE
+    );
+
+    parsed.searchParams.set(
+      "utm_medium",
+      "referral"
+    );
+
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Escape attribution text
+// -----------------------------------------------------------------------------
+
+function escapeHtml(
+  value: string
+): string {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Automatically add Unsplash attribution
+// -----------------------------------------------------------------------------
+
+function addUnsplashAttribution(
+  html: string,
+  imageLibrary: UnsplashImage[]
+): string {
+  if (
+    !imageLibrary.length
+  ) {
+    return html;
+  }
+
+  const byUrl =
+    new Map(
+      imageLibrary.map(
+        (image) => [
+          image.url,
+          image,
+        ]
+      )
+    );
+
+  return html.replace(
+    /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+
+    (
+      fullMatch: string,
+      prefix: string,
+      url: string,
+      suffix: string
+    ) => {
+      const image =
+        byUrl.get(url);
+
+      if (!image) {
+        return fullMatch;
+      }
+
+      const photographerUrl =
+        addUnsplashUtm(
+          image.photographerUrl
+        );
+
+      const unsplashUrl =
+        addUnsplashUtm(
+          image.unsplashUrl ||
+            "https://unsplash.com"
+        );
+
+      const attribution = `
+<p class="mt-1 text-xs text-gray-500">
+  Photo by
+  <a
+    href="${photographerUrl}"
+    target="_blank"
+    rel="noopener noreferrer"
+  >${escapeHtml(
+    image.photographer
+  )}</a>
+  on
+  <a
+    href="${unsplashUrl}"
+    target="_blank"
+    rel="noopener noreferrer"
+  >Unsplash</a>
+</p>`;
+
+      return (
+        `${prefix}${url}${suffix}` +
+        attribution
+      );
+    }
+  );
+}
+
+// -----------------------------------------------------------------------------
 // POST
 // -----------------------------------------------------------------------------
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    // -------------------------------------------------------------------------
-    // Parse request
-    // -------------------------------------------------------------------------
+    const body =
+      await request.json();
 
-    const body = await request.json();
+    // =========================================================================
+    // OPTIONAL DOWNLOAD TRACKING ACTION
+    // =========================================================================
+    //
+    // Your frontend can explicitly call this when a user chooses an image:
+    //
+    // {
+    //   "action": "track-download",
+    //   "downloadLocation": "..."
+    // }
+    //
+    // =========================================================================
+
+    if (
+      body?.action ===
+      "track-download"
+    ) {
+      const downloadLocation =
+        typeof body.downloadLocation ===
+        "string"
+          ? body.downloadLocation
+          : "";
+
+      if (
+        !downloadLocation
+      ) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "downloadLocation is required",
+          }),
+          {
+            status: 400,
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+          }
+        );
+      }
+
+      await trackUnsplashDownload(
+        downloadLocation
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+        }),
+        {
+          status: 200,
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+        }
+      );
+    }
+
+    // =========================================================================
+    // PARSE NORMAL GENERATION REQUEST
+    // =========================================================================
 
     const currentCode =
-      typeof body.currentCode === "string"
+      typeof body.currentCode ===
+      "string"
         ? body.currentCode
         : "";
 
     const prompt =
-      typeof body.prompt === "string"
+      typeof body.prompt ===
+      "string"
         ? body.prompt.trim()
         : "";
 
     if (!prompt) {
       return new Response(
         JSON.stringify({
-          error: "Prompt is required",
+          error:
+            "Prompt is required",
         }),
         {
           status: 400,
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
         }
       );
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // STEP 1
-    // Automatically determine an image search query.
-    //
-    // IMPORTANT:
-    // The user does NOT need to ask for images.
-    // Images are automatically included for every website.
-    // -------------------------------------------------------------------------
+    // Automatically determine image search query.
+    // =========================================================================
 
     const imageQueryPrompt = `
 Create ONE concise Unsplash search query for the website below.
@@ -179,25 +519,25 @@ Examples:
 - restaurant food dining
 
 Return ONLY the search query.
+
 No explanation.
 
 Website request:
 ${prompt}
 `.trim();
 
-    // -------------------------------------------------------------------------
-    // STEP 2
-    // Get image search query.
-    //
-    // This is a small fast request.
-    // -------------------------------------------------------------------------
-
     const queryResponse =
-      await openai.responses.create({
-        model: "gpt-4.1-nano",
-        stream: false,
-        input: imageQueryPrompt,
-      });
+      await openai.responses.create(
+        {
+          model:
+            "gpt-4.1-nano",
+
+          stream: false,
+
+          input:
+            imageQueryPrompt,
+        }
+      );
 
     const imageQuery =
       (
@@ -205,26 +545,38 @@ ${prompt}
         prompt
       )
         .trim()
-        .replace(/^["']|["']$/g, "")
-        .slice(0, 150);
+        .replace(
+          /^["']|["']$/g,
+          ""
+        )
+        .slice(
+          0,
+          150
+        );
 
-    // -------------------------------------------------------------------------
-    // STEP 3
+    // =========================================================================
+    // STEP 2
     // Search Unsplash BEFORE generating the website.
-    //
-    // No image tool call is needed inside the main generation request.
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     const imageResults =
-      await searchUnsplash(imageQuery);
+      await searchUnsplash(
+        imageQuery
+      );
 
     const allowedImageUrls =
-      new Set<string>(
+      new Set(
         imageResults
-          .map((image: any) => image.url)
+          .map(
+            (image) =>
+              image.url
+          )
           .filter(
-            (url: any) =>
-              typeof url === "string" &&
+            (
+              url
+            ): url is string =>
+              typeof url ===
+                "string" &&
               url.length > 0
           )
       );
@@ -237,30 +589,40 @@ ${prompt}
       `Images found: ${imageResults.length}`
     );
 
-    // -------------------------------------------------------------------------
-    // STEP 4
-    // Build image library for the model.
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // STEP 3
+    // Build image library for OpenAI.
+    // =========================================================================
 
     const imageLibrary =
       imageResults.length > 0
         ? imageResults
             .map(
-              (image: any) =>
+              (image) =>
                 `
 IMAGE ${image.id}
+PHOTO ID: ${image.photoId}
 URL: ${image.url}
 ALT: ${image.alt}
 PHOTOGRAPHER: ${image.photographer}
+PHOTOGRAPHER URL: ${addUnsplashUtm(
+                  image.photographerUrl
+                )}
+UNSPLASH URL: ${addUnsplashUtm(
+                  image.unsplashUrl
+                )}
+DOWNLOAD LOCATION: ${image.downloadLocation}
 `.trim()
             )
-            .join("\n\n")
+            .join(
+              "\n\n"
+            )
         : "NO IMAGES WERE AVAILABLE.";
 
-    // -------------------------------------------------------------------------
-    // STEP 5
-    // ONE final HTML generation request.
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // STEP 4
+    // Generate website.
+    // =========================================================================
 
     const systemPrompt = `
 You are an expert HTML and Tailwind CSS developer.
@@ -307,8 +669,6 @@ Use:
 ===============================================================================
 AUTOMATIC IMAGE REQUIREMENT
 ===============================================================================
-
-IMPORTANT:
 
 Images are AUTOMATICALLY REQUIRED.
 
@@ -382,12 +742,12 @@ EMPTY
 PLAIN
 
 ===============================================================================
-IMAGE LIBRARY
+UNSPLASH IMAGE LIBRARY
 ===============================================================================
 
 The following images were retrieved specifically for this website.
 
-ONLY use URLs from this image library.
+ONLY use image URLs from this image library.
 
 ${imageLibrary}
 
@@ -414,6 +774,32 @@ NEVER:
 ONLY use image URLs supplied in the IMAGE LIBRARY.
 
 ===============================================================================
+ATTRIBUTION
+===============================================================================
+
+Every Unsplash image must be displayed with attribution.
+
+Use the supplied photographer information.
+
+The required attribution format is:
+
+Photo by PHOTOGRAPHER on Unsplash
+
+The attribution links must point to the supplied:
+
+PHOTOGRAPHER URL
+
+and
+
+UNSPLASH URL
+
+Do not invent attribution URLs.
+
+The server will also enforce attribution after generation.
+
+Do not remove or hide the attribution.
+
+===============================================================================
 IMAGE REUSE
 ===============================================================================
 
@@ -434,7 +820,10 @@ NEVER invent additional image URLs.
 CURRENT CODE
 ===============================================================================
 
-${currentCode || "(No existing code was provided. Create the page from scratch.)"}
+${
+  currentCode ||
+  "(No existing code was provided. Create the page from scratch.)"
+}
 
 ===============================================================================
 USER REQUEST
@@ -443,46 +832,60 @@ USER REQUEST
 ${prompt}
 `.trim();
 
-    // -------------------------------------------------------------------------
-    // STEP 6
-    // SINGLE final OpenAI request.
+    // =========================================================================
+    // STEP 5
+    // ONE FINAL OPENAI REQUEST
     //
     // stream:false is intentional for Netlify.
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     const finalResponse =
-      await openai.responses.create({
-        model: "gpt-5.6-luna",
-        stream: false,
-        input: systemPrompt,
-      });
+      await openai.responses.create(
+        {
+          model:
+            "gpt-5.6-luna",
 
-    // -------------------------------------------------------------------------
-    // STEP 7
-    // Get generated HTML.
-    // -------------------------------------------------------------------------
+          stream: false,
+
+          input:
+            systemPrompt,
+        }
+      );
 
     let htmlText =
-      finalResponse.output_text || "";
+      finalResponse.output_text ||
+      "";
 
-    // -------------------------------------------------------------------------
-    // STEP 8
+    // =========================================================================
+    // STEP 6
     // Remove accidental Markdown fences.
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
-    htmlText = htmlText
-      .replace(/^```html\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
+    htmlText =
+      htmlText
+        .replace(
+          /^```html\s*/i,
+          ""
+        )
+        .replace(
+          /^```\s*/i,
+          ""
+        )
+        .replace(
+          /\s*```$/i,
+          ""
+        )
+        .trim();
 
-    // -------------------------------------------------------------------------
-    // STEP 9
+    // =========================================================================
+    // STEP 7
     // Validate generated image URLs.
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     const generatedImageUrls =
-      extractImageUrls(htmlText);
+      extractImageUrls(
+        htmlText
+      );
 
     console.log(
       `Generated image count: ${generatedImageUrls.length}`
@@ -490,10 +893,16 @@ ${prompt}
 
     const invalidImageUrls =
       generatedImageUrls.filter(
-        (url) => !allowedImageUrls.has(url)
+        (url) =>
+          !allowedImageUrls.has(
+            url
+          )
       );
 
-    if (invalidImageUrls.length > 0) {
+    if (
+      invalidImageUrls.length >
+      0
+    ) {
       console.warn(
         "Invalid image URLs generated:",
         invalidImageUrls
@@ -506,25 +915,77 @@ ${prompt}
         );
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // STEP 8
+    // Enforce Unsplash attribution.
+    // =========================================================================
+
+    htmlText =
+      addUnsplashAttribution(
+        htmlText,
+        imageResults
+      );
+
+    // =========================================================================
+    // STEP 9
+    // Track images actually used.
+    // =========================================================================
+
+    const finalGeneratedImageUrls =
+      extractImageUrls(
+        htmlText
+      );
+
+    const usedImages =
+      imageResults.filter(
+        (image) =>
+          finalGeneratedImageUrls.includes(
+            image.url
+          ) &&
+          image.downloadLocation
+      );
+
+    console.log(
+      `Unsplash images used: ${usedImages.length}`
+    );
+
+    /*
+     * Track only images actually
+     * inserted into the generated website.
+     *
+     * All requests run in parallel.
+     *
+     * A tracking failure will NEVER
+     * break website generation.
+     */
+    await Promise.allSettled(
+      usedImages.map(
+        (image) =>
+          trackUnsplashDownload(
+            image.downloadLocation
+          )
+      )
+    );
+
+    // =========================================================================
     // STEP 10
-    // Final response.
-    //
-    // IMPORTANT:
-    // Do not stream this response.
-    // Netlify receives one complete response.
-    // -------------------------------------------------------------------------
+    // FINAL NON-STREAMED RESPONSE
+    // =========================================================================
 
-    return new Response(htmlText, {
-      status: 200,
-      headers: {
-        "Content-Type":
-          "text/plain; charset=utf-8",
+    return new Response(
+      htmlText,
+      {
+        status: 200,
 
-        "Cache-Control":
-          "no-cache, no-transform",
-      },
-    });
+        headers: {
+          "Content-Type":
+            "text/plain; charset=utf-8",
+
+          "Cache-Control":
+            "no-cache, no-transform",
+        },
+      }
+    );
   } catch (error: any) {
     console.error(
       "API Route Error:",
@@ -533,13 +994,16 @@ ${prompt}
 
     return new Response(
       JSON.stringify({
-        error: "Failed to generate page",
+        error:
+          "Failed to generate page",
+
         message:
           error?.message ||
           "Unknown error",
       }),
       {
         status: 500,
+
         headers: {
           "Content-Type":
             "application/json",
@@ -548,4 +1012,3 @@ ${prompt}
     );
   }
 }
-
