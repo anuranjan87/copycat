@@ -1,6 +1,8 @@
 import { getStore } from "@netlify/blobs";
 import type { Config } from "@netlify/functions";
 
+export const dynamic = "force-dynamic";
+
 const jobs = getStore("website-generation-jobs");
 
 type GenerationJob =

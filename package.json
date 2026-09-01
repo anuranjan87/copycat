@@ -55,7 +55,7 @@
     "next": "15.5.18",
     "next-themes": "latest",
     "ogl": "^0.0.104",
-    "openai": "^5.10.1",
+    "openai": "^7.8.0",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
