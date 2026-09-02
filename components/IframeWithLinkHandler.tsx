@@ -1,12 +1,23 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { sendEnquiry } from "@/lib/website-actions"
+import {
+  useEffect,
+  useRef,
+} from "react"
+
+import {
+  sendEnquiry,
+} from "@/lib/website-actions"
+
 
 interface IframeWithLinkHandlerProps {
+
   content: string
+
   username: string
+
 }
+
 
 export default function IframeWithLinkHandler({
   content,
@@ -16,200 +27,367 @@ export default function IframeWithLinkHandler({
   const iframeRef =
     useRef<HTMLIFrameElement>(null)
 
+
+  /*
+   * ============================================================
+   * MESSAGE HANDLER
+   * ============================================================
+   */
   useEffect(() => {
 
+    console.log("")
+    console.log("========================================")
+    console.log("[PARENT] IFRAME COMPONENT MOUNTED")
+    console.log("========================================")
+
+    console.log(
+      "[PARENT] Username:",
+      username
+    )
+
+    console.log(
+      "[PARENT] HTML length:",
+      content.length
+    )
+
+
+    /*
+     * Show the HTML being sent to iframe.
+     */
+    console.log(
+      "[PARENT] iframe HTML:",
+      content
+    )
+
+
+    /*
+     * ==========================================================
+     * HANDLE MESSAGES FROM IFRAME
+     * ==========================================================
+     */
     const handleMessage = async (
       event: MessageEvent
     ) => {
 
+      console.log(
+        "[PARENT] MESSAGE RECEIVED:",
+        event.data
+      )
+
+
       /*
-       * Only accept messages coming from
-       * our iframe.
+       * Only accept our iframe.
        */
       if (
         event.source !==
         iframeRef.current?.contentWindow
       ) {
+
+        console.log(
+          "[PARENT] Ignoring message from unknown source"
+        )
+
         return
       }
 
-      const message = event.data
+
+      const message =
+        event.data
+
 
       if (!message) {
+
         return
+
       }
 
+
       /*
-       * Handle links.
-       *
-       * Generated website can send:
-       *
-       * window.parent.postMessage({
-       *   openLink: "https://example.com"
-       * }, "*")
+       * ========================================================
+       * LINK HANDLING
+       * ========================================================
        */
-      if (message.openLink) {
+      if (
+        message.openLink
+      ) {
 
-        const url = String(message.openLink)
+        const url =
+          String(
+            message.openLink
+          )
 
-        /*
-         * Basic URL validation.
-         */
+
+        console.log(
+          "[PARENT] Open link:",
+          url
+        )
+
+
         try {
 
-          const parsedUrl = new URL(url)
+          const parsedUrl =
+            new URL(url)
 
+
+          /*
+           * Only allow http/https.
+           */
           if (
-            parsedUrl.protocol === "http:" ||
-            parsedUrl.protocol === "https:"
+            parsedUrl.protocol !== "http:" &&
+            parsedUrl.protocol !== "https:"
           ) {
 
-            window.open(
-              parsedUrl.href,
-              "_blank",
-              "noopener,noreferrer"
+            console.warn(
+              "[PARENT] Blocked invalid protocol:",
+              parsedUrl.protocol
             )
 
+            return
+
           }
+
+
+          window.open(
+            parsedUrl.href,
+            "_blank",
+            "noopener,noreferrer"
+          )
+
 
         } catch {
 
           console.warn(
-            "Invalid URL:",
+            "[PARENT] Invalid URL:",
             url
           )
 
         }
 
+
         return
+
       }
 
+
       /*
-       * Handle form submission.
+       * ========================================================
+       * FORM SUBMISSION
+       * ========================================================
        */
       if (
-        message.type !== "formSubmit" ||
-        !message.formData
+        message.type !==
+        "formSubmit"
       ) {
+
         return
+
       }
 
-      const formData = new FormData()
+
+      if (
+        !message.formData
+      ) {
+
+        console.warn(
+          "[PARENT] formSubmit received without formData"
+        )
+
+        return
+
+      }
+
+
+      console.log("")
+      console.log("========================================")
+      console.log("[PARENT] FORM DATA RECEIVED")
+      console.log("========================================")
+
+      console.log(
+        message.formData
+      )
+
 
       /*
-       * Convert iframe form data
-       * into a real FormData object.
+       * Create real FormData.
+       */
+      const formData =
+        new FormData()
+
+
+      /*
+       * Convert object → FormData.
        */
       Object.entries(
-        message.formData as Record<string, unknown>
-      ).forEach(([key, value]) => {
+        message.formData as Record<
+          string,
+          unknown
+        >
+      ).forEach(
+        ([key, value]) => {
 
-        /*
-         * Ignore null/undefined.
-         */
-        if (value == null) {
-          return
+          /*
+           * Ignore null.
+           */
+          if (
+            value == null
+          ) {
+
+            return
+
+          }
+
+
+          /*
+           * Objects / arrays.
+           */
+          if (
+            typeof value ===
+            "object"
+          ) {
+
+            formData.append(
+              key,
+              JSON.stringify(value)
+            )
+
+            return
+
+          }
+
+
+          /*
+           * Normal values.
+           */
+          const stringValue =
+            String(value).trim()
+
+
+          /*
+           * Don't add empty fields.
+           */
+          if (
+            stringValue !== ""
+          ) {
+
+            formData.append(
+              key,
+              stringValue
+            )
+
+          }
+
         }
+      )
 
-        /*
-         * Objects/arrays → JSON.
-         */
-        if (typeof value === "object") {
 
-          formData.append(
-            key,
-            JSON.stringify(value)
-          )
+      console.log(
+        "[PARENT] FormData:",
+        Object.fromEntries(
+          formData.entries()
+        )
+      )
 
-          return
-        }
-
-        /*
-         * Normal values.
-         */
-        const stringValue =
-          String(value).trim()
-
-        /*
-         * Ignore empty fields.
-         */
-        if (stringValue !== "") {
-
-          formData.append(
-            key,
-            stringValue
-          )
-
-        }
-
-      })
 
       /*
-       * Don't send empty submissions.
+       * Don't send empty form.
        */
       if (
         [...formData.keys()].length === 0
       ) {
+
+        console.warn(
+          "[PARENT] Empty form submission"
+        )
+
         return
+
       }
 
+
+      /*
+       * ========================================================
+       * SEND ENQUIRY
+       * ========================================================
+       */
       try {
 
-        /*
-         * Send enquiry to your backend.
-         */
+        console.log(
+          "[PARENT] Sending enquiry..."
+        )
+
+
         await sendEnquiry(
           username,
           formData
         )
 
+
         console.log(
-          "ENQUIRY SENT:",
-          Object.fromEntries(
-            formData.entries()
-          )
+          "[PARENT] ✅ ENQUIRY SENT"
         )
 
+
         /*
-         * Tell iframe that submission
-         * was successful.
+         * Tell iframe success.
          */
-        iframeRef.current?.contentWindow?.postMessage(
-          {
-            type: "formResponse",
-            status: "success",
-          },
-          "*"
-        )
+        iframeRef.current
+          ?.contentWindow
+          ?.postMessage(
+            {
+              type:
+                "formResponse",
+
+              status:
+                "success",
+            },
+            "*"
+          )
+
 
       } catch (error) {
 
         console.error(
-          "Error sending enquiry:",
+          "[PARENT] ❌ SEND ENQUIRY FAILED"
+        )
+
+        console.error(
           error
         )
 
+
         /*
-         * Tell iframe that submission
-         * failed.
+         * Tell iframe failure.
          */
-        iframeRef.current?.contentWindow?.postMessage(
-          {
-            type: "formResponse",
-            status: "error",
-          },
-          "*"
-        )
+        iframeRef.current
+          ?.contentWindow
+          ?.postMessage(
+            {
+              type:
+                "formResponse",
+
+              status:
+                "error",
+            },
+            "*"
+          )
 
       }
 
     }
 
+
+    /*
+     * Register listener.
+     */
     window.addEventListener(
       "message",
       handleMessage
     )
 
+
+    /*
+     * Cleanup.
+     */
     return () => {
 
       window.removeEventListener(
@@ -219,14 +397,45 @@ export default function IframeWithLinkHandler({
 
     }
 
-  }, [username])
 
+  }, [
+    username,
+    content
+  ])
+
+
+  /*
+   * ============================================================
+   * IFRAME
+   * ============================================================
+   */
   return (
     <iframe
       ref={iframeRef}
+
       srcDoc={content}
-      className="w-full h-screen border-0"
+
       title={`${username}'s website`}
+
+      className="w-full h-screen border-0"
+
+      onLoad={() => {
+
+        console.log("")
+        console.log("========================================")
+        console.log("[PARENT] ✅ IFRAME LOADED")
+        console.log("========================================")
+
+      }}
+
+      onError={(error) => {
+
+        console.error(
+          "[PARENT] ❌ IFRAME ERROR:",
+          error
+        )
+
+      }}
     />
   )
 }

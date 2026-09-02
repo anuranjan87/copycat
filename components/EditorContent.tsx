@@ -174,11 +174,68 @@ export default function New({ username, initialContent }: NewMobileProps) {
     localStorage.setItem('inputBarVisible', JSON.stringify(inputBarVisible))
   }, [inputBarVisible])
 
+  // Normalize the data editor content. The editor may contain either a
+  // complete declaration (`const data = {...};`) or only the object body.
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
-    const match = dataString.match(/const\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i)
+
+    const trimmed = dataString.trim()
+
+    const match = trimmed.match(
+      /^\s*(?:const|let|var)\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i
+    )
+
     if (match) return match[1].trim()
-    return dataString
+
+    return trimmed
+  }
+
+  // Always produce exactly one valid `const data = {...};` declaration.
+  const buildDataScript = (dataString: string) => {
+    const trimmed = dataString.trim()
+
+    if (!trimmed) return 'const data = {};'
+
+    // If someone pasted a complete declaration into the editor, use it as-is.
+    if (/^(?:const|let|var)\s+data\s*=/.test(trimmed)) {
+      return trimmed
+    }
+
+    // Otherwise the editor contains the object body.
+    return `const data = {\n${trimmed}\n};`
+  }
+
+  // Inject data consistently for iframe preview, full preview and download.
+  const injectDataIntoHtml = (html: string, dataString: string) => {
+    const dataScript = buildDataScript(dataString)
+
+    const injection = `<!-- WEBSITE_DATA_INJECTION_START -->
+<script>
+${dataScript}
+</script>
+<!-- WEBSITE_DATA_INJECTION_END -->
+`
+
+    // Remove an injection previously created by this component.
+    const withoutPreviousInjection = html.replace(
+      /\s*<!-- WEBSITE_DATA_INJECTION_START -->[\s\S]*?<!-- WEBSITE_DATA_INJECTION_END -->\s*/gi,
+      '\n'
+    )
+
+    const babelScriptRegex = /<script\s+type=["']text\/babel["']\s*>/i
+
+    if (babelScriptRegex.test(withoutPreviousInjection)) {
+      return withoutPreviousInjection.replace(
+        babelScriptRegex,
+        `${injection}<script type="text/babel">`
+      )
+    }
+
+    // Fallback for HTML without a Babel script.
+    return withoutPreviousInjection.replace(
+      /<\/body>/i,
+      `${injection}</body>`
+    )
   }
 
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -242,15 +299,7 @@ export default function New({ username, initialContent }: NewMobileProps) {
 
   const hasUnsavedChanges = draftHtml !== savedHtml || draftData !== savedData
 
-  const finalCode = savedHtml.replace(
-    '<script type="text/babel">',
-    `<script>
-const data = {
-${savedData}
-};
-</script>
-<script type="text/babel">`
-  )
+const finalCode = injectDataIntoHtml(savedHtml, savedData)
 
   const [devMode, setDevMode] = useState(false)
 
@@ -260,18 +309,17 @@ ${savedData}
 
   // Open draft preview tab
   const openDraftPreview = () => {
-    const currentPreviewCode = draftHtml.replace(
-      '<script type="text/babel">',
-      `<script>
-const data = {
-${draftData}
-};
-</script>
-<script type="text/babel">`
+    const currentPreviewCode = injectDataIntoHtml(
+      draftHtml,
+      draftData
     )
+
     const key = `draft_preview_${Date.now()}`
     sessionStorage.setItem(key, currentPreviewCode)
-    const draftUrl = `/draft/${username}?previewKey=${encodeURIComponent(key)}`
+
+    const draftUrl =
+      `/draft/${username}?previewKey=${encodeURIComponent(key)}`
+
     window.open(draftUrl, '_blank')
   }
 
@@ -353,15 +401,11 @@ ${draftData}
   }, [finalCode, captureScrollPosition])
 
   const handleDownload = () => {
-    const fullHtml = savedHtml.replace(
-      '<script type="text/babel">',
-      `<script>
-const data = {
-${savedData}
-};
-</script>
-<script type="text/babel">`
+    const fullHtml = injectDataIntoHtml(
+      savedHtml,
+      savedData
     )
+
     const blob = new Blob([fullHtml], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -590,11 +634,11 @@ if (!confirm(message)) return;
             <span className="hidden sm:inline">Templates</span>
           </a>
           <a
-            href={`/docs`}
+            href={`/tutorial`}
             className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
           >
             <Drum className="h-4 w-4" />
-            <span className="hidden sm:inline">Docs</span>
+            <span className="hidden sm:inline">Tutorial</span>
           </a>
           <a
             href={`/${username}`}

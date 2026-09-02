@@ -1,194 +1,314 @@
-import { Inter } from 'next/font/google'
+'use client'
+
+import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Header from "@/components/header2"
 
-const inter = Inter({ subsets: ['latin'] })
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false
+})
 
-const oils = [
-  {
-    name: "Olive Oil (Extra Virgin)",
-    benefits: [
-      "Rich in monounsaturated fats, which are heart-healthy.",
-      "High in antioxidants and anti-inflammatory compounds.",
-      "Linked to lower risks of heart disease and improved cholesterol levels."
-    ]
-  },
-  {
-    name: "Avocado Oil",
-    benefits: [
-      "Contains monounsaturated fats and vitamin E.",
-      "Supports heart health and improves the absorption of fat-soluble vitamins.",
-      "Great for high-heat cooking due to its high smoke point."
-    ]
-  },
-  {
-    name: "Coconut Oil",
-    benefits: [
-      "Contains medium-chain triglycerides (MCTs), which may boost metabolism.",
-      "Good for brain health and energy.",
-      "Contains some saturated fat, but the type of fat is different from that in animal-based fats."
-    ]
-  },
-  {
-    name: "Flaxseed Oil",
-    benefits: [
-      "High in omega-3 fatty acids, which support heart and brain health.",
-      "May reduce inflammation and promote a healthy cholesterol balance.",
-      "Should be used cold, as it is sensitive to heat."
-    ]
-  },
-  {
-    name: "Walnut Oil",
-    benefits: [
-      "Rich in omega-3 fatty acids and antioxidants.",
-      "Good for heart health and may improve brain function.",
-      "Best used in dressings or as a finishing oil due to its low smoke point."
-    ]
-  },
-  {
-    name: "Almond Oil",
-    benefits: [
-      "High in monounsaturated fats, vitamin E, and antioxidants.",
-      "Supports heart health and has anti-inflammatory properties.",
-      "Great for skin health as well, often used topically."
-    ]
-  },
-  {
-    name: "Sesame Oil",
-    benefits: [
-      "Contains both monounsaturated and polyunsaturated fats.",
-      "Rich in antioxidants like sesamol, which may reduce inflammation.",
-      "Ideal for cooking at moderate heat or as a finishing oil."
-    ]
-  },
-  {
-    name: "Ghee (Clarified Butter)",
-    benefits: [
-      "Contains butyrate, a short-chain fatty acid with anti-inflammatory benefits.",
-      "Lactose-free, making it suitable for those with lactose intolerance.",
-      "Best used for high-heat cooking due to its high smoke point."
-    ]
-  },
-  {
-    name: "Hemp Oil",
-    benefits: [
-      "High in omega-3 and omega-6 fatty acids in an optimal ratio.",
-      "Supports brain function, skin health, and heart health.",
-      "Best used in cold dishes like salads or drizzled over cooked food."
-    ]
-  },
-  {
-    name: "Pumpkin Seed Oil",
-    benefits: [
-      "Rich in zinc, omega-3 fatty acids, and antioxidants.",
-      "Supports prostate health and is anti-inflammatory.",
-      "Best used as a finishing oil or in salad dressings."
-    ]
-  },
-  {
-    name: "Chia Seed Oil",
-    benefits: [
-      "High in omega-3 fatty acids, particularly ALA (alpha-linolenic acid).",
-      "Supports heart health, reduces inflammation, and enhances skin health.",
-      "Best used in cold dishes or as a salad dressing."
-    ]
-  },
-  {
-    name: "Safflower Oil (High Oleic Variety)",
-    benefits: [
-      "Rich in monounsaturated fats, making it heart-healthy.",
-      "A good source of vitamin E, an antioxidant that supports skin and eye health.",
-      "Can be used for high-heat cooking due to its high smoke point."
-    ]
-  },
-  {
-    name: "Rice Bran Oil",
-    benefits: [
-      "Contains healthy monounsaturated and polyunsaturated fats.",
-      "Rich in oryzanol, which may help lower cholesterol levels.",
-      "Its high smoke point makes it ideal for stir-frying and deep-frying."
-    ]
-  },
-  {
-    name: "Macadamia Nut Oil",
-    benefits: [
-      "High in monounsaturated fats and antioxidants.",
-      "Supports heart health and may reduce inflammation.",
-      "Has a high smoke point, making it suitable for high-heat cooking."
-    ]
-  },
-  {
-    name: "Mustard Oil",
-    benefits: [
-      "Contains omega-3 fatty acids and antioxidants like vitamin E.",
-      "Known for its anti-inflammatory and antibacterial properties.",
-      "Widely used in Indian cooking, particularly for sautéing and stir-frying."
-    ]
-  },
-  {
-    name: "Pecan Oil",
-    benefits: [
-      "Rich in monounsaturated fats and antioxidants.",
-      "Supports heart health and has anti-inflammatory effects.",
-      "Great for baking, sautéing, or drizzling over dishes."
-    ]
-  },
-  {
-    name: "Evening Primrose Oil",
-    benefits: [
-      "Contains gamma-linolenic acid (GLA), an omega-6 fatty acid with anti-inflammatory properties.",
-      "Supports hormonal balance and skin health.",
-      "Best used as a supplement or in skincare, as it is not typically used for cooking."
-    ]
-  },
-  {
-    name: "Camu Camu Seed Oil",
-    benefits: [
-      "Rich in vitamin C and antioxidants.",
-      "Known for its skin benefits, improving skin tone and elasticity.",
-      "Used more for skin care rather than cooking."
-    ]
-  },
-  {
-    name: "Tallow (Beef Fat)",
-    benefits: [
-      "A good source of conjugated linoleic acid (CLA), which may have anti-cancer properties.",
-      "Supports energy levels and may promote fat loss.",
-      "Used for high-heat cooking, though it is high in saturated fat, so should be consumed in moderation."
-    ]
-  },
-  {
-    name: "Lipid-Rich Fish Oil (e.g., Salmon Oil)",
-    benefits: [
-      "High in omega-3 fatty acids EPA and DHA, which are excellent for brain, heart, and joint health.",
-      "Known for reducing inflammation and improving cardiovascular health.",
-      "Typically consumed as a supplement, though some people use it in cooking."
-    ]
+export default function LearnHTML() {
+  const [editorMounted, setEditorMounted] = useState(false)
+
+  useEffect(() => {
+    setEditorMounted(true)
+  }, [])
+
+  const CodeExample = ({
+    code,
+    height = '150px'
+  }: {
+    code: string
+    height?: string
+  }) => (
+    <div className="mb-6">
+      {editorMounted && (
+        <MonacoEditor
+          height={height}
+          language="javascript"
+          theme="vs-dark"
+          value={code}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 16,
+            wordWrap: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            readOnly: true,
+            padding: {
+              top: 20,
+            },
+          }}
+        />
+      )}
+    </div>
+  )
+
+  const [interactiveCode, setInteractiveCode] = useState(`{
+  section1: {
+    heading: "Hello"
   }
-];
+}`)
 
-export default function Home() {
+  /*
+   * Get only the actual content from the Page Content.
+   *
+   * Example:
+   *
+   * {
+   *   section1: {
+   *     heading: "Hello"
+   *   }
+   * }
+   *
+   * returns:
+   *
+   * Hello
+   */
+  const getHeading = (code: string) => {
+    const match = code.match(
+      /heading\s*:\s*["'`]([\s\S]*?)["'`]/
+    )
+
+    if (match) {
+      return match[1]
+    }
+
+    return ''
+  }
+
+  const handleEditorChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setInteractiveCode(value)
+    }
+  }
+
+  const pageHeading = getHeading(interactiveCode)
+
   return (
-    <main className={`min-h-screen p-8 ${inter.className}`}><Header/><header>
-      <h1 className="text-4xl font-bold mt-12 mb-8 text-center">Top 20 Healthy Oils for Software Developers</h1>
-      <p className="mb-8 text-lg text-center">
-        As a software developer, maintaining a healthy lifestyle is crucial. One way to do this is by incorporating healthy oils into your diet. Here are 20 of the healthiest oils you can use, each with distinct health benefits:
-      </p></header>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {oils.map((oil, index) => (
-          <div key={index} className="bg-white shadow-md rounded-lg p-6">
-            <h2 className="text-2xl font-semibold mb-4">{index + 1}. {oil.name}</h2>
-            <ul className="list-disc pl-5">
-              {oil.benefits.map((benefit, benefitIndex) => (
-                <li key={benefitIndex} className="mb-2">{benefit}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <p className="mt-8 text-lg text-center">
-        These oils can be used in various ways, depending on the type of cooking you're doing or for incorporating into dressings and cold dishes. Remember, a balanced diet with healthy fats can support your cognitive function and overall well-being, which is essential for software developers who often engage in mentally demanding tasks.
+    <div className="container mx-auto px-4 py-8">
+      <Header />
+
+      <header>
+        <h1 className="text-4xl font-bold mt-12 mb-6">
+          Learn 7Wingz Page Content in 5 Minutes
+        </h1>
+
+        <p className="mb-4">
+          A 7Wingz template separates a website into two things:
+          <strong> Page Content</strong> and <strong>Page Layout</strong>.
+        </p>
+
+        <p className="mb-4">
+          Page Content is what your website says. Page Layout is how your
+          website looks.
+        </p>
+
+        <p className="mb-6">
+          Programmers call these <code>data.js</code> and{' '}
+          <code>index.html</code> — technical names for a simple idea.
+          <strong>
+            {' '}
+            Change the Page Content, and your website changes without
+            disturbing the layout.
+          </strong>
+        </p>
+      </header>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        What Is Page Content?
+      </h2>
+
+      <p className="mb-4">
+        Page Content is simply{' '}
+        <strong>the stuff you actually want to change.</strong>
       </p>
-    </main>
+
+      <p className="mb-4">
+        Headings, text, buttons, images, prices, and more.
+      </p>
+
+      <p className="mb-4">
+        Programmers call it <code>data.js</code>.
+        We call it <strong>Page Content</strong> — because humans deserve
+        human names.
+      </p>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Two Formats Work
+      </h2>
+
+      <p className="mb-4">
+        7Wingz accepts two different formats for Page Content.
+        And yes, both work.
+      </p>
+
+      <h3 className="text-xl font-semibold mb-2">
+        Option A — Full data statement
+      </h3>
+
+      <CodeExample
+        code={`const data = {
+  section1: {
+    heading: "Hello"
+  }
+};`}
+      />
+
+      <h3 className="text-xl font-semibold mb-2">
+        Option B — Just the content
+      </h3>
+
+      <CodeExample
+        code={`{
+  section1: {
+    heading: "Hello"
+  }
+}`}
+      />
+
+      <p className="mb-6">
+        <strong>Both work perfectly and give you the same result.</strong>
+      </p>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Now Customize It
+      </h2>
+
+      <p className="mb-4">
+        Want to change the heading?
+        Just change the value.
+      </p>
+
+      <CodeExample
+        code={`{
+  section1: {
+    heading: "You're just gonna scroll by without saying hi to polite cat?"
+  }
+}`}
+        height="180px"
+      />
+
+      <p className="mb-6">
+        That's it.
+        <strong> You change the words. 7Wingz keeps the layout.</strong>
+      </p>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Write It Yourself — or Ask AI
+      </h2>
+
+      <p className="mb-4">
+        You can edit the Page Content yourself, or ask AI to help you write it.
+      </p>
+
+      <CodeExample
+        code={`{
+  section1: {
+    heading: "Welcome to 7Wingz"
+  }
+}`}
+      />
+
+      <p className="mb-4">
+        You can change the words however you like.
+      </p>
+
+      <p className="mb-6">
+        Just remember one thing:
+        <strong> change the content, but keep the structure intact.</strong>
+      </p>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Structure Matters
+      </h2>
+
+      <p className="mb-4">
+        Think of the structure as the skeleton.
+      </p>
+
+      <CodeExample
+        code={`{
+  section1: {
+    heading: "Welcome to 7Wingz"
+  }
+}`}
+      />
+
+      <p className="mb-4">
+        The words can change.
+        The structure should stay the same.
+      </p>
+
+      <p className="mb-6">
+        <strong>
+          Change the clothes. Don't break the bones. 😎
+        </strong>
+      </p>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Try It Yourself
+      </h2>
+
+      <p className="mb-4">
+        Change the Page Content below and see your content update instantly.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+        {/* LEFT: EDITOR */}
+        <div className="border rounded-lg overflow-hidden">
+          {editorMounted && (
+            <MonacoEditor
+              height="300px"
+              language="javascript"
+              theme="vs-dark"
+              value={interactiveCode}
+              onChange={handleEditorChange}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                wordWrap: 'on',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: {
+                  top: 20,
+                },
+              }}
+            />
+          )}
+        </div>
+
+        {/* RIGHT: ONLY THE ACTUAL CONTENT */}
+        <div className="border rounded-lg p-4 flex items-center justify-center min-h-[300px]">
+          <div className="text-3xl font-semibold text-center">
+            {pageHeading}
+          </div>
+        </div>
+
+      </div>
+
+      <h2 className="text-2xl font-semibold mb-4">
+        Final Words
+      </h2>
+
+      <p className="mb-4">
+        Page Content is simply <strong>what your website says.</strong>
+      </p>
+
+      <p className="mb-4">
+        Page Layout is <strong>how your website looks.</strong>
+      </p>
+
+      <p className="mb-4">
+        Change the content. Keep the structure.
+        Let 7Wingz handle the rest.
+      </p>
+
+      <p className="font-bold">
+        Happy building! 🚀
+      </p>
+    </div>
   )
 }
-
