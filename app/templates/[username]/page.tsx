@@ -1,50 +1,64 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
-import { use } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
+import * as XLSX from "xlsx";
 import {
+  templatesMeta,
+  CATEGORIES,
+  type TemplateMeta,
+} from "@/lib/templates";
+
+import { useSubscription } from "@/components/subscription-provider";
+
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  LayoutGrid,
   Loader2,
+  Lock,
+  Mail,
   Plus,
   Search,
   Sparkles,
-  ArrowRight,
-  LayoutGrid,
   Upload,
-  Download,
-  Mail,
 } from "lucide-react";
-import * as XLSX from "xlsx"; // npm i xlsx
 
-// ─── shadcn/ui imports ─────────────────────────────────────────────
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card";
+
+import CategoryPills from "@/components/CategoryPills";
+
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+
+import Buttons from "@/components/ui_components/buttons";
+import Colors from "@/components/ui_components/colors";
+import Gradients from "@/components/ui_components/gradients";
+
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 import Nav from "@/components/nav";
 import mat from "@/asset/mat.gif";
 
-// ─── Types ──────────────────────────────────────────────────────────
-interface TemplateMeta {
-  id: string;
-  localImage: string;
-  title: string;
-  description: string;
-  mood: string;
-  category: string;
+interface PageProps {
+  params: Promise<{
+    username: string;
+  }>;
 }
 
 interface EmailTemplate {
@@ -54,281 +68,212 @@ interface EmailTemplate {
   image: string;
 }
 
-interface PageProps {
-  params: Promise<{ username: string }>;
-}
-
-// ─── Template Data ──────────────────────────────────────────────────
-const templatesMeta: TemplateMeta[] = [
-  {
-    id: "1",
-    localImage: "/1.png",
-    title: "Light House",
-    description:
-      "Warm, inviting landing page with a bold hero section.",
-    mood: "Landing page",
-    category: "Landing Page",
-  },
-
-  {
-    id: "2",
-    localImage: "/2.png",
-    title: "Modern SaaS",
-    description:
-      "Clean SaaS landing page designed for modern digital products.",
-    mood: "SaaS",
-    category: "SaaS",
-  },
-
-  {
-    id: "3",
-    localImage: "/3.png",
-    title: "Creative Studio",
-    description:
-      "Bold creative layout for agencies, studios and digital teams.",
-    mood: "Creative",
-    category: "Portfolio",
-  },
-
-  {
-    id: "4",
-    localImage: "/4.png",
-    title: "Personal Portfolio",
-    description:
-      "Minimal portfolio experience for showcasing your work and skills.",
-    mood: "Portfolio",
-    category: "Portfolio",
-  },
-
-  {
-    id: "5",
-    localImage: "/5.png",
-    title: "Digital Journal",
-    description:
-      "Elegant editorial layout for articles, stories and personal writing.",
-    mood: "Editorial",
-    category: "Blog & Content",
-  },
-
-  {
-    id: "6",
-    localImage: "/6.png",
-    title: "Business Pro",
-    description:
-      "Professional business website with a clear and trustworthy layout.",
-    mood: "Corporate",
-    category: "SaaS",
-  },
-
-  {
-    id: "7",
-    localImage: "/7.png",
-    title: "Product Launch",
-    description:
-      "High-impact product landing page built for launches and campaigns.",
-    mood: "Landing page",
-    category: "SaaS",
-  },
-
-  {
-    id: "8",
-    localImage: "/8.jpg",
-    title: "Startup Flow",
-    description:
-      "Modern startup website focused on clarity, conversion and growth.",
-    mood: "SaaS",
-    category: "SaaS",
-  },
-
-  {
-    id: "9",
-    localImage: "/9.png",
-    title: "Designer Portfolio",
-    description:
-      "Visual-first portfolio for designers, creators and freelancers.",
-    mood: "Portfolio",
-    category: "Portfolio",
-  },
-
-  {
-    id: "10",
-    localImage: "/10.png",
-    title: "Insight",
-    description:
-      "Content-focused website for publishing ideas, insights and stories.",
-    mood: "Editorial",
-    category: "Blog & Content",
-  },
-
-  {
-    id: "11",
-    localImage: "/11.png",
-    title: "Enterprise",
-    description:
-      "Structured corporate layout for established companies and teams.",
-    mood: "Corporate",
-    category: "SaaS",
-  },
-
-  {
-    id: "12",
-    localImage: "/12.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "SaaS",
-  },
-  {
-    id: "15",
-    localImage: "/15.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "SaaS",
-  },
-   {
-    id: "16",
-    localImage: "/16.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "SaaS",
-  },
-   {
-    id: "18",
-    localImage: "/18.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "SaaS",
-  },
-   {
-    id: "19",
-    localImage: "/19.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "Portfolio",
-  },
-   {
-    id: "27",
-    localImage: "/27.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "AI Agent",
-  },
-  {
-    id: "28",
-    localImage: "/28.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "Blog & Content",
-  },{
-    id: "29",
-    localImage: "/29.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "Blog & Content",
-  },
-];
-
-const CATEGORIES = [
-  
-  "Landing Page",
-  "SaaS",
-  "Portfolio",
-  "Blog & Content",
-  "AI Agent"
-];
-
-// ─── Email templates for campaign ──────────────────────────────────
 const emailTemplates: EmailTemplate[] = [
   {
     id: "email1",
     title: "Newsletter",
-    description: "Clean, minimal design perfect for regular updates.",
-    image: "/email1.png", // replace with actual asset
+    description:
+      "Clean, minimal design perfect for regular updates.",
+    image: "/email1.png",
   },
   {
     id: "email2",
     title: "Promotional",
-    description: "Bold, attention-grabbing layout for offers and launches.",
+    description:
+      "Bold, attention-grabbing layout for offers and launches.",
     image: "/email2.png",
   },
   {
     id: "email3",
     title: "Announcement",
-    description: "Professional, trustworthy design for company news.",
+    description:
+      "Professional, trustworthy design for company news.",
     image: "/email3.png",
   },
 ];
 
-// ─── Page Component ──────────────────────────────────────────────────
 export default function Page({ params }: PageProps) {
   const { username } = use(params);
   const router = useRouter();
+  const { isPremium } = useSubscription();
+
+  
+  // ------------------------------------------------------------
+  // General state
+  // ------------------------------------------------------------
 
   const [isNavigating, setIsNavigating] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null
-  );
-  const [applyRoxFont, setApplyRoxFont] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("Landing Page");
 
-  // Modal states
+  const [selectedTemplateId, setSelectedTemplateId] =
+    useState<string | null>(null);
+
+  const [applyRoxFont, setApplyRoxFont] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [activeCategory, setActiveCategory] =
+    useState("Landing Page");
+
+  const [activeUIComponent, setActiveUIComponent] =
+    useState("Colors");
+
+  // ------------------------------------------------------------
+  // Blank Editor animation
+  // ------------------------------------------------------------
+
+  const [isOpeningBlankEditor, setIsOpeningBlankEditor] =
+    useState(false);
+
+  // ------------------------------------------------------------
+  // Category navigation
+  // BOTH arrows are intentionally ALWAYS visible.
+  // ------------------------------------------------------------
+
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+
+  // ------------------------------------------------------------
+  // Email campaign modal
+  // ------------------------------------------------------------
+
   const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [modalStep, setModalStep] = useState<1 | 2>(1);
+
   const [contactsText, setContactsText] = useState("");
-  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string | null>(null);
+
+  const [selectedEmailTemplate, setSelectedEmailTemplate] =
+    useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ------------------------------------------------------------
+  // Rox font
+  // ------------------------------------------------------------
+
   useEffect(() => {
-    const timer = setTimeout(() => setApplyRoxFont(true), 3500);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      setApplyRoxFont(true);
+    }, 3500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, []);
 
-  const handleSelectTemplate = (templateId: string) => {
-    const found = templatesMeta.some((t) => t.id === templateId);
-    if (!found) {
-      alert("Template not found. Please refresh.");
+  // ------------------------------------------------------------
+  // Category scrolling
+  // ------------------------------------------------------------
+
+  const scrollCategories = (
+    direction: "left" | "right"
+  ) => {
+    const element = categoryScrollRef.current;
+
+    if (!element) {
       return;
     }
 
-    setIsNavigating(true);
-    setSelectedTemplateId(templateId);
+    const amount = Math.max(
+      element.clientWidth * 0.65,
+      250
+    );
 
-    setTimeout(() => {
-      router.push(`/edit_new/${username}?templateId=${templateId}`);
+    element.scrollBy({
+      left:
+        direction === "right"
+          ? amount
+          : -amount,
+      behavior: "smooth",
+    });
+  };
+
+  // ------------------------------------------------------------
+  // Blank Editor
+  // ------------------------------------------------------------
+
+  const handleBlankEditor = () => {
+  if (isOpeningBlankEditor) {
+    return;
+  }
+
+  setIsOpeningBlankEditor(true);
+
+  window.setTimeout(() => {
+    router.push(`/edit/${username}`);
+  }, 1000);
+};
+
+  // ------------------------------------------------------------
+  // Template selection
+  // ------------------------------------------------------------
+
+  const handleSelectTemplate = (
+    templateId: string
+  ) => {
+    const exists = templatesMeta.some(
+      (template) =>
+        template.id === templateId
+    );
+
+    if (!exists) {
+      alert(
+        "Template not found. Please refresh."
+      );
+      return;
+    }
+
+    setSelectedTemplateId(templateId);
+    setIsNavigating(true);
+
+    window.setTimeout(() => {
+      router.push(
+        `/edit_new/${username}?templateId=${templateId}`
+      );
     }, 300);
   };
 
+  // ------------------------------------------------------------
+  // Filter templates
+  // ------------------------------------------------------------
+
   const filteredTemplates = useMemo(() => {
-    return templatesMeta.filter((template) => {
-      const matchesSearch =
-        template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.mood.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery
+      .toLowerCase()
+      .trim();
 
-      const matchesCategory =
-        activeCategory === "All" || template.category === activeCategory;
+    return templatesMeta.filter(
+      (template) => {
+        const matchesSearch =
+          !query ||
+          template.title
+            .toLowerCase()
+            .includes(query) ||
+          template.description
+            .toLowerCase()
+            .includes(query) ||
+          template.mood
+            .toLowerCase()
+            .includes(query);
 
-      return matchesSearch && matchesCategory;
-    });
-  }, [searchQuery, activeCategory]);
+        const matchesCategory =
+          activeCategory === "All" ||
+          template.category === activeCategory;
 
-  // ─── Modal handlers ───────────────────────────────────────────────
+        return (
+          matchesSearch &&
+          matchesCategory
+        );
+      }
+    );
+  }, [
+    searchQuery,
+    activeCategory,
+  ]);
+
+  // ------------------------------------------------------------
+  // Email modal
+  // ------------------------------------------------------------
+
   const openModal = () => {
     setIsModalOpen(true);
     setModalStep(1);
@@ -336,133 +281,418 @@ export default function Page({ params }: PageProps) {
     setSelectedEmailTemplate(null);
   };
 
-  const closeModal = () => setIsModalOpen(false);
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ------------------------------------------------------------
+  // File upload
+  // ------------------------------------------------------------
+
+  const handleFileUpload = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+
+    reader.onload = (loadEvent) => {
       try {
-        let data: any[] = [];
-        const extension = file.name.split(".").pop()?.toLowerCase();
+        const extension = file.name
+          .split(".")
+          .pop()
+          ?.toLowerCase();
+
+        let rows: any[] = [];
+
+        // --------------------------------------------------------
+        // CSV
+        // --------------------------------------------------------
+
         if (extension === "csv") {
-          const csv = ev.target?.result as string;
-          const lines = csv.split("\n").filter((line) => line.trim() !== "");
-          const headers = lines[0].split(",").map((h) => h.trim());
-          const nameIdx = headers.findIndex((h) => h.toLowerCase().includes("name"));
-          const emailIdx = headers.findIndex((h) => h.toLowerCase().includes("email"));
-          data = lines.slice(1).map((line) => {
-            const cols = line.split(",").map((c) => c.trim());
-            return { name: cols[nameIdx] || "", email: cols[emailIdx] || "" };
-          });
-        } else if (extension === "xlsx" || extension === "xls") {
-          const workbook = XLSX.read(ev.target?.result, { type: "array" });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          data = XLSX.utils.sheet_to_json(sheet);
-        } else {
-          alert("Unsupported file format. Please upload CSV or Excel.");
+          const csv =
+            loadEvent.target?.result as string;
+
+          const lines = csv
+            .split(/\r?\n/)
+            .filter(
+              (line) =>
+                line.trim() !== ""
+            );
+
+          if (lines.length === 0) {
+            alert(
+              "The CSV file is empty."
+            );
+            return;
+          }
+
+          const headers = lines[0]
+            .split(",")
+            .map((header) =>
+              header
+                .trim()
+                .toLowerCase()
+            );
+
+          const nameIndex =
+            headers.findIndex(
+              (header) =>
+                header.includes("name")
+            );
+
+          const emailIndex =
+            headers.findIndex(
+              (header) =>
+                header.includes("email")
+            );
+
+          rows = lines
+            .slice(1)
+            .map((line) => {
+              const columns = line
+                .split(",")
+                .map((column) =>
+                  column.trim()
+                );
+
+              return {
+                name:
+                  nameIndex >= 0
+                    ? columns[
+                        nameIndex
+                      ] || ""
+                    : "",
+                email:
+                  emailIndex >= 0
+                    ? columns[
+                        emailIndex
+                      ] || ""
+                    : "",
+              };
+            });
+        }
+
+        // --------------------------------------------------------
+        // Excel
+        // --------------------------------------------------------
+
+        else if (
+          extension === "xlsx" ||
+          extension === "xls"
+        ) {
+          const workbook = XLSX.read(
+            loadEvent.target?.result,
+            {
+              type: "array",
+            }
+          );
+
+          const firstSheet =
+            workbook.Sheets[
+              workbook.SheetNames[0]
+            ];
+
+          rows =
+            XLSX.utils.sheet_to_json(
+              firstSheet
+            );
+        }
+
+        // --------------------------------------------------------
+        // Unsupported
+        // --------------------------------------------------------
+
+        else {
+          alert(
+            "Unsupported file format. Please upload CSV or Excel."
+          );
           return;
         }
 
-        // Build contacts text: "name, email" lines
-        const text = data
-          .map((row) => `${row.name || row.Name || ""}, ${row.email || row.Email || ""}`)
-          .filter((line) => line.trim() !== ",")
+        // --------------------------------------------------------
+        // Convert rows to contacts
+        // --------------------------------------------------------
+
+        const contacts = rows
+          .map((row) => {
+            const name =
+              row.name ??
+              row.Name ??
+              "";
+
+            const email =
+              row.email ??
+              row.Email ??
+              "";
+
+            return `${String(
+              name
+            ).trim()}, ${String(
+              email
+            ).trim()}`;
+          })
+          .filter(
+            (line) =>
+              line.trim() !== ","
+        )
           .join("\n");
-        setContactsText((prev) => (prev ? prev + "\n" + text : text));
-      } catch (err) {
-        alert("Failed to parse file. Please check the format.");
-        console.error(err);
+
+        setContactsText(
+          (previous) => {
+            if (!previous.trim()) {
+              return contacts;
+            }
+
+            if (!contacts.trim()) {
+              return previous;
+            }
+
+            return `${previous}\n${contacts}`;
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Contact file parsing error:",
+          error
+        );
+
+        alert(
+          "Failed to parse file. Please check the format."
+        );
       }
     };
-    if (file.name.endsWith(".csv")) {
+
+    if (
+      file.name
+        .toLowerCase()
+        .endsWith(".csv")
+    ) {
       reader.readAsText(file);
     } else {
       reader.readAsArrayBuffer(file);
     }
-    // Reset input
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
-  const downloadSampleCSV = () => {
-    const sample = "Name,Email\nJohn Doe,john@example.com\nJane Smith,jane@example.com";
-    const blob = new Blob([sample], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sample_contacts.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleNextStep = () => {
-    if (modalStep === 1) {
-      // Validate that there is at least one contact
-      const lines = contactsText.split("\n").filter((line) => line.trim() !== "");
-      if (lines.length === 0) {
-        alert("Please add at least one contact (name, email).");
-        return;
-      }
-      setModalStep(2);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
-  const handleSelectEmailTemplate = (templateId: string) => {
-    setSelectedEmailTemplate(templateId);
+  // ------------------------------------------------------------
+  // Download sample CSV
+  // ------------------------------------------------------------
+
+  const downloadSampleCSV = () => {
+    const csv =
+      "Name,Email\nJohn Doe,john@example.com\nJane Smith,jane@example.com";
+
+    const blob = new Blob(
+      [csv],
+      {
+        type: "text/csv;charset=utf-8;",
+      }
+    );
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const link =
+      document.createElement("a");
+
+    link.href = url;
+    link.download =
+      "sample_contacts.csv";
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   };
 
-const handleProceedWithTemplate = () => {
-  if (!selectedEmailTemplate) {
-    alert("Please select a template.");
-    return;
-  }
-  // Save contacts to sessionStorage
-  sessionStorage.setItem('emailCampaignContacts', contactsText);
-  // Navigate to ui_ai page
-  router.push(`/ai_ui/${username}?templateId=${selectedEmailTemplate}`);
-  closeModal();
-};
+  // ------------------------------------------------------------
+  // Modal step 1 → step 2
+  // ------------------------------------------------------------
 
+  const handleNextStep = () => {
+    if (modalStep !== 1) {
+      return;
+    }
 
-  // ─── Render ──────────────────────────────────────────────────────
+    const contacts =
+      contactsText
+        .split(/\r?\n/)
+        .map((line) =>
+          line.trim()
+        )
+        .filter(Boolean);
+
+    if (contacts.length === 0) {
+      alert(
+        "Please add at least one contact (name, email)."
+      );
+      return;
+    }
+
+    setModalStep(2);
+  };
+
+  // ------------------------------------------------------------
+  // Select email template
+  // ------------------------------------------------------------
+
+  const handleSelectEmailTemplate = (
+    templateId: string
+  ) => {
+    setSelectedEmailTemplate(
+      templateId
+    );
+  };
+
+  // ------------------------------------------------------------
+  // Start campaign
+  // ------------------------------------------------------------
+
+  const handleProceedWithTemplate =
+    () => {
+      if (!selectedEmailTemplate) {
+        alert(
+          "Please select a template."
+        );
+        return;
+      }
+
+      sessionStorage.setItem(
+        "emailCampaignContacts",
+        contactsText
+      );
+
+      closeModal();
+
+      router.push(
+        `/ai_ui/${username}?templateId=${selectedEmailTemplate}`
+      );
+    };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 text-foreground font-sans selection:bg-primary/30 selection:text-primary-foreground">
-      {/* ─── Loading Overlay ────────────────────────────────────── */}
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 text-foreground font-sans">
+
+      {/* ========================================================
+          Blank Editor transition
+          ======================================================== */}
+
+      {isOpeningBlankEditor && (
+        <div className="fixed inset-0 z-[9999] pointer-events-none overflow-hidden">
+
+          {/* Soft backdrop */}
+
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-md animate-blank-backdrop" />
+
+          {/* Portal */}
+
+          <div className="absolute left-1/2 top-1/2">
+
+            <div className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background animate-blank-portal" />
+
+            {/* Ring 1 */}
+
+            <div className="absolute left-0 top-0 w-20 h-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/40 animate-blank-ring" />
+
+            {/* Ring 2 */}
+
+            <div className="absolute left-0 top-0 w-24 h-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/20 animate-blank-ring-two" />
+
+            {/* Core */}
+
+            <div className="absolute left-0 top-0 w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background shadow-[0_0_80px_rgba(255,255,255,0.5)] animate-blank-core" />
+
+            {/* Spark */}
+
+            <div className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 animate-blank-spark">
+              <Sparkles className="w-7 h-7 text-primary" />
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          Template loading overlay
+          ======================================================== */}
+
       {isNavigating && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center transition-all duration-300">
-          <Card className="w-72 p-6 flex flex-col items-center shadow-2xl border-muted">
-            <div className="relative mb-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+
+          <Card className="w-72 p-6 shadow-2xl">
+
+            <div className="flex flex-col items-center">
+
               <Image
                 src={mat}
                 alt="Loading"
                 width={48}
                 height={48}
-                className="object-contain opacity-90"
+                className="mb-4 object-contain"
               />
+
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+
+                <span>
+                  Setting up workspace…
+                </span>
+
+              </div>
+
             </div>
-            <div className="flex items-center gap-2.5 text-sm text-muted-foreground font-medium">
-              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              <span>Setting up workspace…</span>
-            </div>
+
           </Card>
+
         </div>
       )}
 
+      {/* ========================================================
+          Navigation
+          ======================================================== */}
+
       <Nav username={username} />
 
-      <main className="max-w-7xl mx-auto mt-12 px-4 sm:px-6 lg:px-8 py-10 w-full flex-1" style={{ zoom: '0.92' }}>
-        {/* ─── Header Section ───────────────────────────────────── */}
-        <header className="mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/20 text-primary text-xs font-medium">
+      {/* ========================================================
+          Main
+          ======================================================== */}
+
+      <main
+        className="mx-auto mt-12 w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8"
+        style={{
+          zoom: "0.92",
+        }}
+      >
+
+        {/* ======================================================
+            Header
+            ====================================================== */}
+
+         <header className="mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/10 text-primary text-xs font-medium">
           </div>
 
           <h1
             className={`text-3xl sm:text-4xl mb-2 md:text-5xl font-semibold tracking-tight ${
-              applyRoxFont ? "rox" : ""
+              applyRoxFont
+                ? "rox"
+                : ""
             }`}
           >
             What would you like to build today?
@@ -471,295 +701,850 @@ const handleProceedWithTemplate = () => {
           <p className="text-muted-foreground tracking-[0.08rem] mb-3 text-base sm:text-lg leading-relaxed">
             7winks helps you launch fast, learn quickly, and see what actually works.
           </p>
+
         </header>
 
-        {/* ─── Action Bar & Search ────────────────────────────── */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-10">
-          {/* Category Filter Pills */}
-          <ScrollArea className="w-full md:w-auto pb-2 md:pb-0">
-            <div className="flex items-center gap-2.5">
-              {CATEGORIES.map((cat) => (
-                <Button
-                  key={cat}
-                  variant={activeCategory === cat ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setActiveCategory(cat)}
-                  className="rounded-full whitespace-nowrap"
-                >
-                  {cat}
-                </Button>
-              ))}
-            </div>
-            <ScrollBar orientation="horizontal" className="hidden" />
-          </ScrollArea>
+        {/* ======================================================
+            Action bar
+            ====================================================== */}
 
-          {/* Search & Blank Editor CTA */}
-          <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="mb-10 flex flex-col items-center justify-between gap-5 md:flex-row">
+
+          {/* ====================================================
+              Categories
+              ==================================================== */}
+
+          <div className="relative min-w-0 flex-1 w-full md:w-auto">
+
+            {/* --------------------------------------------------
+                BOTH ARROWS ARE ALWAYS VISIBLE
+                -------------------------------------------------- */}
+
+            <div className="absolute -top-11 left-0 z-30 flex items-center gap-1">
+
+              {/* LEFT */}
+
+              <button
+                type="button"
+                aria-label="Previous categories"
+                onClick={() =>
+                  scrollCategories(
+                    "left"
+                  )
+                }
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-muted hover:text-foreground active:scale-95"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {/* RIGHT */}
+
+              <button
+                type="button"
+                aria-label="More categories"
+                onClick={() =>
+                  scrollCategories(
+                    "right"
+                  )
+                }
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground shadow-sm transition-all duration-200 hover:scale-105 hover:bg-muted hover:text-foreground active:scale-95"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+
+            </div>
+
+            {/* --------------------------------------------------
+                Category pills
+                -------------------------------------------------- */}
+
+            <div
+              ref={categoryScrollRef}
+              className="flex items-center gap-2.5 overflow-x-auto scroll-smooth py-1 pr-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            >
+
+              {CATEGORIES.map(
+                (category) => {
+                  const Icon =
+                    category.icon;
+
+                  const isActive =
+                    activeCategory ===
+                    category.name;
+
+                  return (
+                    <Button
+                      key={
+                        category.name
+                      }
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setActiveCategory(
+                          category.name
+                        )
+                      }
+                      className={
+                        isActive
+                          ? "h-9 shrink-0 gap-2 whitespace-nowrap rounded-full border border-foreground bg-foreground px-4 text-sm font-medium text-background transition-all hover:bg-foreground/90 hover:text-background"
+                          : "h-9 shrink-0 gap-2 whitespace-nowrap rounded-full border border-transparent bg-muted/50 px-4 text-sm font-medium text-foreground transition-all hover:bg-muted"
+                      }
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+
+                      {category.name}
+                    </Button>
+                  );
+                }
+              )}
+
+            </div>
+          </div>
+
+          {/* ====================================================
+              Search + actions
+              ==================================================== */}
+
+          <div className="flex w-full items-center gap-3 md:w-auto">
+
+            {/* Search */}
+
             <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
               <Input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(event) =>
+                  setSearchQuery(
+                    event.target.value
+                  )
+                }
                 placeholder="Tell your idea.."
-                className="pl-10 rounded-full bg-muted/10 border-muted-foreground/20 focus-visible:ring-primary"
+                className="rounded-full border-muted-foreground/20 bg-muted/10 pl-10 focus-visible:ring-primary"
               />
+
             </div>
 
-            <Button asChild variant="outline" className="rounded-full">
-              <Link href={`/edit/${username}`}>
-                <Plus className="w-4 h-4 mr-1.5 text-primary" />
-                Blank Editor
-              </Link>
-            </Button>
+            {/* ==================================================
+                BLANK EDITOR
+                ================================================== */}
 
-            {/* ─── Create Email Campaign (opens modal) ─────────── */}
-            <Button variant="outline" className="rounded-full" onClick={openModal}>
-              <Mail className="w-4 h-4 mr-1.5 text-primary" />
+          <Button
+  type="button"
+  variant="outline"
+  disabled={isOpeningBlankEditor}
+  onClick={handleBlankEditor}
+  className={
+    isOpeningBlankEditor
+      ? "relative overflow-hidden rounded-full scale-95"
+      : "group relative overflow-hidden rounded-full transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 active:scale-95"
+  }
+>
+  {!isOpeningBlankEditor && (
+    <>
+      <Plus className="mr-1.5 h-4 w-4 text-primary transition-transform duration-300 group-hover:rotate-90" />
+      <span>Blank Editor</span>
+    </>
+  )}
+
+  {isOpeningBlankEditor && (
+    <>
+      <span className="absolute inset-0 animate-blank-button rounded-full bg-primary/10" />
+
+      <Sparkles className="relative z-10 h-4 w-4 animate-blank-icon text-primary" />
+    </>
+  )}
+</Button>
+
+            {/* ==================================================
+                EMAIL CAMPAIGN
+                ================================================== */}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openModal}
+              className="rounded-full"
+            >
+              <Mail className="mr-1.5 h-4 w-4 text-primary" />
+
               Create Email Campaign
             </Button>
+
           </div>
+
         </div>
 
-        {/* ─── Templates Grid ──────────────────────────────────── */}
-        <section className="pb-16">
-          {filteredTemplates.length === 0 ? (
-            <Card className="py-20 border-muted/60 bg-muted/10 max-w-md mx-auto my-8 text-center">
-              <CardContent className="space-y-3">
-                <LayoutGrid className="w-10 h-10 text-muted-foreground mx-auto opacity-50" />
-                <h3 className="text-base font-medium text-foreground">
-                  No templates found
-                </h3>
-                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                  Try searching for a different keyword or change your category
-                  filter.
-                </p>
-                <Button
-                  variant="link"
-                  className="text-primary"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveCategory("All");
-                  }}
-                >
-                  Reset filters
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredTemplates.map((template) => (
-                <TemplateCard
-                  key={template.id}
-                  template={template}
-                  applyRoxFont={applyRoxFont}
-                  isLoading={
-                    isNavigating && selectedTemplateId === template.id
-                  }
-                  onSelect={handleSelectTemplate}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+        {/* ======================================================
+            Templates
+            ====================================================== */}
+
+      
+<section className="pb-16">
+  {activeCategory === "UI Components" ? (
+    <div className="w-full">
+      {/* UI Component Subcategory Pills */}
+      <CategoryPills
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+        activeUIComponent={activeUIComponent}
+        onUIComponentChange={setActiveUIComponent}
+      />
+
+      {/* Selected UI Component */}
+      <div className="mt-6 w-full">
+        {activeUIComponent === "Colors" && <Colors />}
+        {activeUIComponent === "Buttons" && <Buttons />}
+        {activeUIComponent === "Gradients" && <Gradients />}
+      </div>
+    </div>
+  ) : filteredTemplates.length === 0 ? (
+    <Card className="mx-auto my-8 max-w-md border-muted/60 bg-muted/10 py-20 text-center">
+      <CardContent className="space-y-3">
+        <LayoutGrid className="mx-auto h-10 w-10 text-muted-foreground opacity-50" />
+
+        <h3 className="text-base font-medium">
+          No templates found
+        </h3>
+
+        <p className="mx-auto max-w-xs text-sm text-muted-foreground">
+          Try searching for a different keyword or change your category filter.
+        </p>
+
+        <Button
+          type="button"
+          variant="link"
+          className="text-primary"
+          onClick={() => {
+            setSearchQuery("");
+            setActiveCategory("All");
+          }}
+        >
+          Reset filters
+        </Button>
+      </CardContent>
+    </Card>
+  ) : (
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {filteredTemplates.map((template) => (
+        <TemplateCard
+          key={template.id}
+          template={template}
+          applyRoxFont={applyRoxFont}
+          isLoading={
+            isNavigating &&
+            selectedTemplateId === template.id
+          }
+            isPremium={isPremium}
+
+          onSelect={handleSelectTemplate}
+        />
+      ))}
+    </div>
+  )}
+</section>
+
 
         <Footer />
+
       </main>
 
-      {/* ─── Email Campaign Modal ───────────────────────────────── */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      {/* ========================================================
+          Email Campaign Dialog
+          ======================================================== */}
+
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={
+          setIsModalOpen
+        }
+      >
+
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+
           <DialogHeader>
+
             <DialogTitle>
-              {modalStep === 1 ? "Add Contacts" : "Choose Email Template"}
+              {modalStep === 1
+                ? "Add Contacts"
+                : "Choose Email Template"}
             </DialogTitle>
+
             <DialogDescription>
               {modalStep === 1
                 ? "Add your contacts in the format: name, email (one per line). You can also upload a CSV or Excel file."
                 : "Select a template to start your email campaign."}
             </DialogDescription>
+
           </DialogHeader>
 
-          {/* ─── Step 1: Contacts ──────────────────────────────── */}
+          {/* ====================================================
+              Step 1
+              ==================================================== */}
+
           {modalStep === 1 && (
             <div className="space-y-4 py-2">
+
               <div>
-                <label htmlFor="contacts" className="text-sm font-medium">
+
+                <label
+                  htmlFor="contacts"
+                  className="text-sm font-medium"
+                >
                   Contacts
                 </label>
+
                 <textarea
                   id="contacts"
                   rows={8}
-                  className="w-full mt-1 p-3 border rounded-md bg-background text-sm resize-none"
-placeholder={"John Doe, john@example.com"}
                   value={contactsText}
-                  onChange={(e) => setContactsText(e.target.value)}
+                  onChange={(event) =>
+                    setContactsText(
+                      event.target.value
+                    )
+                  }
+                  placeholder="John Doe, john@example.com"
+                  className="mt-1 w-full resize-none rounded-md border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
                 />
+
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() =>
+                    fileInputRef.current?.click()
+                  }
                 >
-                  <Upload className="w-4 h-4 mr-2" />
+                  <Upload className="mr-2 h-4 w-4" />
+
                   Bulk Upload (CSV / Excel)
                 </Button>
+
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".csv,.xlsx,.xls"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
+                  onChange={
+                    handleFileUpload
+                  }
                   className="hidden"
                 />
+
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={downloadSampleCSV}
+                  onClick={
+                    downloadSampleCSV
+                  }
                 >
-                  <Download className="w-4 h-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
+
                   Download Sample CSV
                 </Button>
+
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Supported formats: .csv, .xlsx, .xls. The file should contain columns named "Name" and "Email" (case-insensitive).
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Supported formats: .csv, .xlsx, .xls. The file should contain columns named "Name" and "Email".
+              </p>
+
             </div>
           )}
 
-          {/* ─── Step 2: Template Selection ────────────────────── */}
+          {/* ====================================================
+              Step 2
+              ==================================================== */}
+
           {modalStep === 2 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
-              {emailTemplates.map((tpl) => (
-                <Card
-                  key={tpl.id}
-                  className={`cursor-pointer transition-all hover:border-primary ${
-                    selectedEmailTemplate === tpl.id
-                      ? "border-2 border-primary ring-2 ring-primary/30"
-                      : "border-muted"
-                  }`}
-                  onClick={() => handleSelectEmailTemplate(tpl.id)}
-                >
-                  <div className="aspect-video bg-muted/30 relative overflow-hidden">
-                    {/* Use placeholder if image not found */}
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      <Mail className="w-12 h-12 opacity-30" />
-                    </div>
-                  </div>
-                  <CardContent className="p-4">
-                    <h4 className="font-medium">{tpl.title}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {tpl.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="grid grid-cols-1 gap-4 py-2 md:grid-cols-3">
+
+              {emailTemplates.map(
+                (template) => {
+                  const selected =
+                    selectedEmailTemplate ===
+                    template.id;
+
+                  return (
+                    <Card
+                      key={
+                        template.id
+                      }
+                      onClick={() =>
+                        handleSelectEmailTemplate(
+                          template.id
+                        )
+                      }
+                      className={
+                        selected
+                          ? "cursor-pointer overflow-hidden border-2 border-primary ring-2 ring-primary/20"
+                          : "cursor-pointer overflow-hidden border border-muted transition-colors hover:border-primary"
+                      }
+                    >
+
+                      <div className="relative aspect-video overflow-hidden bg-muted/30">
+
+                        <Image
+                          src={
+                            template.image
+                          }
+                          alt={
+                            template.title
+                          }
+                          fill
+                          className="object-cover"
+                        />
+
+                      </div>
+
+                      <CardContent className="p-4">
+
+                        <h4 className="font-medium">
+                          {
+                            template.title
+                          }
+                        </h4>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {
+                            template.description
+                          }
+                        </p>
+
+                      </CardContent>
+
+                    </Card>
+                  );
+                }
+              )}
+
             </div>
           )}
 
-          <DialogFooter className="flex justify-between items-center gap-2">
-            <Button variant="ghost" onClick={closeModal}>
+          {/* ====================================================
+              Footer
+              ==================================================== */}
+
+          <DialogFooter className="flex items-center justify-between gap-2">
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={
+                closeModal
+              }
+            >
               Cancel
             </Button>
+
             <div className="flex gap-2">
+
               {modalStep === 1 && (
-                <Button onClick={handleNextStep}>
+                <Button
+                  type="button"
+                  onClick={
+                    handleNextStep
+                  }
+                >
                   Next
-                  <ArrowRight className="ml-2 w-4 h-4" />
+
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               )}
+
               {modalStep === 2 && (
-                <Button onClick={handleProceedWithTemplate} disabled={!selectedEmailTemplate}>
+                <Button
+                  type="button"
+                  disabled={
+                    !selectedEmailTemplate
+                  }
+                  onClick={
+                    handleProceedWithTemplate
+                  }
+                >
                   Start Campaign
                 </Button>
               )}
+
             </div>
+
           </DialogFooter>
+
         </DialogContent>
+
       </Dialog>
+
+      {/* ========================================================
+          Animation CSS
+          ======================================================== */}
+
+      <style jsx global>{`
+        @keyframes blank-backdrop {
+          0% {
+            opacity: 0;
+          }
+
+          25% {
+            opacity: 1;
+          }
+
+          100% {
+            opacity: 1;
+          }
+        }
+
+        @keyframes blank-portal {
+          0% {
+            width: 20px;
+            height: 20px;
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0);
+          }
+
+          20% {
+            opacity: 1;
+          }
+
+          50% {
+            width: 180px;
+            height: 180px;
+            transform: translate(-50%, -50%) scale(1);
+          }
+
+          100% {
+            width: 1800px;
+            height: 1800px;
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
+
+        @keyframes blank-ring {
+          0% {
+            transform: translate(-50%, -50%) scale(0.2)
+              rotate(0deg);
+            opacity: 0;
+          }
+
+          20% {
+            opacity: 0.8;
+          }
+
+          100% {
+            transform: translate(-50%, -50%) scale(3)
+              rotate(180deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes blank-ring-two {
+          0% {
+            transform: translate(-50%, -50%) scale(0.1)
+              rotate(0deg);
+            opacity: 0;
+          }
+
+          25% {
+            opacity: 0.6;
+          }
+
+          100% {
+            transform: translate(-50%, -50%) scale(3.5)
+              rotate(-180deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes blank-core {
+          0% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+          }
+
+          30% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+          }
+
+          65% {
+            transform: translate(-50%, -50%) scale(1.2);
+            opacity: 1;
+          }
+
+          100% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes blank-spark {
+          0% {
+            transform: translate(-50%, -50%) scale(0)
+              rotate(-90deg);
+            opacity: 0;
+          }
+
+          25% {
+            transform: translate(-50%, -50%) scale(1.3)
+              rotate(0deg);
+            opacity: 1;
+          }
+
+          65% {
+            transform: translate(-50%, -50%) scale(1)
+              rotate(90deg);
+            opacity: 1;
+          }
+
+          100% {
+            transform: translate(-50%, -50%) scale(0)
+              rotate(180deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes blank-button {
+          0% {
+            transform: scale(1);
+          }
+
+          20% {
+            transform: scale(0.88);
+          }
+
+          40% {
+            transform: scale(1.04);
+          }
+
+          100% {
+            transform: scale(0.9);
+          }
+        }
+
+        @keyframes blank-icon {
+          0% {
+            transform: scale(0) rotate(-90deg);
+            opacity: 0;
+          }
+
+          30% {
+            transform: scale(1.3) rotate(0deg);
+            opacity: 1;
+          }
+
+          70% {
+            transform: scale(1) rotate(90deg);
+            opacity: 1;
+          }
+
+          100% {
+            transform: scale(0);
+            opacity: 0;
+          }
+        }
+
+        .animate-blank-backdrop {
+          animation: blank-backdrop 1000ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-portal {
+          animation: blank-portal 1000ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-ring {
+          animation: blank-ring 850ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-ring-two {
+          animation: blank-ring-two 1000ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-core {
+          animation: blank-core 800ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-spark {
+          animation: blank-spark 750ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-button {
+          animation: blank-button 1000ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        .animate-blank-icon {
+          animation: blank-icon 750ms
+            cubic-bezier(0.16, 1, 0.3, 1)
+            forwards;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-blank-backdrop,
+          .animate-blank-portal,
+          .animate-blank-ring,
+          .animate-blank-ring-two,
+          .animate-blank-core,
+          .animate-blank-spark,
+          .animate-blank-button,
+          .animate-blank-icon {
+            animation-duration: 1ms !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
-// ─── Subcomponents ──────────────────────────────────────────────────
+// ================================================================
+// Template Card
+// ================================================================
 
 function TemplateCard({
   template,
   applyRoxFont,
   isLoading,
+  isPremium,
   onSelect,
 }: {
   template: TemplateMeta;
   applyRoxFont: boolean;
+    isPremium: boolean;
   isLoading: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (
+    id: string
+  ) => void;
 }) {
   return (
     <Card
-      className="group overflow-hidden border-muted/60 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 cursor-pointer flex flex-col"
-      onClick={() => onSelect(template.id)}
+      onClick={() =>
+        onSelect(template.id)
+      }
+      className="group flex cursor-pointer flex-col overflow-hidden border-muted/60 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
     >
-      {/* Image Preview Area */}
-      <div className="relative aspect-[16/10] overflow-hidden bg-muted/30 border-b border-muted/40">
+
+      {/* Image */}
+
+      <div className="relative aspect-[16/10] overflow-hidden border-b border-muted/40 bg-muted/30">
+
         <img
           src={template.localImage}
           alt={template.title}
           className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
         />
-        {/* Overlay with action button */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center p-4">
+
+        {/* Hover overlay */}
+
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+
           <Button
-            variant="default"
+            type="button"
             size="sm"
-            className="rounded-full shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200"
+            className="translate-y-2 transform rounded-full shadow-lg transition-transform duration-200 group-hover:translate-y-0"
           >
             Use Template
-            <ArrowRight className="ml-1.5 w-3.5 h-3.5" />
+
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
           </Button>
+
         </div>
+
       </div>
 
-      {/* Content Area */}
-      <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
+      {/* Content */}
+
+      <CardContent className="flex flex-1 flex-col justify-between space-y-4 p-5">
+
         <div>
-          <div className="flex items-center justify-between gap-2 mb-1.5">
+
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+
             <h3
-              className={`text-base font-semibold transition-colors group-hover:text-primary ${
-                applyRoxFont ? "rox" : ""
-              }`}
+              className={
+                applyRoxFont
+                  ? "rox text-base font-semibold transition-colors group-hover:text-primary"
+                  : "text-base font-semibold transition-colors group-hover:text-primary"
+              }
             >
-              {template.title}
+              {
+                template.title
+              }
             </h3>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {template.mood}
+
+            <Badge
+              variant="secondary"
+              className="shrink-0 text-[10px]"
+            >
+              {
+                template.mood
+              }
             </Badge>
+
           </div>
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {template.description}
+
+          <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {
+              template.description
+            }
           </p>
+
         </div>
 
-        {/* Loading Indicator */}
         {isLoading && (
-          <div className="flex items-center gap-2 pt-2 border-t border-muted/60 text-xs text-primary font-medium animate-pulse">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Loading editor…</span>
+          <div className="flex items-center gap-2 border-t border-muted/60 pt-2 text-xs font-medium text-primary">
+
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+
+            <span>
+              Loading editor…
+            </span>
+
           </div>
         )}
+
       </CardContent>
+
     </Card>
   );
 }
 
+// ================================================================
+// Footer
+// ================================================================
+
 function Footer() {
   return (
-    <footer className="border-t border-muted/40 py-8 text-center text-xs text-muted-foreground flex flex-col sm:flex-row justify-between items-center gap-4">
-      <p>© Workspace Templates. All layouts are fully customizable.</p>
-      <div className="flex items-center gap-4 text-muted-foreground/70">
-        <a href="/blogs">Blogs & tools</a>
-      </div>
+    <footer className="flex flex-col items-center justify-between gap-4 border-t border-muted/40 py-8 text-center text-xs text-muted-foreground sm:flex-row">
+
+      <p>
+        © Workspace Templates. All layouts are fully customizable.
+      </p>
+
+      <a
+        href="/blogs"
+        className="text-muted-foreground/70 transition-colors hover:text-foreground"
+      >
+        Blogs & tools
+      </a>
+
     </footer>
   );
 }

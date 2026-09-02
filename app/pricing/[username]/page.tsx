@@ -1,250 +1,686 @@
-// app/pricing/[username]/page.tsx
+"use client";
 
 import * as React from "react";
+import Script from "next/script";
+import { useParams } from "next/navigation";
+
 import Nav from "@/components/nav";
+import Premium from "@/components/premium";
 
-export default function Page({ params }: { params: { username: string } }) {
-  const { username } = params;
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
-  const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+export default function PricingPage() {
+  const params = useParams();
 
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  const username =
+    typeof params?.username === "string"
+      ? params.username
+      : "";
 
-  <!-- Fonts -->
-  <link href="https://db.onlinewebfonts.com/c/68b898f6044bbee439423445076f3168?family=Roxborough+CF+Thin" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  // --------------------------------------------------
+  // STATE
+  // --------------------------------------------------
 
-  <style>
-    body{
-      margin:0;
-      background:black;
-      font-family:'Inter',sans-serif;
-      color:white;
+  const [checkingPremium, setCheckingPremium] =
+    React.useState(true);
+
+  const [isPremium, setIsPremium] =
+    React.useState(false);
+
+  const [loading, setLoading] =
+    React.useState(false);
+
+  const [message, setMessage] =
+    React.useState("");
+
+  // --------------------------------------------------
+  // CHECK PREMIUM STATUS
+  // --------------------------------------------------
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function checkPremiumStatus() {
+      try {
+        setCheckingPremium(true);
+
+        const response = await fetch(
+          "/api/razorpay/status",
+          {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+              "Cache-Control": "no-cache",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setIsPremium(false);
+          }
+
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!cancelled) {
+          setIsPremium(
+            data?.premium === true
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Premium status check failed:",
+          error
+        );
+
+        if (!cancelled) {
+          setIsPremium(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingPremium(false);
+        }
+      }
     }
 
-    .rox{
-      font-family:"Roxborough CF Thin",serif;
-      letter-spacing:-0.03em;
+    checkPremiumStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // RAZORPAY PAYMENT
+  // --------------------------------------------------
+
+  const handlePayment = async () => {
+    if (loading || isPremium) {
+      return;
     }
-  </style>
-</head>
 
-<body>
+    setLoading(true);
+    setMessage("");
 
-<section class="relative overflow-hidden bg-black px-6 lg:px-12 py-32">
+    try {
+      // ----------------------------------------------
+      // CREATE ORDER
+      // ----------------------------------------------
 
-  <!-- subtle atmosphere -->
-  <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_55%)]"></div>
+      const response = await fetch(
+        "/api/razorpay/create-order",
+        {
+          method: "POST",
 
-  <div class="relative z-10 max-w-6xl mx-auto">
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-    <!-- heading -->
-    <div class="max-w-3xl mb-28">
+          body: JSON.stringify({
+            username,
+          }),
+        }
+      );
 
-      <p class="text-[10px] uppercase tracking-[0.28em] text-white/20 mb-8">
-        Pricing
-      </p>
+      const data = await response.json();
 
-      <h1 class="rox text-[58px] md:text-[82px] leading-[0.95] tracking-tight text-white mb-8">
-        Not loud. <br>
-        Just well made.
-      </h1>
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Unable to create payment."
+        );
+      }
 
-      <p class="max-w-xl text-white/40 text-[15px] leading-[1.9] font-light">
-        Some people want attention.
-        Some people just want their work to look right.
-      </p>
+      // ----------------------------------------------
+      // CHECK RAZORPAY
+      // ----------------------------------------------
 
-    </div>
+      if (!window.Razorpay) {
+        throw new Error(
+          "Razorpay failed to load. Please try again."
+        );
+      }
 
-    <!-- pricing cards -->
-    <div class="grid lg:grid-cols-2 gap-6">
+      // ----------------------------------------------
+      // RAZORPAY OPTIONS
+      // ----------------------------------------------
 
-      <!-- free -->
-      <div class="rounded-[32px] border border-white/10 bg-white/[0.025] p-10">
+      const options = {
+        key: data.key,
 
-        <div class="mb-14">
+        amount: data.amount,
 
-          <p class="text-[10px] uppercase tracking-[0.24em] text-white/20 mb-6">
-            Foundation
-          </p>
+        currency: data.currency,
 
-          <div class="flex items-end gap-3">
+        name: "7Winks",
 
-            <h2 class="rox text-[56px] leading-none text-white">
-              Free
-            </h2>
+        description:
+          "7Winks Premium",
 
-          </div>
+        order_id: data.orderId,
 
-        </div>
+        theme: {
+          color: "#171717",
+        },
 
-        <div class="space-y-7 mb-16">
+        prefill: {
+          name: username,
+        },
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              Core templates
-            </h3>
+        notes: {
+          username,
+        },
 
-            <p class="text-white/35 text-sm leading-relaxed">
-              Enough to launch something clean and thoughtful.
+        // --------------------------------------------
+        // PAYMENT SUCCESS
+        // --------------------------------------------
+
+        handler: async function (
+          paymentResponse: any
+        ) {
+          try {
+            setMessage(
+              "Finishing things up..."
+            );
+
+            // ----------------------------------------
+            // VERIFY PAYMENT
+            // ----------------------------------------
+
+            const verifyResponse =
+              await fetch(
+                "/api/razorpay/verify",
+                {
+                  method: "POST",
+
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+
+                  body: JSON.stringify({
+                    username,
+
+                    razorpay_order_id:
+                      paymentResponse?.razorpay_order_id,
+
+                    razorpay_payment_id:
+                      paymentResponse?.razorpay_payment_id,
+
+                    razorpay_signature:
+                      paymentResponse?.razorpay_signature,
+                  }),
+                }
+              );
+
+            const verifyData =
+              await verifyResponse.json();
+
+            if (!verifyResponse.ok) {
+              throw new Error(
+                verifyData?.error ||
+                  "Payment verification failed."
+              );
+            }
+
+            if (
+              verifyData?.success !== true
+            ) {
+              throw new Error(
+                "Payment could not be confirmed."
+              );
+            }
+
+            // ----------------------------------------
+            // PAYMENT VERIFIED
+            // ----------------------------------------
+
+            setMessage("");
+
+            // This immediately replaces
+            // the pricing page with Premium.
+            //
+            // The database is now the source
+            // of truth.
+            setIsPremium(true);
+          } catch (error) {
+            console.error(
+              "Payment verification error:",
+              error
+            );
+
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : "Payment verification failed."
+            );
+          } finally {
+            setLoading(false);
+          }
+        },
+
+        // --------------------------------------------
+        // MODAL CLOSED
+        // --------------------------------------------
+
+        modal: {
+          ondismiss: function () {
+            setLoading(false);
+            setMessage("");
+          },
+        },
+      };
+
+      // ----------------------------------------------
+      // OPEN RAZORPAY
+      // ----------------------------------------------
+
+      const razorpay =
+        new window.Razorpay(options);
+
+      // ----------------------------------------------
+      // PAYMENT FAILED
+      // ----------------------------------------------
+
+      razorpay.on(
+        "payment.failed",
+        function (response: any) {
+          console.error(
+            "Razorpay payment failed:",
+            response
+          );
+
+          setLoading(false);
+
+          setMessage(
+            response?.error?.description ||
+              "Payment failed. Please try again."
+          );
+        }
+      );
+
+      razorpay.open();
+    } catch (error) {
+      console.error(
+        "Payment error:",
+        error
+      );
+
+      setLoading(false);
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong."
+      );
+    }
+  };
+
+  // --------------------------------------------------
+  // ALWAYS SHOW NAVBAR
+  // --------------------------------------------------
+
+  return (
+    <>
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="afterInteractive"
+      />
+
+      <Nav username={username} />
+
+      {/* -------------------------------------------- */}
+      {/* CHECKING PREMIUM */}
+      {/* -------------------------------------------- */}
+
+      {checkingPremium ? (
+        <main className="min-h-screen bg-[#f6f6f3] text-[#171717] pt-16 flex items-center justify-center">
+
+          <div className="flex flex-col items-center">
+
+            <div className="w-7 h-7 rounded-full border-2 border-black/10 border-t-black/60 animate-spin" />
+
+            <p className="mt-4 text-[10px] uppercase tracking-[0.2em] text-black/30">
+              Loading
             </p>
+
           </div>
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              AI-assisted editing
-            </h3>
+        </main>
+      ) : isPremium ? (
+        /* ------------------------------------------ */
+        /* PAID USER                                  */
+        /* ------------------------------------------ */
 
-            <p class="text-white/35 text-sm leading-relaxed">
-              Edit layouts naturally without learning complicated tools.
-            </p>
-          </div>
+        <Premium
+          username={username}
+        />
+      ) : (
+        /* ------------------------------------------ */
+        /* FREE USER                                  */
+        /* ------------------------------------------ */
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              Instant publishing
-            </h3>
+        <FreePricing
+          username={username}
+          loading={loading}
+          message={message}
+          onPayment={handlePayment}
+        />
+      )}
+    </>
+  );
+}
 
-            <p class="text-white/35 text-sm leading-relaxed">
-              No setup rituals. No technical friction.
-            </p>
-          </div>
 
-        </div>
+// ==================================================
+// FREE PRICING
+// ==================================================
 
-        <button class="w-full rounded-2xl border border-white/10 py-4 text-white text-sm hover:bg-white/[0.04] transition-all duration-300">
-          Start building
-        </button>
+function FreePricing({
+  username,
+  loading,
+  message,
+  onPayment,
+}: {
+  username: string;
+  loading: boolean;
+  message: string;
+  onPayment: () => void;
+}) {
+  return (
+    <main className="min-h-screen bg-[#f6f6f3] text-[#171717] pt-16 overflow-hidden">
+
+      {/* ------------------------------------------ */}
+      {/* ATMOSPHERE                                 */}
+      {/* ------------------------------------------ */}
+
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full bg-white blur-[120px] opacity-80" />
+
+        <div className="absolute top-[35%] -left-40 w-[400px] h-[400px] rounded-full bg-[#e9e9e3] blur-[100px]" />
+
+        <div className="absolute bottom-0 -right-40 w-[450px] h-[450px] rounded-full bg-[#e8e8e3] blur-[120px]" />
 
       </div>
 
-      <!-- premium -->
-      <div class="relative rounded-[32px] border border-white/15 bg-white/[0.045] p-10">
+      <section className="relative px-5 sm:px-8 lg:px-12 py-20 lg:py-28">
 
-        <!-- badge -->
-        <div class="absolute top-6 right-6">
+        <div className="max-w-6xl mx-auto">
 
-          <span class="text-[9px] uppercase tracking-[0.2em] text-white/35 border border-white/10 rounded-full px-3 py-1">
-            Premium
-          </span>
+          {/* ---------------------------------------- */}
+          {/* TOP LABEL                                */}
+          {/* ---------------------------------------- */}
 
-        </div>
+          <div className="flex items-center justify-between mb-16">
 
-        <div class="mb-14">
+            <div className="flex items-center gap-3">
 
-          <p class="text-[10px] uppercase tracking-[0.24em] text-white/20 mb-6">
-            Quietly premium
-          </p>
+              <div className="w-2 h-2 rounded-full bg-black/70" />
 
-          <div class="flex items-end gap-3 mb-4">
+              <span className="text-[10px] uppercase tracking-[0.25em] text-black/45">
+                7Winks Premium
+              </span>
 
-            <h2 class="rox text-[64px] leading-none text-white">
-              €6.66
-            </h2>
+            </div>
 
-            <span class="text-white/30 text-sm mb-2">
-              / month
+            <span className="hidden sm:block text-[10px] uppercase tracking-[0.2em] text-black/25">
+              {username}
             </span>
 
           </div>
 
-          <p class="text-white/35 text-sm italic leading-relaxed max-w-sm">
-            Unlock what you need, when you need it.
-          </p>
+
+          {/* ---------------------------------------- */}
+          {/* HERO                                     */}
+          {/* ---------------------------------------- */}
+
+          <div className="grid lg:grid-cols-[1fr_420px] gap-14 lg:gap-24 items-center mb-20">
+
+            <div>
+
+              <h1 className="font-serif text-[54px] sm:text-[68px] lg:text-[82px] leading-[0.91] tracking-[-0.045em]">
+
+                You haven't
+                <br />
+
+                <span className="text-black/35">
+                  seen everything.
+                </span>
+
+              </h1>
+
+              <p className="mt-8 max-w-xl text-[15px] sm:text-[16px] leading-[1.8] text-black/45">
+                Free gets you started.
+                Premium gives you more
+                room to build.
+              </p>
+
+              {/* CTA */}
+
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+
+                <button
+                  onClick={onPayment}
+                  disabled={loading}
+                  className="group inline-flex items-center gap-4 rounded-full bg-[#171717] text-white px-7 py-4 text-sm font-medium shadow-[0_10px_35px_rgba(0,0,0,0.14)] hover:shadow-[0_15px_45px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-60 disabled:hover:translate-y-0"
+                >
+
+                  <span>
+                    {loading
+                      ? "Opening..."
+                      : "Unlock Premium"}
+                  </span>
+
+                  {!loading && (
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10">
+                      →
+                    </span>
+                  )}
+
+                </button>
+
+                <span className="text-[11px] text-black/30">
+                  €6.66 / month
+                </span>
+
+              </div>
+
+              {message && (
+                <p className="mt-5 text-xs text-black/45">
+                  {message}
+                </p>
+              )}
+
+            </div>
+
+
+            {/* -------------------------------------- */}
+            {/* JAS                                     */}
+            {/* -------------------------------------- */}
+
+            <div className="relative flex justify-center lg:justify-end">
+
+              <div className="relative w-[330px] h-[330px] sm:w-[380px] sm:h-[380px] rounded-[42px] border border-black/[0.07] bg-white/55 backdrop-blur-xl shadow-[0_30px_100px_rgba(0,0,0,0.08)] overflow-hidden">
+
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(255,255,255,1),rgba(255,255,255,0)_65%)]" />
+
+                <div
+                  className="absolute inset-0 opacity-[0.035]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg,#000 1px,transparent 1px)",
+                    backgroundSize:
+                      "32px 32px",
+                  }}
+                />
+
+                <img
+                  src="/jas.gif"
+                  alt="7Winks"
+                  className="absolute z-10 w-[210px] sm:w-[245px] h-auto left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_20px_25px_rgba(0,0,0,0.12)]"
+                />
+
+                <div className="absolute bottom-4 left-4 right-4 rounded-2xl bg-white/75 backdrop-blur-md border border-black/[0.06] px-4 py-3 flex items-center justify-between">
+
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-black/30">
+                    Premium
+                  </span>
+
+                  <span className="text-[11px] text-black/50">
+                    €6.66 / month
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* ---------------------------------------- */}
+          {/* BENEFITS                                 */}
+          {/* ---------------------------------------- */}
+
+          <div className="grid lg:grid-cols-2 gap-5">
+
+            {/* FREE */}
+
+            <div className="rounded-[30px] border border-black/[0.07] bg-white/55 backdrop-blur-xl p-8 sm:p-10">
+
+              <p className="text-[10px] uppercase tracking-[0.2em] text-black/30 mb-8">
+                Free
+              </p>
+
+              <div className="space-y-6">
+
+                <Benefit
+                  title="Core templates"
+                  text="Enough to launch something clean and thoughtful."
+                />
+
+                <Benefit
+                  title="AI-assisted editing"
+                  text="Edit layouts naturally without complicated tools."
+                />
+
+                <Benefit
+                  title="Instant publishing"
+                  text="No setup rituals. No technical friction."
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* PREMIUM */}
+
+            <div className="rounded-[30px] border border-black/[0.08] bg-white/70 backdrop-blur-xl p-8 sm:p-10">
+
+              <p className="text-[10px] uppercase tracking-[0.2em] text-black/30 mb-8">
+                Premium
+              </p>
+
+              <div className="space-y-6">
+
+                <Benefit
+                  title="Premium templates"
+                  text="More distinctive layouts and design options."
+                />
+
+                <Benefit
+                  title="Save and revisit projects"
+                  text="Keep your work and return whenever you want."
+                />
+
+                <Benefit
+                  title="Full layout + code access"
+                  text="More control without platform limits."
+                />
+
+                <Benefit
+                  title="AI, email & Google Ads credits"
+                  text="Credits are included with your Premium purchase."
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* ---------------------------------------- */}
+          {/* CREDITS                                  */}
+          {/* ---------------------------------------- */}
+
+          <div className="mt-5 rounded-[24px] border border-black/[0.06] bg-white/50 backdrop-blur-xl px-6 py-5 text-center">
+
+            <p className="text-xs text-black/40">
+              Credits carry forward and never expire.
+              If you run out, you can recharge anytime.
+            </p>
+
+          </div>
+
+
+          {/* ---------------------------------------- */}
+          {/* FOOTER                                   */}
+          {/* ---------------------------------------- */}
+
+          <div className="mt-24 pt-8 border-t border-black/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4">
+
+            <p className="text-[10px] uppercase tracking-[0.22em] text-black/20">
+              7Winks
+            </p>
+
+            <p className="text-[10px] text-black/20">
+              Built for people who care about the details.
+            </p>
+
+          </div>
 
         </div>
 
-        <div class="space-y-7 mb-16">
+      </section>
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              One premium unlock every month
-            </h3>
+    </main>
+  );
+}
 
-            <p class="text-white/45 text-sm leading-relaxed">
-              Your unlocked templates stay forever.
-            </p>
-          </div>
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              Save and revisit projects
-            </h3>
+// ==================================================
+// BENEFIT
+// ==================================================
 
-            <p class="text-white/45 text-sm leading-relaxed">
-              Build slowly. Return whenever you want.
-            </p>
-          </div>
+function Benefit({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  return (
+    <div>
 
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              Full layout + code access
-            </h3>
+      <h3 className="text-sm text-black/75">
+        {title}
+      </h3>
 
-            <p class="text-white/45 text-sm leading-relaxed">
-              Change things your way without platform limits.
-            </p>
-          </div>
-
-          <div>
-            <h3 class="text-white text-[15px] mb-2">
-              Better aesthetics, less effort
-            </h3>
-
-            <p class="text-white/45 text-sm leading-relaxed">
-              Because presentation still matters.
-            </p>
-          </div>
-
-        </div>
-
-        <button class="w-full rounded-2xl bg-white text-black py-4 text-sm font-medium hover:bg-neutral-200 transition-all duration-300">
-          Continue
-        </button>
-
-        <p class="text-center text-[10px] tracking-[0.16em] uppercase text-white/15 mt-5">
-          Cancel anytime
-        </p>
-
-      </div>
-
-    </div>
-
-    <!-- footer -->
-    <div class="mt-28 flex flex-col items-center">
-
-      <div class="w-16 h-px bg-white/10 mb-6"></div>
-
-      <p class="text-white/15 uppercase tracking-[0.28em] text-[10px]">
-        Built for independent builders
+      <p className="mt-1.5 text-xs leading-[1.7] text-black/35">
+        {text}
       </p>
 
     </div>
-
-  </div>
-
-</section>
-
-</body>
-</html>`;
-
-  return (
-    <>
-      {/* ✅ Pass params object as expected by Nav component */}
-<Nav username={username} />
-      <div className="relative w-full h-screen pt-16">
-        <iframe
-          srcDoc={htmlContent}
-          title="7Winks Pricing Preview"
-          className="absolute top-0 left-0 w-full h-full border-0"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"
-        />
-      </div>
-    </>
   );
 }
