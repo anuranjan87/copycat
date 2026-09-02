@@ -6,13 +6,27 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET!,
 });
 
+// Your server-side prices.
+// Never trust the frontend to send the actual price.
+const PRICES = {
+  INR: 66600, // ₹666.00
+  EUR: 666,   // €6.66
+} as const;
+
+type Currency = keyof typeof PRICES;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     const username = body?.username;
+    const requestedCurrency = body?.currency;
 
-    if (!username) {
+    // -----------------------------------------
+    // Validate username
+    // -----------------------------------------
+
+    if (!username || typeof username !== "string") {
       return NextResponse.json(
         {
           error: "Username is required.",
@@ -23,27 +37,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * Razorpay expects amount in the smallest
-     * currency unit.
-     *
-     * This example uses INR.
-     *
-     * Replace this amount with the INR equivalent
-     * you want to charge for €6.66.
-     */
+    // -----------------------------------------
+    // Default to INR
+    // -----------------------------------------
 
-    const amount = 66600;
+    const currency: Currency =
+      requestedCurrency === "EUR" ? "EUR" : "INR";
+
+    // -----------------------------------------
+    // Get price ONLY from our server
+    // -----------------------------------------
+
+    const amount = PRICES[currency];
+
+    // -----------------------------------------
+    // Create Razorpay order
+    // -----------------------------------------
 
     const order = await razorpay.orders.create({
       amount,
-      currency: "INR",
-      receipt: `premium_${username}_${Date.now()}`,
+      currency,
+      receipt: `premium_${username}_${Date.now()}`.slice(0, 40),
       notes: {
         username,
         plan: "premium",
+        currency,
       },
     });
 
