@@ -1,3 +1,5 @@
+
+
 import {
   getWebsiteContent,
   trackVisit,
@@ -65,15 +67,37 @@ function normalizeWebsiteData(
   console.log("========================================")
   console.log("[DATA] RAW DATABASE DATA")
   console.log("========================================")
-
   console.log(rawData)
 
-
   /*
-   * Empty data.
+   * ------------------------------------------------------------
+   * DATA.JS FORMAT SUPPORT
+   * ------------------------------------------------------------
+   *
+   * The saved data.js may contain:
+   *
+   * 1. Comments + const data = {...}
+   * 2. Comments + let data = {...}
+   * 3. Comments + var data = {...}
+   * 4. Just {...}
+   * 5. Just the object body:
+   *
+   *      // Hero section
+   *      hero: {
+   *        heading: "Hello"
+   *      }
+   *
+   * Comments are allowed before the declaration and inside the
+   * object. Comments inside the object are preserved.
+   *
+   * The result is ALWAYS a JavaScript object literal:
+   *
+   * {
+   *   ...
+   * }
    */
-  if (!rawData || !rawData.trim()) {
 
+  if (!rawData || !rawData.trim()) {
     console.warn(
       "[DATA] No data found. Using empty object."
     )
@@ -81,89 +105,377 @@ function normalizeWebsiteData(
     return "{}"
   }
 
-
-  let data =
-    rawData.trim()
-
+  const source = rawData.trim()
 
   /*
-   * Remove:
+   * Find the opening `{` of:
    *
-   * const data =
-   * let data =
-   * var data =
+   * const data = {
+   * let data = {
+   * var data = {
+   *
+   * This is intentionally NOT anchored to the beginning because
+   * users may place helpful comments above the declaration.
    */
-  data =
-    data.replace(
-      /^\s*(?:const|let|var)\s+data\s*=\s*/i,
-      ""
+  const declarationMatch = source.match(
+    /(?:^|[\r\n])\s*(?:const|let|var)\s+data\s*=\s*\{/
+  )
+
+  /*
+   * ------------------------------------------------------------
+   * CASE 1: Complete data declaration exists.
+   * ------------------------------------------------------------
+   */
+  if (declarationMatch && declarationMatch.index !== undefined) {
+
+    const declarationStart = declarationMatch.index
+    const openingBrace = source.indexOf(
+      "{",
+      declarationStart
     )
 
+    if (openingBrace !== -1) {
+
+      const closingBrace = findMatchingBrace(
+        source,
+        openingBrace
+      )
+
+      if (closingBrace !== -1) {
+
+        const objectLiteral = source
+          .slice(
+            openingBrace,
+            closingBrace + 1
+          )
+          .trim()
+
+        console.log("")
+        console.log("========================================")
+        console.log("[DATA] NORMALIZED DATA")
+        console.log("========================================")
+        console.log(objectLiteral)
+
+        return objectLiteral
+      }
+
+      console.error(
+        "[DATA] ❌ Could not find closing brace for data object."
+      )
+
+      return "{}"
+    }
+  }
 
   /*
-   * Remove trailing semicolon.
+   * ------------------------------------------------------------
+   * CASE 2: Raw object literal.
+   *
+   * Example:
+   *
+   * {
+   *   // Hero
+   *   hero: {...}
+   * }
+   * ------------------------------------------------------------
    */
-  data =
-    data.replace(
-      /;\s*$/,
-      ""
+  if (
+    source.startsWith("{")
+  ) {
+
+    const closingBrace = findMatchingBrace(
+      source,
+      0
     )
 
+    if (
+      closingBrace !== -1
+    ) {
 
-  data =
-    data.trim()
+      const objectLiteral = source
+        .slice(
+          0,
+          closingBrace + 1
+        )
+        .trim()
 
+      console.log("")
+      console.log("========================================")
+      console.log("[DATA] NORMALIZED DATA")
+      console.log("========================================")
+      console.log(objectLiteral)
+
+      return objectLiteral
+    }
+
+  }
 
   /*
-   * If the data is:
+   * ------------------------------------------------------------
+   * CASE 3: Object body only.
    *
-   * form: {
-   *   ...
+   * Example:
+   *
+   * // Navigation
+   * nav: {
+   *   brand: "Bumper Special"
+   * },
+   *
+   * // Hero
+   * hero: {
+   *   heading: "Hello"
    * }
    *
-   * wrap it in `{}`.
+   * Wrap the body in `{}`.
+   * ------------------------------------------------------------
    */
-  if (
-    data.startsWith("form:")
-  ) {
 
-    data =
-      `{${data}}`
-
-  }
-
-
-  /*
-   * Final validation.
-   */
-  if (
-    !data.startsWith("{") ||
-    !data.endsWith("}")
-  ) {
-
-    console.error(
-      "[DATA] ❌ INVALID DATA FORMAT"
-    )
-
-    console.error(
-      data
-    )
-
-    return "{}"
-  }
-
+  const objectLiteral =
+    `{\n${source}\n}`
 
   console.log("")
   console.log("========================================")
   console.log("[DATA] NORMALIZED DATA")
   console.log("========================================")
+  console.log(objectLiteral)
 
-  console.log(data)
-
-
-  return data
+  return objectLiteral
 }
 
+
+/*
+ * ================================================================
+ * FIND MATCHING BRACE
+ * ================================================================
+ *
+ * Finds the `}` matching an opening `{` while correctly ignoring
+ * braces inside:
+ *
+ * - strings
+ * - template literals
+ * - single-line comments
+ * - block comments
+ *
+ * This is important for data.js because values may contain text
+ * such as:
+ *
+ *   description: "Click {here}"
+ *
+ * or:
+ *
+ *   // Section {comment}
+ *
+ * or:
+ *
+ *   html: `<div>{value}</div>`
+ */
+function findMatchingBrace(
+  source: string,
+  openingBraceIndex: number
+): number {
+
+  let depth = 0
+
+  let quote:
+    '"' |
+    "'" |
+    "`" |
+    null = null
+
+  let escaped = false
+
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (
+    let i = openingBraceIndex;
+    i < source.length;
+    i++
+  ) {
+
+    const char =
+      source[i]
+
+    const next =
+      source[i + 1]
+
+
+    /*
+     * ----------------------------------------------------------
+     * Single-line comment
+     * ----------------------------------------------------------
+     */
+    if (
+      inLineComment
+    ) {
+
+      if (
+        char === "\n"
+      ) {
+
+        inLineComment =
+          false
+
+      }
+
+      continue
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * Block comment
+     * ----------------------------------------------------------
+     */
+    if (
+      inBlockComment
+    ) {
+
+      if (
+        char === "*" &&
+        next === "/"
+      ) {
+
+        inBlockComment =
+          false
+
+        i++
+
+      }
+
+      continue
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * Inside a string / template literal
+     * ----------------------------------------------------------
+     */
+    if (
+      quote !== null
+    ) {
+
+      if (
+        escaped
+      ) {
+
+        escaped =
+          false
+
+        continue
+
+      }
+
+      if (
+        char === "\\"
+      ) {
+
+        escaped =
+          true
+
+        continue
+
+      }
+
+      if (
+        char === quote
+      ) {
+
+        quote =
+          null
+
+      }
+
+      continue
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * Start comments
+     * ----------------------------------------------------------
+     */
+    if (
+      char === "/" &&
+      next === "/"
+    ) {
+
+      inLineComment =
+        true
+
+      i++
+
+      continue
+    }
+
+    if (
+      char === "/" &&
+      next === "*"
+    ) {
+
+      inBlockComment =
+        true
+
+      i++
+
+      continue
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * Start strings
+     * ----------------------------------------------------------
+     */
+    if (
+      char === '"' ||
+      char === "'" ||
+      char === "`"
+    ) {
+
+      quote =
+        char as '"' | "'" | "`"
+
+      continue
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * Track braces
+     * ----------------------------------------------------------
+     */
+    if (
+      char === "{"
+    ) {
+
+      depth++
+
+      continue
+    }
+
+    if (
+      char === "}"
+    ) {
+
+      depth--
+
+      if (
+        depth === 0
+      ) {
+
+        return i
+
+      }
+
+    }
+
+  }
+
+
+  return -1
+}
 
 /*
  * ================================================================
@@ -187,7 +499,23 @@ function buildFinalHtml(
 
 
   /*
-   * Normalize data.
+   * Remove a previous data injection created by this component.
+   * This prevents duplicate window.__SITE_DATA__ declarations if
+   * the same HTML is processed more than once.
+   */
+  finalHtml =
+    finalHtml.replace(
+      /\s*<!-- WEBSITE_DATA_INJECTION_START -->[\s\S]*?<!-- WEBSITE_DATA_INJECTION_END -->\s*/gi,
+      "\n"
+    )
+
+
+  /*
+   * Normalize data.js.
+   *
+   * normalizeWebsiteData() safely extracts the actual object even
+   * when data.js contains comments before `const data` or comments
+   * inside the object.
    */
   const normalizedData =
     normalizeWebsiteData(rawData)
@@ -198,13 +526,11 @@ function buildFinalHtml(
    * DATA SCRIPT
    * ============================================================
    *
-   * We only create window.__SITE_DATA__ here.
-   *
-   * The Babel script will create:
-   *
-   * const data = window.__SITE_DATA__;
+   * Keep the user's data comments out of the executable injection
+   * while preserving the resulting data object exactly.
    */
   const dataScript = `
+<!-- WEBSITE_DATA_INJECTION_START -->
 <script>
 window.__SITE_DATA__ = ${normalizedData};
 
@@ -213,6 +539,7 @@ console.log(
   window.__SITE_DATA__
 );
 </script>
+<!-- WEBSITE_DATA_INJECTION_END -->
 `.trim()
 
 
@@ -400,11 +727,8 @@ console.log(
         /*
          * Stop the original form.
          */
-        event.preventDefault();
 
-        event.stopPropagation();
-
-        event.stopImmediatePropagation();
+        
 
 
         /*

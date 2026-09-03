@@ -75,7 +75,7 @@ export const templatesMeta: TemplateMeta[] = [
 
   {
     id: "8",
-    localImage: "/8.jpg",
+    localImage: "/8.png",
     title: "Startup Flow",
     description:
       "Modern startup website focused on clarity, conversion and growth.",
@@ -120,7 +120,7 @@ export const templatesMeta: TemplateMeta[] = [
     description:
       "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
-    category: "Entrepreneurs & Startups",
+    category: "Individuals",
   },
   {
     id: "15",
@@ -140,15 +140,7 @@ export const templatesMeta: TemplateMeta[] = [
     mood: "Landing page",
     category: "Entrepreneurs & Startups",
   },
-   {
-    id: "18",
-    localImage: "/18.png",
-    title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
-    mood: "Landing page",
-    category: "Entrepreneurs & Startups",
-  },
+   
    {
     id: "19",
     localImage: "/19.png",

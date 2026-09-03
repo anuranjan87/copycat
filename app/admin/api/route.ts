@@ -18,6 +18,10 @@ const IMAGE_EXTENSIONS = [
   ".bmp",
 ];
 
+/* =========================================================
+   HELPERS
+========================================================= */
+
 function isImage(filename: string) {
   return IMAGE_EXTENSIONS.includes(
     path.extname(filename).toLowerCase()
@@ -25,11 +29,16 @@ function isImage(filename: string) {
 }
 
 function safePublicPath(filename: string) {
-  const fullPath = path.resolve(PUBLIC_DIR, filename);
+  const fullPath = path.resolve(
+    PUBLIC_DIR,
+    filename
+  );
 
   if (
     fullPath !== PUBLIC_DIR &&
-    !fullPath.startsWith(PUBLIC_DIR + path.sep)
+    !fullPath.startsWith(
+      PUBLIC_DIR + path.sep
+    )
   ) {
     throw new Error("Invalid file path");
   }
@@ -38,11 +47,32 @@ function safePublicPath(filename: string) {
 }
 
 /* =========================================================
-   GET
-   ========================================================= */
+   SAFE IMAGE FILENAME
+========================================================= */
 
-export async function GET(request: NextRequest) {
-  const type = request.nextUrl.searchParams.get("type");
+function sanitizeFilename(filename: string) {
+  const extension = path.extname(filename).toLowerCase();
+
+  const basename = path
+    .basename(filename, path.extname(filename))
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `${basename || "image"}${extension}`;
+}
+
+/* =========================================================
+   GET
+========================================================= */
+
+export async function GET(
+  request: NextRequest
+) {
+  const type =
+    request.nextUrl.searchParams.get(
+      "type"
+    );
 
   try {
     /* -----------------------------------------------------
@@ -71,15 +101,32 @@ export async function GET(request: NextRequest) {
     ----------------------------------------------------- */
 
     if (type === "images") {
-      const files = await fs.readdir(PUBLIC_DIR, {
+      await fs.mkdir(PUBLIC_DIR, {
         recursive: true,
       });
 
+      const files = await fs.readdir(
+        PUBLIC_DIR,
+        {
+          recursive: true,
+        }
+      );
+
       const images = files
-        .filter((file) => isImage(file))
+        .filter((file) =>
+          isImage(file)
+        )
         .map((file) => ({
-          name: file.replace(/\\/g, "/"),
-          url: "/" + file.replace(/\\/g, "/"),
+          name: file.replace(
+            /\\/g,
+            "/"
+          ),
+          url:
+            "/" +
+            file.replace(
+              /\\/g,
+              "/"
+            ),
         }));
 
       return NextResponse.json({
@@ -93,82 +140,307 @@ export async function GET(request: NextRequest) {
         success: false,
         error: "Invalid type",
       },
-      { status: 400 }
+      {
+        status: 400,
+      }
     );
   } catch (error) {
-    console.error("GET admin API error:", error);
+    console.error(
+      "GET admin API error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
         error: "Failed to load data",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
 /* =========================================================
    POST
-   CREATE WEBSITE TEMPLATE
-   ========================================================= */
+   CREATE WEBSITE TEMPLATE / UPLOAD IMAGE
+========================================================= */
 
-export async function POST(request: NextRequest) {
-  const type = request.nextUrl.searchParams.get("type");
+export async function POST(
+  request: NextRequest
+) {
+  const type =
+    request.nextUrl.searchParams.get(
+      "type"
+    );
 
   try {
-    if (type !== "templates") {
-      return NextResponse.json(
+    /* -----------------------------------------------------
+       UPLOAD IMAGE
+    ----------------------------------------------------- */
+
+    if (type === "images") {
+      const formData =
+        await request.formData();
+
+      const file =
+        formData.get("file");
+
+      if (!(file instanceof File)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "No image file provided",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /* ---------------------------------------------------
+         VALIDATE MIME TYPE
+      --------------------------------------------------- */
+
+      if (
+        !file.type.startsWith(
+          "image/"
+        )
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Only image files are allowed",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /* ---------------------------------------------------
+         VALIDATE EXTENSION
+      --------------------------------------------------- */
+
+      const originalName =
+        file.name || "image";
+
+      if (!isImage(originalName)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Unsupported image format",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /* ---------------------------------------------------
+         LIMIT FILE SIZE
+         10 MB
+      --------------------------------------------------- */
+
+      const MAX_FILE_SIZE =
+        10 * 1024 * 1024;
+
+      if (
+        file.size >
+        MAX_FILE_SIZE
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Image must be smaller than 10 MB",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      /* ---------------------------------------------------
+         MAKE SURE PUBLIC EXISTS
+      --------------------------------------------------- */
+
+      await fs.mkdir(
+        PUBLIC_DIR,
         {
-          success: false,
-          error: "Invalid type",
-        },
-        { status: 400 }
+          recursive: true,
+        }
       );
+
+      /* ---------------------------------------------------
+         SANITIZE FILE NAME
+      --------------------------------------------------- */
+
+      const safeName =
+        sanitizeFilename(
+          originalName
+        );
+
+      let finalName =
+        safeName;
+
+      let filePath =
+        safePublicPath(
+          finalName
+        );
+
+      /* ---------------------------------------------------
+         DON'T OVERWRITE EXISTING FILES
+      --------------------------------------------------- */
+
+      let counter = 1;
+
+      while (true) {
+        try {
+          await fs.access(
+            filePath
+          );
+
+          const extension =
+            path.extname(
+              safeName
+            );
+
+          const basename =
+            path.basename(
+              safeName,
+              extension
+            );
+
+          finalName =
+            `${basename}-${counter}${extension}`;
+
+          filePath =
+            safePublicPath(
+              finalName
+            );
+
+          counter++;
+        } catch {
+          break;
+        }
+      }
+
+      /* ---------------------------------------------------
+         WRITE FILE
+      --------------------------------------------------- */
+
+      const bytes =
+        await file.arrayBuffer();
+
+      const buffer =
+        Buffer.from(bytes);
+
+      await fs.writeFile(
+        filePath,
+        buffer
+      );
+
+      /* ---------------------------------------------------
+         RETURN IMAGE DETAILS
+      --------------------------------------------------- */
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Image uploaded successfully",
+        image: {
+          name: finalName,
+          url: `/${finalName}`,
+        },
+      });
     }
 
-    const body = await request.json();
+    /* -----------------------------------------------------
+       CREATE WEBSITE TEMPLATE
+    ----------------------------------------------------- */
 
-    const code =
-      typeof body.code === "string"
-        ? body.code
-        : "";
+    if (type === "templates") {
+      const body =
+        await request.json();
 
-    const code_script =
-      typeof body.code_script === "string"
-        ? body.code_script
-        : "";
+      const code =
+        typeof body.code ===
+        "string"
+          ? body.code
+          : "";
 
-    const code_data =
-      typeof body.code_data === "string"
-        ? body.code_data
-        : "";
+      const code_script =
+        typeof body.code_script ===
+        "string"
+          ? body.code_script
+          : "";
 
-    const result = await sql`
-      INSERT INTO website_template
-        (code, code_script, code_data)
-      VALUES
-        (${code}, ${code_script}, ${code_data})
-      RETURNING
-        id,
-        code,
-        code_script,
-        code_data
-    `;
+      const code_data =
+        typeof body.code_data ===
+        "string"
+          ? body.code_data
+          : "";
 
-    return NextResponse.json({
-      success: true,
-      template: result[0],
-    });
-  } catch (error) {
-    console.error("CREATE template error:", error);
+      const result = await sql`
+        INSERT INTO website_template
+          (
+            code,
+            code_script,
+            code_data
+          )
+        VALUES
+          (
+            ${code},
+            ${code_script},
+            ${code_data}
+          )
+        RETURNING
+          id,
+          code,
+          code_script,
+          code_data
+      `;
+
+      return NextResponse.json({
+        success: true,
+        template:
+          result[0],
+      });
+    }
+
+    /* -----------------------------------------------------
+       INVALID TYPE
+    ----------------------------------------------------- */
 
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to create template",
+        error: "Invalid type",
       },
-      { status: 500 }
+      {
+        status: 400,
+      }
+    );
+  } catch (error) {
+    console.error(
+      "POST admin API error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Failed to process request",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
@@ -176,10 +448,15 @@ export async function POST(request: NextRequest) {
 /* =========================================================
    PATCH
    UPDATE TEMPLATE / RENAME IMAGE
-   ========================================================= */
+========================================================= */
 
-export async function PATCH(request: NextRequest) {
-  const type = request.nextUrl.searchParams.get("type");
+export async function PATCH(
+  request: NextRequest
+) {
+  const type =
+    request.nextUrl.searchParams.get(
+      "type"
+    );
 
   try {
     /* -----------------------------------------------------
@@ -187,32 +464,43 @@ export async function PATCH(request: NextRequest) {
     ----------------------------------------------------- */
 
     if (type === "templates") {
-      const body = await request.json();
+      const body =
+        await request.json();
 
-      const id = Number(body.id);
+      const id = Number(
+        body.id
+      );
 
-      if (!Number.isInteger(id)) {
+      if (
+        !Number.isInteger(id)
+      ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Invalid template ID",
+            error:
+              "Invalid template ID",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
       const code =
-        typeof body.code === "string"
+        typeof body.code ===
+        "string"
           ? body.code
           : "";
 
       const code_script =
-        typeof body.code_script === "string"
+        typeof body.code_script ===
+        "string"
           ? body.code_script
           : "";
 
       const code_data =
-        typeof body.code_data === "string"
+        typeof body.code_data ===
+        "string"
           ? body.code_data
           : "";
 
@@ -230,19 +518,25 @@ export async function PATCH(request: NextRequest) {
           code_data
       `;
 
-      if (result.length === 0) {
+      if (
+        result.length === 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Template not found",
+            error:
+              "Template not found",
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
 
       return NextResponse.json({
         success: true,
-        template: result[0],
+        template:
+          result[0],
       });
     }
 
@@ -251,77 +545,145 @@ export async function PATCH(request: NextRequest) {
     ----------------------------------------------------- */
 
     if (type === "images") {
-      const body = await request.json();
+      const body =
+        await request.json();
 
-      const oldName = body.oldName;
-      const newName = body.newName;
+      const oldName =
+        body.oldName;
+
+      const newName =
+        body.newName;
 
       if (
-        typeof oldName !== "string" ||
-        typeof newName !== "string" ||
+        typeof oldName !==
+          "string" ||
+        typeof newName !==
+          "string" ||
         !oldName.trim() ||
         !newName.trim()
       ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Old and new file names are required",
+            error:
+              "Old and new file names are required",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      if (!isImage(oldName) || !isImage(newName)) {
+      if (
+        !isImage(oldName) ||
+        !isImage(newName)
+      ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Only image files can be renamed",
+            error:
+              "Only image files can be renamed",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      const oldPath = safePublicPath(oldName);
-      const newPath = safePublicPath(newName);
+      const oldPath =
+        safePublicPath(
+          oldName
+        );
+
+      const newPath =
+        safePublicPath(
+          newName
+        );
+
+      /* ---------------------------------------------------
+         CHECK SOURCE EXISTS
+      --------------------------------------------------- */
 
       try {
-        await fs.access(newPath);
+        await fs.access(
+          oldPath
+        );
+      } catch {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Image not found",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      /* ---------------------------------------------------
+         CHECK DESTINATION
+      --------------------------------------------------- */
+
+      try {
+        await fs.access(
+          newPath
+        );
 
         return NextResponse.json(
           {
             success: false,
-            error: "A file with that name already exists",
+            error:
+              "A file with that name already exists",
           },
-          { status: 409 }
+          {
+            status: 409,
+          }
         );
       } catch {
-        // New file doesn't exist. Continue.
+        // Destination doesn't exist.
       }
 
-      await fs.rename(oldPath, newPath);
+      await fs.rename(
+        oldPath,
+        newPath
+      );
 
       return NextResponse.json({
         success: true,
-        message: "Image renamed successfully",
+        message:
+          "Image renamed successfully",
       });
     }
+
+    /* -----------------------------------------------------
+       INVALID TYPE
+    ----------------------------------------------------- */
 
     return NextResponse.json(
       {
         success: false,
         error: "Invalid type",
       },
-      { status: 400 }
+      {
+        status: 400,
+      }
     );
   } catch (error) {
-    console.error("PATCH admin API error:", error);
+    console.error(
+      "PATCH admin API error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to update",
+        error:
+          "Failed to update",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
@@ -329,10 +691,15 @@ export async function PATCH(request: NextRequest) {
 /* =========================================================
    DELETE
    DELETE TEMPLATE / DELETE IMAGE
-   ========================================================= */
+========================================================= */
 
-export async function DELETE(request: NextRequest) {
-  const type = request.nextUrl.searchParams.get("type");
+export async function DELETE(
+  request: NextRequest
+) {
+  const type =
+    request.nextUrl.searchParams.get(
+      "type"
+    );
 
   try {
     /* -----------------------------------------------------
@@ -341,16 +708,23 @@ export async function DELETE(request: NextRequest) {
 
     if (type === "templates") {
       const id = Number(
-        request.nextUrl.searchParams.get("id")
+        request.nextUrl.searchParams.get(
+          "id"
+        )
       );
 
-      if (!Number.isInteger(id)) {
+      if (
+        !Number.isInteger(id)
+      ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Invalid template ID",
+            error:
+              "Invalid template ID",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
@@ -360,19 +734,25 @@ export async function DELETE(request: NextRequest) {
         RETURNING id
       `;
 
-      if (result.length === 0) {
+      if (
+        result.length === 0
+      ) {
         return NextResponse.json(
           {
             success: false,
-            error: "Template not found",
+            error:
+              "Template not found",
           },
-          { status: 404 }
+          {
+            status: 404,
+          }
         );
       }
 
       return NextResponse.json({
         success: true,
-        message: "Template deleted successfully",
+        message:
+          "Template deleted successfully",
       });
     }
 
@@ -382,15 +762,20 @@ export async function DELETE(request: NextRequest) {
 
     if (type === "images") {
       const name =
-        request.nextUrl.searchParams.get("name");
+        request.nextUrl.searchParams.get(
+          "name"
+        );
 
       if (!name) {
         return NextResponse.json(
           {
             success: false,
-            error: "Image name is required",
+            error:
+              "Image name is required",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
@@ -398,38 +783,78 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "Only image files can be deleted",
+            error:
+              "Only image files can be deleted",
           },
-          { status: 400 }
+          {
+            status: 400,
+          }
         );
       }
 
-      const filePath = safePublicPath(name);
+      const filePath =
+        safePublicPath(name);
 
-      await fs.unlink(filePath);
+      /* ---------------------------------------------------
+         CHECK FILE EXISTS
+      --------------------------------------------------- */
+
+      try {
+        await fs.access(
+          filePath
+        );
+      } catch {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Image not found",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      await fs.unlink(
+        filePath
+      );
 
       return NextResponse.json({
         success: true,
-        message: "Image deleted successfully",
+        message:
+          "Image deleted successfully",
       });
     }
+
+    /* -----------------------------------------------------
+       INVALID TYPE
+    ----------------------------------------------------- */
 
     return NextResponse.json(
       {
         success: false,
         error: "Invalid type",
       },
-      { status: 400 }
+      {
+        status: 400,
+      }
     );
   } catch (error) {
-    console.error("DELETE admin API error:", error);
+    console.error(
+      "DELETE admin API error:",
+      error
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to delete",
+        error:
+          "Failed to delete",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

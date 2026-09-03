@@ -8,7 +8,7 @@ import {
   templatesMeta,
   CATEGORIES,
   type TemplateMeta,
-} from "@/lib/templates";
+} from "@/lib/categoryList";
 
 import { useSubscription } from "@/components/subscription-provider";
 
@@ -928,7 +928,7 @@ export default function Page({ params }: PageProps) {
       </CardContent>
     </Card>
   ) : (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-10 mt-0 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
       {filteredTemplates.map((template) => (
         <TemplateCard
           key={template.id}

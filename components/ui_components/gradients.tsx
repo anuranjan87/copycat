@@ -353,7 +353,7 @@ export default function Gradient() {
 { name: "Festive Cheer", code: "bg-gradient-to-r from-red-500 to-gold-400" },
 { name: "Season of Growth", code: "bg-gradient-to-r from-green-400 to-yellow-400" },
 { name: "Nature’s Palette", code: "bg-gradient-to-r from-green-500 to-brown-300" },
-{ name: "Starry Nights", code: "bg-gradient-to-r from-purple-400 to-blue-600" },
+{ name: "Helen Left...", code: "bg-gradient-to-r from-purple-400 to-blue-600" },
 
   
   ]

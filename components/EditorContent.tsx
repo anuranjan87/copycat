@@ -32,13 +32,20 @@ import dynamic from 'next/dynamic'
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
   let cleaned = raw
-    .replace(/^```[\w]*\n?/, '')
-    .replace(/```$/, '')
+    .replace(/^```(?:javascript|js|typescript|ts)?\s*/i, '')
+    .replace(/\s*```$/i, '')
     .trim()
 
-  if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+  // AI sometimes returns an object wrapped in an extra pair of braces.
+  // Keep complete `const data = {...};` declarations untouched.
+  if (
+    cleaned.startsWith('{') &&
+    cleaned.endsWith('}') &&
+    !/^(?:const|let|var)\s+data\s*=/.test(cleaned)
+  ) {
     cleaned = cleaned.slice(1, -1).trim()
   }
+
   return cleaned
 }
 
@@ -174,34 +181,166 @@ export default function New({ username, initialContent }: NewMobileProps) {
     localStorage.setItem('inputBarVisible', JSON.stringify(inputBarVisible))
   }, [inputBarVisible])
 
-  // Normalize the data editor content. The editor may contain either a
-  // complete declaration (`const data = {...};`) or only the object body.
+  // ------------------------------------------------------------
+  // DATA.JS HELPERS
+  // ------------------------------------------------------------
+  // The Data editor supports both an object body and a complete
+  // `const data = {...};` file. Helpful user comments are preserved.
+
+  /** Find a complete `const/let/var data = {` declaration. */
+  const findDataDeclaration = (source: string) => {
+    const declarationRegex = /(?:^|[\r\n])\s*(?:const|let|var)\s+data\s*=\s*\{/i
+    const match = source.match(declarationRegex)
+
+    if (!match || match.index === undefined) return null
+
+    const declarationText = match[0]
+    const braceOffset = declarationText.indexOf('{')
+    const openingBrace = match.index + braceOffset
+
+    if (braceOffset === -1 || openingBrace < 0) return null
+
+    return {
+      start: match.index,
+      openingBrace,
+    }
+  }
+
+  /** Find the matching closing brace while respecting strings/comments. */
+  const findMatchingClosingBrace = (source: string, openingBrace: number) => {
+    let depth = 0
+    let quote: '"' | "'" | '`' | null = null
+    let escaped = false
+    let inLineComment = false
+    let inBlockComment = false
+
+    for (let i = openingBrace; i < source.length; i++) {
+      const char = source[i]
+      const next = source[i + 1]
+
+      if (inLineComment) {
+        if (char === '\n') inLineComment = false
+        continue
+      }
+
+      if (inBlockComment) {
+        if (char === '*' && next === '/') {
+          inBlockComment = false
+          i++
+        }
+        continue
+      }
+
+      if (quote) {
+        if (escaped) {
+          escaped = false
+          continue
+        }
+
+        if (char === '\\') {
+          escaped = true
+          continue
+        }
+
+        if (char === quote) quote = null
+        continue
+      }
+
+      if (char === '/' && next === '/') {
+        inLineComment = true
+        i++
+        continue
+      }
+
+      if (char === '/' && next === '*') {
+        inBlockComment = true
+        i++
+        continue
+      }
+
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char
+        continue
+      }
+
+      if (char === '{') {
+        depth++
+        continue
+      }
+
+      if (char === '}') {
+        depth--
+        if (depth === 0) return i
+      }
+    }
+
+    return -1
+  }
+
+  /**
+   * Extract the editable data body from data.js.
+   *
+   * If comments exist before `const data`, they are kept in the editor.
+   * Comments inside the object are naturally preserved as well.
+   */
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
 
     const trimmed = dataString.trim()
+    if (!trimmed) return ''
 
-    const match = trimmed.match(
-      /^\s*(?:const|let|var)\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i
+    const declaration = findDataDeclaration(trimmed)
+
+    if (!declaration) {
+      // Already an object body. Keep every comment exactly as supplied.
+      return trimmed
+    }
+
+    const closingBrace = findMatchingClosingBrace(
+      trimmed,
+      declaration.openingBrace
     )
 
-    if (match) return match[1].trim()
+    // Never destroy incomplete user code.
+    if (closingBrace === -1) return trimmed
 
-    return trimmed
+    const prefix = trimmed.slice(0, declaration.start).trim()
+    const body = trimmed
+      .slice(declaration.openingBrace + 1, closingBrace)
+      .trim()
+
+    // Keep useful comments/documentation that appeared before `const data`.
+    // The declaration itself is removed because the editor represents the
+    // editable object body.
+    return [prefix, body].filter(Boolean).join('\n\n').trim()
   }
 
-  // Always produce exactly one valid `const data = {...};` declaration.
+  /**
+   * Build one executable `const data = {...};` declaration for preview,
+   * publishing, and download. If the editor contains a full declaration,
+   * it is normalized without duplicating `const data`.
+   */
   const buildDataScript = (dataString: string) => {
     const trimmed = dataString.trim()
 
     if (!trimmed) return 'const data = {};'
 
-    // If someone pasted a complete declaration into the editor, use it as-is.
-    if (/^(?:const|let|var)\s+data\s*=/.test(trimmed)) {
-      return trimmed
+    const declaration = findDataDeclaration(trimmed)
+
+    if (declaration) {
+      const closingBrace = findMatchingClosingBrace(
+        trimmed,
+        declaration.openingBrace
+      )
+
+      if (closingBrace !== -1) {
+        // Already a complete declaration. Preserve it exactly, including
+        // comments before and inside the data object.
+        return trimmed.slice(declaration.start).trim()
+      }
     }
 
-    // Otherwise the editor contains the object body.
+    // Object body (including comments) -> complete declaration.
     return `const data = {\n${trimmed}\n};`
   }
 

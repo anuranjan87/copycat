@@ -41,6 +41,13 @@ export default function AdminPage() {
   const [newImageName, setNewImageName] =
     useState("");
 
+  // Image upload
+  const [uploadingImage, setUploadingImage] =
+    useState(false);
+
+  const [imageInputKey, setImageInputKey] =
+    useState(0);
+
   // Editor values
   const [code, setCode] = useState("");
   const [codeScript, setCodeScript] = useState("");
@@ -106,6 +113,233 @@ export default function AdminPage() {
     }
   }
 
+  /* =====================================================
+     UPLOAD IMAGE FROM FILE INPUT
+  ===================================================== */
+
+  async function uploadImage(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+
+      setImageInputKey(
+        (key) => key + 1
+      );
+
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      const formData = new FormData();
+
+      formData.append("file", file);
+
+      const response = await fetch(
+        "/admin/api?type=images",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Failed to upload image"
+        );
+      }
+
+      // Reset file input
+      setImageInputKey(
+        (key) => key + 1
+      );
+
+      // Reload images
+      await loadImages();
+    } catch (error: any) {
+      console.error(error);
+
+      alert(
+        error.message ||
+          "Failed to upload image"
+      );
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  /* =====================================================
+     UPLOAD IMAGE FROM CLIPBOARD
+  ===================================================== */
+
+  async function uploadPastedImage(
+    file: File
+  ) {
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      const formData = new FormData();
+
+      /*
+       * Clipboard images often have names such as
+       * "image.png" or no useful filename at all.
+       *
+       * Create a unique filename so the server receives
+       * the pasted image as a normal uploaded file.
+       */
+
+      let extension =
+        file.type
+          .split("/")
+          .pop()
+          ?.toLowerCase() || "png";
+
+      if (extension === "jpeg") {
+        extension = "jpg";
+      }
+
+      const pastedFile = new File(
+        [file],
+        `pasted-image-${Date.now()}.${extension}`,
+        {
+          type: file.type,
+        }
+      );
+
+      formData.append(
+        "file",
+        pastedFile
+      );
+
+      const response = await fetch(
+        "/admin/api?type=images",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Failed to upload pasted image"
+        );
+      }
+
+      await loadImages();
+    } catch (error: any) {
+      console.error(error);
+
+      alert(
+        error.message ||
+          "Failed to upload pasted image"
+      );
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  /* =====================================================
+     PASTE IMAGE FROM CLIPBOARD
+  ===================================================== */
+
+  useEffect(() => {
+    if (tab !== "images") {
+      return;
+    }
+
+    function handlePaste(
+      event: ClipboardEvent
+    ) {
+      const target =
+        event.target as HTMLElement | null;
+
+      /*
+       * Do not intercept paste while the user is
+       * typing inside an input, textarea, or
+       * contenteditable element.
+       */
+
+      if (target) {
+        const tagName =
+          target.tagName.toLowerCase();
+
+        if (
+          tagName === "input" ||
+          tagName === "textarea" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+
+      const items =
+        event.clipboardData?.items;
+
+      if (!items) {
+        return;
+      }
+
+      for (const item of items) {
+        if (item.kind !== "file") {
+          continue;
+        }
+
+        if (
+          !item.type.startsWith("image/")
+        ) {
+          continue;
+        }
+
+        const file =
+          item.getAsFile();
+
+        if (!file) {
+          continue;
+        }
+
+        event.preventDefault();
+
+        void uploadPastedImage(file);
+
+        break;
+      }
+    }
+
+    window.addEventListener(
+      "paste",
+      handlePaste
+    );
+
+    return () => {
+      window.removeEventListener(
+        "paste",
+        handlePaste
+      );
+    };
+  }, [tab]);
+
+  /* =====================================================
+     LOAD DATA WHEN TAB CHANGES
+  ===================================================== */
+
   useEffect(() => {
     if (tab === "templates") {
       loadTemplates();
@@ -125,7 +359,8 @@ export default function AdminPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             code,
@@ -135,7 +370,8 @@ export default function AdminPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error);
@@ -145,7 +381,10 @@ export default function AdminPage() {
 
       await loadTemplates();
     } catch (error: any) {
-      alert(error.message || "Failed to create template");
+      alert(
+        error.message ||
+          "Failed to create template"
+      );
     }
   }
 
@@ -154,7 +393,9 @@ export default function AdminPage() {
   ===================================================== */
 
   async function updateTemplate() {
-    if (!editingTemplate) return;
+    if (!editingTemplate) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -162,7 +403,8 @@ export default function AdminPage() {
         {
           method: "PATCH",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             id: editingTemplate.id,
@@ -173,7 +415,8 @@ export default function AdminPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error);
@@ -183,7 +426,10 @@ export default function AdminPage() {
 
       await loadTemplates();
     } catch (error: any) {
-      alert(error.message || "Failed to update template");
+      alert(
+        error.message ||
+          "Failed to update template"
+      );
     }
   }
 
@@ -191,12 +437,17 @@ export default function AdminPage() {
      DELETE TEMPLATE
   ===================================================== */
 
-  async function deleteTemplate(id: number) {
-    const confirmed = window.confirm(
-      `Delete template #${id}?`
-    );
+  async function deleteTemplate(
+    id: number
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete template #${id}?`
+      );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -206,7 +457,8 @@ export default function AdminPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error);
@@ -214,7 +466,10 @@ export default function AdminPage() {
 
       await loadTemplates();
     } catch (error: any) {
-      alert(error.message || "Failed to delete template");
+      alert(
+        error.message ||
+          "Failed to delete template"
+      );
     }
   }
 
@@ -222,13 +477,23 @@ export default function AdminPage() {
      OPEN EDITOR
   ===================================================== */
 
-  function openEditor(template: Template) {
+  function openEditor(
+    template: Template
+  ) {
     setEditingTemplate(template);
     setShowCreate(false);
 
-    setCode(template.code || "");
-    setCodeScript(template.code_script || "");
-    setCodeData(template.code_data || "");
+    setCode(
+      template.code || ""
+    );
+
+    setCodeScript(
+      template.code_script || ""
+    );
+
+    setCodeData(
+      template.code_data || ""
+    );
   }
 
   /* =====================================================
@@ -262,7 +527,9 @@ export default function AdminPage() {
   ===================================================== */
 
   async function renameImage() {
-    if (!editingImage) return;
+    if (!editingImage) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -270,16 +537,19 @@ export default function AdminPage() {
         {
           method: "PATCH",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
-            oldName: editingImage.name,
+            oldName:
+              editingImage.name,
             newName: newImageName,
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error);
@@ -290,7 +560,10 @@ export default function AdminPage() {
 
       await loadImages();
     } catch (error: any) {
-      alert(error.message || "Failed to rename image");
+      alert(
+        error.message ||
+          "Failed to rename image"
+      );
     }
   }
 
@@ -298,12 +571,17 @@ export default function AdminPage() {
      DELETE IMAGE
   ===================================================== */
 
-  async function deleteImage(name: string) {
-    const confirmed = window.confirm(
-      `Delete "${name}"?`
-    );
+  async function deleteImage(
+    name: string
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete "${name}"?`
+      );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -315,7 +593,8 @@ export default function AdminPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error);
@@ -323,7 +602,22 @@ export default function AdminPage() {
 
       await loadImages();
     } catch (error: any) {
-      alert(error.message || "Failed to delete image");
+      alert(
+        error.message ||
+          "Failed to delete image"
+      );
+    }
+  }
+
+  /* =====================================================
+     REFRESH CURRENT TAB
+  ===================================================== */
+
+  function refreshCurrentTab() {
+    if (tab === "templates") {
+      loadTemplates();
+    } else {
+      loadImages();
     }
   }
 
@@ -348,13 +642,7 @@ export default function AdminPage() {
           </div>
 
           <button
-            onClick={() => {
-              if (tab === "templates") {
-                loadTemplates();
-              } else {
-                loadImages();
-              }
-            }}
+            onClick={refreshCurrentTab}
             className="rounded-lg border border-[#ddd] px-4 py-2 text-[13px] font-medium hover:bg-[#f7f7f7]"
           >
             Refresh
@@ -372,7 +660,9 @@ export default function AdminPage() {
         <div className="mx-auto flex max-w-[1400px] gap-8 px-6">
 
           <button
-            onClick={() => setTab("templates")}
+            onClick={() =>
+              setTab("templates")
+            }
             className={`border-b-2 py-4 text-[14px] font-medium ${
               tab === "templates"
                 ? "border-black text-black"
@@ -383,7 +673,9 @@ export default function AdminPage() {
           </button>
 
           <button
-            onClick={() => setTab("images")}
+            onClick={() =>
+              setTab("images")
+            }
             className={`border-b-2 py-4 text-[14px] font-medium ${
               tab === "images"
                 ? "border-black text-black"
@@ -394,7 +686,6 @@ export default function AdminPage() {
           </button>
 
         </div>
-
       </div>
 
       {/* =================================================
@@ -477,96 +768,115 @@ export default function AdminPage() {
                   )}
 
                   {!loading &&
-                    templates.map((template) => (
-                      <tr
-                        key={template.id}
-                        className="border-b border-[#eee] last:border-0 hover:bg-[#fafafa]"
-                      >
+                    templates.map(
+                      (template) => (
+                        <tr
+                          key={template.id}
+                          className="border-b border-[#eee] last:border-0 hover:bg-[#fafafa]"
+                        >
 
-                        {/* ID */}
+                          {/* ID */}
 
-                        <td className="px-4 py-4 font-mono text-[13px]">
-                          {template.id}
-                        </td>
+                          <td className="px-4 py-4 font-mono text-[13px]">
+                            {template.id}
+                          </td>
 
-                        {/* CODE */}
+                          {/* CODE */}
 
-                        <td className="px-4 py-4">
+                          <td className="px-4 py-4">
 
-                          <div
-                            title={template.code}
-                            className="truncate font-mono text-[12px] text-[#555]"
-                          >
-                            {template.code || "NULL"}
-                          </div>
-
-                        </td>
-
-                        {/* SCRIPT */}
-
-                        <td className="px-4 py-4">
-
-                          <div
-                            title={template.code_script || ""}
-                            className="truncate font-mono text-[12px] text-[#555]"
-                          >
-                            {template.code_script || "NULL"}
-                          </div>
-
-                        </td>
-
-                        {/* DATA */}
-
-                        <td className="px-4 py-4">
-
-                          <div
-                            title={template.code_data || ""}
-                            className="truncate font-mono text-[12px] text-[#555]"
-                          >
-                            {template.code_data || "NULL"}
-                          </div>
-
-                        </td>
-
-                        {/* ACTIONS */}
-
-                        <td className="px-4 py-4">
-
-                          <div className="flex justify-end gap-2">
-
-                            <button
-                              onClick={() =>
-                                setPreviewTemplate(template)
+                            <div
+                              title={
+                                template.code
                               }
-                              className="rounded-md border border-[#ddd] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#f5f5f5]"
+                              className="truncate font-mono text-[12px] text-[#555]"
                             >
-                              Preview
-                            </button>
+                              {template.code ||
+                                "NULL"}
+                            </div>
 
-                            <button
-                              onClick={() =>
-                                openEditor(template)
+                          </td>
+
+                          {/* SCRIPT */}
+
+                          <td className="px-4 py-4">
+
+                            <div
+                              title={
+                                template.code_script ||
+                                ""
                               }
-                              className="rounded-md border border-[#ddd] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#f5f5f5]"
+                              className="truncate font-mono text-[12px] text-[#555]"
                             >
-                              Edit
-                            </button>
+                              {template.code_script ||
+                                "NULL"}
+                            </div>
 
-                            <button
-                              onClick={() =>
-                                deleteTemplate(template.id)
+                          </td>
+
+                          {/* DATA */}
+
+                          <td className="px-4 py-4">
+
+                            <div
+                              title={
+                                template.code_data ||
+                                ""
                               }
-                              className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50"
+                              className="truncate font-mono text-[12px] text-[#555]"
                             >
-                              Delete
-                            </button>
+                              {template.code_data ||
+                                "NULL"}
+                            </div>
 
-                          </div>
+                          </td>
 
-                        </td>
+                          {/* ACTIONS */}
 
-                      </tr>
-                    ))}
+                          <td className="px-4 py-4">
+
+                            <div className="flex justify-end gap-2">
+
+                              <button
+                                onClick={() =>
+                                  setPreviewTemplate(
+                                    template
+                                  )
+                                }
+                                className="rounded-md border border-[#ddd] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#f5f5f5]"
+                              >
+                                Preview
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  openEditor(
+                                    template
+                                  )
+                                }
+                                className="rounded-md border border-[#ddd] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#f5f5f5]"
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  deleteTemplate(
+                                    template.id
+                                  )
+                                }
+                                className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50"
+                              >
+                                Delete
+                              </button>
+
+                            </div>
+
+                          </td>
+
+                        </tr>
+                      )
+                    )}
 
                 </tbody>
 
@@ -584,91 +894,196 @@ export default function AdminPage() {
         {tab === "images" && (
           <>
 
-            <div className="mb-6">
+            {/* IMAGE HEADER */}
 
-              <h2 className="text-[24px] font-semibold tracking-tight">
-                Images
-              </h2>
+            <div className="mb-6 flex items-end justify-between">
 
-              <p className="mt-1 text-[13px] text-[#888]">
-                Images inside your public folder
+              <div>
+                <h2 className="text-[24px] font-semibold tracking-tight">
+                  Images
+                </h2>
+
+                <p className="mt-1 text-[13px] text-[#888]">
+                  Images inside your public folder
+                </p>
+              </div>
+
+              {/* UPLOAD */}
+
+              <div>
+
+                <input
+                  key={imageInputKey}
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={uploadImage}
+                  className="hidden"
+                />
+
+                <div className="flex items-center gap-2">
+
+                  <label
+                    htmlFor="image-upload"
+                    className={`inline-flex cursor-pointer items-center rounded-lg bg-black px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#222] ${
+                      uploadingImage
+                        ? "pointer-events-none opacity-60"
+                        : ""
+                    }`}
+                  >
+                    {uploadingImage
+                      ? "Uploading..."
+                      : "+ Upload image"}
+                  </label>
+
+                  <div
+                    className={`rounded-lg border border-[#ddd] bg-[#fafafa] px-3 py-2.5 text-[12px] text-[#777] ${
+                      uploadingImage
+                        ? "opacity-60"
+                        : ""
+                    }`}
+                  >
+                    or{" "}
+                    <span className="font-medium text-[#333]">
+                      Ctrl + V
+                    </span>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* PASTE DROP AREA */}
+
+            <div className="mb-6 rounded-xl border border-dashed border-[#ddd] bg-[#fafafa] px-5 py-4 text-center">
+
+              <p className="text-[13px] font-medium text-[#444]">
+                Copy an image and press{" "}
+                <span className="font-semibold text-black">
+                  Ctrl + V
+                </span>{" "}
+                to upload it
+              </p>
+
+              <p className="mt-1 text-[11px] text-[#999]">
+                You can paste screenshots or copied images directly from your clipboard.
               </p>
 
             </div>
 
+            {/* IMAGE GRID */}
+
             {loading ? (
+
               <div className="py-20 text-center text-[13px] text-[#888]">
                 Loading...
               </div>
+
+            ) : images.length === 0 ? (
+
+              <div className="rounded-xl border border-dashed border-[#ccc] py-20 text-center">
+
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[#f5f5f5] text-xl">
+                  ↑
+                </div>
+
+                <p className="text-[14px] font-medium">
+                  No images yet
+                </p>
+
+                <p className="mt-1 text-[12px] text-[#888]">
+                  Upload an image or paste one with Ctrl + V.
+                </p>
+
+              </div>
+
             ) : (
 
               <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
 
-                {images.map((image) => (
+                {images.map(
+                  (image) => (
 
-                  <div
-                    key={image.name}
-                    className="overflow-hidden rounded-xl border border-[#ddd] bg-white"
-                  >
+                    <div
+                      key={image.name}
+                      className="overflow-hidden rounded-xl border border-[#ddd] bg-white"
+                    >
 
-                    <div className="flex h-44 items-center justify-center bg-[#f7f7f7] p-5">
+                      {/* IMAGE */}
 
-                      <img
-                        src={image.url}
-                        alt={image.name}
-                        className="max-h-full max-w-full object-contain"
-                      />
+                      <div className="flex h-44 items-center justify-center bg-[#f7f7f7] p-5">
 
-                    </div>
+                        <img
+                          src={image.url}
+                          alt={image.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
 
-                    <div className="border-t border-[#eee] p-3">
+                      </div>
 
-                      <p
-                        title={image.name}
-                        className="truncate font-mono text-[11px]"
-                      >
-                        {image.name}
-                      </p>
+                      {/* IMAGE INFO */}
 
-                      <div className="mt-3 flex gap-2">
+                      <div className="border-t border-[#eee] p-3">
 
-                        <button
-                          onClick={() => {
-                            setEditingImage(image);
-
-                            const dot =
-                              image.name.lastIndexOf(".");
-
-                            setNewImageName(
-                              dot === -1
-                                ? image.name
-                                : image.name.substring(
-                                    0,
-                                    dot
-                                  )
-                            );
-                          }}
-                          className="flex-1 rounded-md border border-[#ddd] px-2 py-1.5 text-[11px] hover:bg-[#f7f7f7]"
+                        <p
+                          title={image.name}
+                          className="truncate font-mono text-[11px]"
                         >
-                          Rename
-                        </button>
+                          {image.name}
+                        </p>
 
-                        <button
-                          onClick={() =>
-                            deleteImage(image.name)
-                          }
-                          className="rounded-md border border-red-200 px-2 py-1.5 text-[11px] text-red-600 hover:bg-red-50"
-                        >
-                          Delete
-                        </button>
+                        {/* ACTIONS */}
+
+                        <div className="mt-3 flex gap-2">
+
+                          <button
+                            onClick={() => {
+
+                              setEditingImage(
+                                image
+                              );
+
+                              const dot =
+                                image.name.lastIndexOf(
+                                  "."
+                                );
+
+                              setNewImageName(
+                                dot === -1
+                                  ? image.name
+                                  : image.name.substring(
+                                      0,
+                                      dot
+                                    )
+                              );
+
+                            }}
+                            className="flex-1 rounded-md border border-[#ddd] px-2 py-1.5 text-[11px] hover:bg-[#f7f7f7]"
+                          >
+                            Rename
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              deleteImage(
+                                image.name
+                              )
+                            }
+                            className="rounded-md border border-red-200 px-2 py-1.5 text-[11px] text-red-600 hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+
+                        </div>
 
                       </div>
 
                     </div>
 
-                  </div>
-
-                ))}
+                  )
+                )}
 
               </div>
 
@@ -686,7 +1101,9 @@ export default function AdminPage() {
       {previewTemplate && (
         <PreviewModal
           template={previewTemplate}
-          onClose={() => setPreviewTemplate(null)}
+          onClose={() =>
+            setPreviewTemplate(null)
+          }
         />
       )}
 
@@ -694,13 +1111,14 @@ export default function AdminPage() {
           EDIT / CREATE POPUP
       ================================================= */}
 
-      {(editingTemplate || showCreate) && (
+      {(editingTemplate ||
+        showCreate) && (
 
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-5">
 
           <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-            {/* Header */}
+            {/* HEADER */}
 
             <div className="flex items-center justify-between border-b border-[#ddd] px-6 py-4">
 
@@ -729,7 +1147,7 @@ export default function AdminPage() {
 
             </div>
 
-            {/* Editors */}
+            {/* EDITORS */}
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
 
@@ -756,7 +1174,7 @@ export default function AdminPage() {
 
             </div>
 
-            {/* Footer */}
+            {/* FOOTER */}
 
             <div className="flex justify-end gap-2 border-t border-[#ddd] px-6 py-4">
 
@@ -810,9 +1228,12 @@ export default function AdminPage() {
               autoFocus
               value={newImageName}
               onChange={(e) =>
-                setNewImageName(e.target.value)
+                setNewImageName(
+                  e.target.value
+                )
               }
               onKeyDown={(e) => {
+
                 if (e.key === "Enter") {
                   renameImage();
                 }
@@ -820,6 +1241,7 @@ export default function AdminPage() {
                 if (e.key === "Escape") {
                   setEditingImage(null);
                 }
+
               }}
               className="mt-5 w-full rounded-lg border border-[#ddd] px-3 py-2.5 font-mono text-[13px] outline-none focus:border-black"
             />
@@ -866,13 +1288,16 @@ function PreviewModal({
   onClose: () => void;
 }) {
   const [device, setDevice] =
-    useState<"desktop" | "mobile">("desktop");
+    useState<"desktop" | "mobile">(
+      "desktop"
+    );
 
-  const previewCode = buildPreviewCode(
-    template.code,
-    template.code_script,
-    template.code_data
-  );
+  const previewCode =
+    buildPreviewCode(
+      template.code,
+      template.code_script,
+      template.code_data
+    );
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
@@ -892,6 +1317,7 @@ function PreviewModal({
             </div>
 
             <div>
+
               <p className="text-[13px] font-semibold">
                 Template Preview
               </p>
@@ -899,16 +1325,19 @@ function PreviewModal({
               <p className="text-[10px] text-[#888]">
                 ID #{template.id}
               </p>
+
             </div>
 
           </div>
 
-          {/* Device selector */}
+          {/* DEVICE SELECTOR */}
 
           <div className="flex items-center gap-1 rounded-lg border border-[#ddd] bg-[#fafafa] p-1">
 
             <button
-              onClick={() => setDevice("desktop")}
+              onClick={() =>
+                setDevice("desktop")
+              }
               className={`rounded-md px-3 py-1.5 text-[11px] ${
                 device === "desktop"
                   ? "bg-white font-medium shadow-sm"
@@ -919,7 +1348,9 @@ function PreviewModal({
             </button>
 
             <button
-              onClick={() => setDevice("mobile")}
+              onClick={() =>
+                setDevice("mobile")
+              }
               className={`rounded-md px-3 py-1.5 text-[11px] ${
                 device === "mobile"
                   ? "bg-white font-medium shadow-sm"
@@ -973,9 +1404,6 @@ function PreviewModal({
 
 /* =========================================================
    BUILD PREVIEW CODE
-
-   This follows the same idea as the example you provided:
-   HTML + data injection + script injection.
 ========================================================= */
 
 function buildPreviewCode(
@@ -985,25 +1413,14 @@ function buildPreviewCode(
 ) {
   let finalHtml = html || "";
 
-  const dataScript = buildDataScript(data || "");
+  const dataScript =
+    buildDataScript(
+      data || ""
+    );
 
-  /*
-   ---------------------------------------------------------
-   DATA.JS
-   ---------------------------------------------------------
-
-   Supports both:
-
-   const data = {
-      ...
-   };
-
-   AND:
-
-   {
-      ...
-   }
-  */
+  /* =======================================================
+     DATA.JS
+  ======================================================= */
 
   const dataInjection = `
 <!-- ADMIN_DATA_INJECTION_START -->
@@ -1013,59 +1430,63 @@ ${dataScript}
 <!-- ADMIN_DATA_INJECTION_END -->
 `;
 
-  /*
-   Remove a previous injection if the HTML already contains
-   one from an earlier preview.
-  */
+  /* =======================================================
+     REMOVE PREVIOUS DATA INJECTION
+  ======================================================= */
 
   finalHtml = finalHtml.replace(
     /\s*<!-- ADMIN_DATA_INJECTION_START -->[\s\S]*?<!-- ADMIN_DATA_INJECTION_END -->\s*/gi,
     "\n"
   );
 
-  /*
-   If the HTML has a Babel script, inject data immediately
-   before it.
-
-   This follows the same approach as the example code.
-  */
+  /* =======================================================
+     INJECT DATA BEFORE BABEL
+  ======================================================= */
 
   const babelRegex =
     /<script\s+type=["']text\/babel["']\s*>/i;
 
   if (babelRegex.test(finalHtml)) {
-    finalHtml = finalHtml.replace(
-      babelRegex,
-      `${dataInjection}<script type="text/babel">`
-    );
+
+    finalHtml =
+      finalHtml.replace(
+        babelRegex,
+        `${dataInjection}<script type="text/babel">`
+      );
+
   } else {
-    /*
-     Otherwise put data before </head>.
-    */
+
+    /* =====================================================
+       OTHERWISE INJECT BEFORE HEAD
+    ===================================================== */
 
     if (/<\/head>/i.test(finalHtml)) {
-      finalHtml = finalHtml.replace(
-        /<\/head>/i,
-        `${dataInjection}\n</head>`
-      );
-    } else {
+
       finalHtml =
-        dataInjection + finalHtml;
+        finalHtml.replace(
+          /<\/head>/i,
+          `${dataInjection}\n</head>`
+        );
+
+    } else {
+
+      finalHtml =
+        dataInjection +
+        finalHtml;
+
     }
+
   }
 
-  /*
-   ---------------------------------------------------------
-   CODE SCRIPT
-   ---------------------------------------------------------
+  /* =======================================================
+     CODE SCRIPT
+  ======================================================= */
 
-   Your database has a separate code_script column.
+  if (
+    script &&
+    script.trim()
+  ) {
 
-   We append it to the website as an actual script so that
-   the preview behaves like the real website.
-  */
-
-  if (script && script.trim()) {
     const scriptInjection = `
 <!-- ADMIN_SCRIPT_INJECTION_START -->
 <script>
@@ -1074,19 +1495,35 @@ ${script}
 <!-- ADMIN_SCRIPT_INJECTION_END -->
 `;
 
-    finalHtml = finalHtml.replace(
-      /\s*<!-- ADMIN_SCRIPT_INJECTION_START -->[\s\S]*?<!-- ADMIN_SCRIPT_INJECTION_END -->\s*/gi,
-      "\n"
-    );
+    /* =====================================================
+       REMOVE PREVIOUS SCRIPT
+    ===================================================== */
+
+    finalHtml =
+      finalHtml.replace(
+        /\s*<!-- ADMIN_SCRIPT_INJECTION_START -->[\s\S]*?<!-- ADMIN_SCRIPT_INJECTION_END -->\s*/gi,
+        "\n"
+      );
+
+    /* =====================================================
+       INJECT BEFORE BODY
+    ===================================================== */
 
     if (/<\/body>/i.test(finalHtml)) {
-      finalHtml = finalHtml.replace(
-        /<\/body>/i,
-        `${scriptInjection}\n</body>`
-      );
+
+      finalHtml =
+        finalHtml.replace(
+          /<\/body>/i,
+          `${scriptInjection}\n</body>`
+        );
+
     } else {
-      finalHtml += scriptInjection;
+
+      finalHtml +=
+        scriptInjection;
+
     }
+
   }
 
   return finalHtml;
@@ -1099,21 +1536,16 @@ ${script}
 function buildDataScript(
   dataString: string
 ) {
-  const trimmed = dataString.trim();
+  const trimmed =
+    dataString.trim();
 
   if (!trimmed) {
     return "const data = {};";
   }
 
-  /*
-   User already supplied:
-
-   const data = {
-      ...
-   };
-
-   Keep it.
-  */
+  /* =======================================================
+     ALREADY DECLARED DATA
+  ======================================================= */
 
   if (
     /^(?:const|let|var)\s+data\s*=/.test(
@@ -1123,21 +1555,9 @@ function buildDataScript(
     return trimmed;
   }
 
-  /*
-   Otherwise treat the content as the object body.
-
-   Example:
-
-   {
-     title: "Hello"
-   }
-
-   becomes:
-
-   const data = {
-     title: "Hello"
-   };
-  */
+  /* =======================================================
+     OBJECT
+  ======================================================= */
 
   if (
     trimmed.startsWith("{") &&
@@ -1145,6 +1565,10 @@ function buildDataScript(
   ) {
     return `const data = ${trimmed};`;
   }
+
+  /* =======================================================
+     OBJECT BODY
+  ======================================================= */
 
   return `const data = {\n${trimmed}\n};`;
 }
@@ -1185,7 +1609,9 @@ function CodeEditor({
       <textarea
         value={value}
         onChange={(e) =>
-          onChange(e.target.value)
+          onChange(
+            e.target.value
+          )
         }
         spellCheck={false}
         className="min-h-0 flex-1 resize-none bg-[#fcfcfc] p-4 font-mono text-[12px] leading-6 outline-none"
