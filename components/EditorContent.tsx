@@ -28,6 +28,7 @@ import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from '@/lib
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
+import { CodeEditor } from '@/components/code-editor'
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -345,37 +346,74 @@ export default function New({ username, initialContent }: NewMobileProps) {
   }
 
   // Inject data consistently for iframe preview, full preview and download.
-  const injectDataIntoHtml = (html: string, dataString: string) => {
-    const dataScript = buildDataScript(dataString)
+ const injectDataIntoHtml = useCallback(
+  (html: string, data: string) => {
+    if (!html) {
+      return html
+    }
 
-    const injection = `<!-- WEBSITE_DATA_INJECTION_START -->
+    const safeData =
+      typeof data === 'string'
+        ? data.trim()
+        : ''
+
+    // Remove an existing data script first.
+    // This prevents duplicate var data declarations.
+    let cleanHtml = html
+      .replace(
+        /<script>\s*(?:var|const|let)\s+data\s*=\s*\{[\s\S]*?\}\s*;?\s*<\/script>\s*/i,
+        ''
+      )
+      .trim()
+
+    // ----------------------------------------------------------
+    // Build the exact data block we want.
+    // ----------------------------------------------------------
+
+    const dataBlock = `
 <script>
-${dataScript}
+var data={
+${safeData}
+}
 </script>
-<!-- WEBSITE_DATA_INJECTION_END -->
 `
 
-    // Remove an injection previously created by this component.
-    const withoutPreviousInjection = html.replace(
-      /\s*<!-- WEBSITE_DATA_INJECTION_START -->[\s\S]*?<!-- WEBSITE_DATA_INJECTION_END -->\s*/gi,
-      '\n'
+    // ----------------------------------------------------------
+    // Insert data BEFORE the Babel script.
+    // ----------------------------------------------------------
+
+    const babelScriptMatch = cleanHtml.match(
+      /<script\b[^>]*type=["']text\/babel["'][^>]*>/i
     )
 
-    const babelScriptRegex = /<script\s+type=["']text\/babel["']\s*>/i
-
-    if (babelScriptRegex.test(withoutPreviousInjection)) {
-      return withoutPreviousInjection.replace(
-        babelScriptRegex,
-        `${injection}<script type="text/babel">`
+    if (babelScriptMatch) {
+      return cleanHtml.replace(
+        babelScriptMatch[0],
+        `${dataBlock}
+${babelScriptMatch[0]}`
       )
     }
 
-    // Fallback for HTML without a Babel script.
-    return withoutPreviousInjection.replace(
-      /<\/body>/i,
-      `${injection}</body>`
-    )
-  }
+    // ----------------------------------------------------------
+    // If there is no Babel script, put data before </body>.
+    // ----------------------------------------------------------
+
+    if (cleanHtml.includes('</body>')) {
+      return cleanHtml.replace(
+        '</body>',
+        `${dataBlock}
+</body>`
+      )
+    }
+
+    // ----------------------------------------------------------
+    // Final fallback.
+    // ----------------------------------------------------------
+    return `${dataBlock}
+${cleanHtml}`
+  },
+  []
+)
 
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -441,6 +479,29 @@ ${dataScript}
 const finalCode = injectDataIntoHtml(savedHtml, savedData)
 
   const [devMode, setDevMode] = useState(false)
+  const [showEditLayoutMessage, setShowEditLayoutMessage] = useState(false)
+  const [isLayoutEditor, setIsLayoutEditor] = useState(false)
+
+  // When Dev Mode is enabled:
+  // - hide the AI input bar
+  // - show the Edit Layout button
+  // - show its helper message for 3 seconds
+  useEffect(() => {
+    if (!devMode) {
+      setShowEditLayoutMessage(false)
+      setInputBarVisible(true)
+      return
+    }
+
+    setInputBarVisible(false)
+    setShowEditLayoutMessage(true)
+
+    const timer = setTimeout(() => {
+      setShowEditLayoutMessage(false)
+    }, 3000)
+
+    return () => clearTimeout(timer)
+  }, [devMode])
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
@@ -541,8 +602,8 @@ const finalCode = injectDataIntoHtml(savedHtml, savedData)
 
   const handleDownload = () => {
     const fullHtml = injectDataIntoHtml(
-      savedHtml,
-      savedData
+      draftHtml,
+      draftData
     )
 
     const blob = new Blob([fullHtml], { type: 'text/html' })
@@ -673,6 +734,26 @@ if (!confirm(message)) return;
     )
   }
 
+  // When Edit Layout is clicked, replace the entire New UI
+  // FIX: pass disableTemplateLoad={true} to prevent reloading the original template from URL
+  if (isLayoutEditor) {
+    return (
+      <div className="flex h-screen bg-[#030712] relative">
+        <main className="flex-1">
+          <CodeEditor
+            username={username}
+            initialContent={{
+              html: draftHtml,
+              script: '',
+              data: draftData,
+            }}
+            disableTemplateLoad={true}
+          />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200 overflow-hidden">
 
@@ -695,6 +776,25 @@ if (!confirm(message)) return;
           }
           50% {
             box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
+          }
+        }
+
+        @keyframes fadeInOut {
+          0% {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          10% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          85% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-4px);
           }
         }
         .glow-pulse {
@@ -894,8 +994,34 @@ if (!confirm(message)) return;
               </button>
             </div>
 
-            <div className="flex items-center flex-1 justify-end">
-              {inputBarVisible ? (
+            <div className="flex items-center flex-1 justify-end relative">
+              {devMode ? (
+                <div className="relative">
+                  {/* Edit Layout button */}
+                  <button
+                    onClick={() => {
+                      setIsLayoutEditor(true)
+                    }}
+                    className="relative flex items-center gap-2 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 hover:bg-blue-500/30 hover:text-white px-3 py-1.5 text-sm transition-all duration-200"
+                    title="Exit Dev Mode and edit the layout with AI"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Edit Layout</span>
+                  </button>
+
+                  {/* Temporary helper message */}
+                  {showEditLayoutMessage && (
+                    <div
+                      className="absolute right-0 top-full mt-2 z-50 w-56 rounded-lg bg-slate-800 border border-slate-700/60 px-3 py-2.5 text-xs text-slate-200 shadow-xl"
+                      style={{
+                        animation: 'fadeInOut 3s ease-in-out forwards',
+                      }}
+                    >
+                      Open the layout editor to edit with AI or manually
+                    </div>
+                  )}
+                </div>
+              ) : inputBarVisible ? (
                 <div className="flex items-center gap-2 w-full max-w-md">
                   <div className="relative flex-1 group">
                     <input
@@ -908,6 +1034,7 @@ if (!confirm(message)) return;
                       disabled={isGenerating}
                       className="w-full rounded-full bg-slate-800/30 border border-slate-700/30 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-transparent transition-all duration-200"
                     />
+
                     <button
                       onClick={handleAIGenerate}
                       disabled={isGenerating || !aiPrompt.trim()}
@@ -920,9 +1047,11 @@ if (!confirm(message)) return;
                       )}
                     </button>
                   </div>
+
                   <button
                     onClick={() => setInputBarVisible(false)}
                     className="text-xs text-slate-500 hover:text-slate-300 transition hover:scale-110"
+                    aria-label="Hide AI input"
                   >
                     ✕
                   </button>
@@ -932,7 +1061,8 @@ if (!confirm(message)) return;
                   onClick={() => setInputBarVisible(true)}
                   className="text-xs bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 px-3 py-1 rounded-full transition hover:scale-105 flex items-center gap-1"
                 >
-                  <Sparkles className="w-3 h-3" /> Ask AI
+                  <Sparkles className="w-3 h-3" />
+                  Ask AI
                 </button>
               )}
             </div>

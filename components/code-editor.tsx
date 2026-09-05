@@ -85,17 +85,27 @@ export interface CodeEditorProps {
     script: string;
     data: string;
   };
+  /** Prevents the component from loading a template from the URL parameter */
+  disableTemplateLoad?: boolean;
 }
 
-export function CodeEditor({ username, initialContent }: CodeEditorProps) {
+export function CodeEditor({
+  username,
+  initialContent,
+  disableTemplateLoad = false,
+}: CodeEditorProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get('templateId');
 
-  // Core states
+  // ------------------------------------------------------------
+  // State
+  // ------------------------------------------------------------
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isLoadingTemplate, setIsLoadingTemplate] = useState(!!templateId);
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(
+    !!templateId && !disableTemplateLoad
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [inputBarVisible, setInputBarVisible] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -108,11 +118,10 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasReceivedData, setHasReceivedData] = useState(false);
 
-  // View toggles
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
   const [hidePreview, setHidePreview] = useState(false);
 
-  // Loading messages (same as before)
+  // Loading messages
   const loadingMessages = [
     'The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim',
     "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new  — Steve Jobs",
@@ -126,7 +135,9 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   ];
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
 
-  // Rotate message every 6s while generating (only before first chunk)
+  // ------------------------------------------------------------
+  // Effects
+  // ------------------------------------------------------------
   useEffect(() => {
     if (!isGenerating || hasReceivedData) return;
     const interval = setInterval(() => {
@@ -142,19 +153,14 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
   }, [isGenerating, hasReceivedData, loadingMessages.length]);
 
   useEffect(() => {
-    if (isGenerating) {
-      setCurrentMessageIndex(0);
-    }
+    if (isGenerating) setCurrentMessageIndex(0);
   }, [isGenerating]);
 
   const aiInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus AI input
   useEffect(() => {
     if (inputBarVisible) {
-      const timer = setTimeout(() => {
-        aiInputRef.current?.focus();
-      }, 100);
+      const timer = setTimeout(() => aiInputRef.current?.focus(), 100);
       return () => clearTimeout(timer);
     }
   }, [inputBarVisible]);
@@ -163,16 +169,18 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
     localStorage.setItem('inputBarVisible', JSON.stringify(inputBarVisible));
   }, [inputBarVisible]);
 
-  // Fullscreen handling
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Data extraction and draft state
+  // ------------------------------------------------------------
+  // Data helpers
+  // ------------------------------------------------------------
   const extractDataFields = (dataString: string) => {
     if (!dataString) return '';
     const match = dataString.match(/const\s+data\s*=\s*\{([\s\S]*)\}\s*;?\s*$/i);
@@ -180,18 +188,25 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
     return dataString;
   };
 
-  const [draftData, setDraftData] = useState(extractDataFields(initialContent.data));
+  // ------------------------------------------------------------
+  // Draft and history
+  // ------------------------------------------------------------
+  const [draftData, setDraftData] = useState(
+    extractDataFields(initialContent.data)
+  );
   const [draftHtml, setDraftHtml] = useState(initialContent.html);
   const [savedHtml, setSavedHtml] = useState(initialContent.html);
-  const [savedData, setSavedData] = useState(extractDataFields(initialContent.data));
+  const [savedData, setSavedData] = useState(
+    extractDataFields(initialContent.data)
+  );
 
-  // ----- UNDO / REDO HISTORY -----
-  const [history, setHistory] = useState<{ html: string; data: string }[]>(() => [
+  const [history, setHistory] = useState<
+    { html: string; data: string }[]
+  >(() => [
     { html: initialContent.html, data: extractDataFields(initialContent.data) },
   ]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
-  // Push a new snapshot (truncates any future states)
   const pushHistory = useCallback(
     (html: string, data: string) => {
       setHistory((prev) => {
@@ -226,7 +241,7 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
     }
   }, [history, historyIndex]);
 
-  // Keyboard shortcuts for Undo/Redo (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y)
+  // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isCtrlZ = (e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey;
@@ -238,22 +253,23 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
           e.preventDefault();
           handleUndo();
         }
-        // else: let Monaco handle it
       } else if (isCtrlY || isCtrlShiftZ) {
         if (historyIndex < history.length - 1) {
           e.preventDefault();
           handleRedo();
         }
-        // else: let Monaco handle it
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [historyIndex, history.length, handleUndo, handleRedo]);
 
-  // Load template if templateId present
+  // Load template if requested and not disabled
   useEffect(() => {
-    if (!templateId) return;
+    if (disableTemplateLoad || !templateId) {
+      setIsLoadingTemplate(false);
+      return;
+    }
     async function loadTemplate() {
       try {
         const result = await getTemplateById(Number(templateId));
@@ -263,7 +279,6 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
           setDraftData(extracted);
           setSavedHtml(result.html);
           setSavedData(extracted);
-          // Reset history with template as the initial state
           setHistory([{ html: result.html, data: extracted }]);
           setHistoryIndex(0);
           toast.info('Template loaded', {
@@ -283,11 +298,13 @@ export function CodeEditor({ username, initialContent }: CodeEditorProps) {
       }
     }
     loadTemplate();
-  }, [templateId]);
+  }, [templateId, disableTemplateLoad]);
 
-  const hasUnsavedChanges = draftHtml !== savedHtml;
+  const hasUnsavedChanges = draftHtml !== savedHtml || draftData !== savedData;
 
-  // Preview code – uses draftHtml so AI edits show live
+  // ------------------------------------------------------------
+  // Preview and iframe
+  // ------------------------------------------------------------
   const previewCode = useMemo(() => {
     return draftHtml.replace(
       '<script type="text/babel">',
@@ -300,7 +317,6 @@ ${savedData}
     );
   }, [draftHtml, savedData]);
 
-  // Iframe and scroll persistence
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 });
   const isRestoringScroll = useRef(false);
@@ -341,11 +357,15 @@ ${savedData}
       isRestoringScroll.current = true;
       const attemptRestore = (attempt = 1) => {
         try {
-          iframeRef.current?.contentWindow?.scrollTo(scrollPosition.x, scrollPosition.y);
+          iframeRef.current?.contentWindow?.scrollTo(
+            scrollPosition.x,
+            scrollPosition.y
+          );
         } catch (error) {
           console.log('Scroll restore error:', error);
         }
-        if (attempt < 3) setTimeout(() => attemptRestore(attempt + 1), attempt * 100);
+        if (attempt < 3)
+          setTimeout(() => attemptRestore(attempt + 1), attempt * 100);
         else isRestoringScroll.current = false;
       };
       setTimeout(attemptRestore, 50);
@@ -379,7 +399,6 @@ ${savedData}
       }
     }
 
-    // Prioritise auto‑scroll to bottom during AI generation
     if (shouldScrollToBottom.current) {
       setTimeout(() => {
         scrollIframeToBottom();
@@ -397,7 +416,8 @@ ${savedData}
       if (!isRestoringScroll.current) captureScrollPosition();
     };
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'scrollUpdate') setScrollPosition(event.data.position);
+      if (event.data?.type === 'scrollUpdate')
+        setScrollPosition(event.data.position);
     };
     try {
       iframe.contentWindow.addEventListener('scroll', handleScroll);
@@ -411,14 +431,15 @@ ${savedData}
     }
   }, [previewCode, captureScrollPosition]);
 
-  // Whenever draftHtml changes during generation, flag that we want to scroll to bottom
   useEffect(() => {
     if (isGenerating && hasReceivedData) {
       shouldScrollToBottom.current = true;
     }
   }, [draftHtml, isGenerating, hasReceivedData]);
 
-  // Open draft preview in new tab
+  // ------------------------------------------------------------
+  // Actions
+  // ------------------------------------------------------------
   const openDraftPreview = () => {
     const currentPreviewCode = draftHtml.replace(
       '<script type="text/babel">',
@@ -435,7 +456,6 @@ ${draftData}
     window.open(draftUrl, '_blank');
   };
 
-  // Toggle fullscreen for iframe
   const toggleFullscreen = () => {
     if (!iframeRef.current) return;
     if (!document.fullscreenElement) {
@@ -451,12 +471,11 @@ ${draftData}
     }
   };
 
-  // Save handler – also pushes a history snapshot
   const handleSave = useCallback(() => {
     captureScrollPosition();
     setSavedHtml(draftHtml);
     setSavedData(draftData);
-    pushHistory(draftHtml, draftData); // snapshot for undo/redo
+    pushHistory(draftHtml, draftData);
     toast.success('Changes saved', {
       description: 'Your draft has been updated.',
       position: 'top-center',
@@ -464,7 +483,7 @@ ${draftData}
     });
   }, [draftHtml, draftData, captureScrollPosition, pushHistory]);
 
-  // Keyboard shortcut: Ctrl+S (save)
+  // Keyboard shortcut: Ctrl+S
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -476,20 +495,30 @@ ${draftData}
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleSave]);
 
-  // Publish handler
+  /**
+   * PUBLISH: saves the current draft to the database and navigates back
+   * to the main edit page with a flag to force the desktop view.
+   */
   const handlePublish = async () => {
     if (username === 'demo') {
-      // You can add sign-in modal logic here
+      // Optionally redirect to sign-up
       return;
     }
     setIsPublishing(true);
     try {
-      const result = await updateWebsiteContent(username, draftHtml, draftData, draftData);
+      const result = await updateWebsiteContent(
+        username,
+        draftHtml,
+        draftData,
+        draftData
+      );
       if (result.success) {
         toast.success('Published!', {
           description: 'Your website is now live.',
           position: 'top-center',
         });
+        // Navigate back to the parent editor, forcing the desktop view
+        // The parent should check for this param and override the mobile detection.
         router.replace(`/edit_new/${username}`);
       } else {
         toast.error(result.error || 'Failed to publish website');
@@ -501,140 +530,97 @@ ${draftData}
     }
   };
 
-  // ============================================================
-  // STREAMING AI GENERATION
-  // ============================================================
+  // AI generation (streaming)
   const editorRef = useRef<any>(null);
 
-const handleAIGenerate = async () => {
-  if (!aiPrompt.trim()) {
-    toast.error('Please enter a prompt for AI assistance', {
-      position: 'top-center',
-    });
-    return;
-  }
-
-  setIsGenerating(true);
-  setHasReceivedData(false);
-
-  // Generate the job ID BEFORE starting the background function
-  const jobId = crypto.randomUUID();
-
-  try {
-    const response = await fetch('/api/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jobId,
-        currentCode: draftHtml,
-        prompt: aiPrompt,
-      }),
-    });
-
-    // Background Function should return 202
-    if (!response.ok && response.status !== 202) {
-      const errorText = await response.text();
-
-      throw new Error(
-        errorText || `Generation failed (${response.status})`
-      );
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error('Please enter a prompt for AI assistance', {
+        position: 'top-center',
+      });
+      return;
     }
 
-    console.log('Generation started:', jobId);
-
-    // Now poll the status endpoint
-    const maxAttempts = 180;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, 2000)
-      );
-
-      const statusResponse = await fetch(
-        `/api/generate/status?jobId=${encodeURIComponent(jobId)}`,
-        {
-          method: 'GET',
-          cache: 'no-store',
-        }
-      );
-
-      if (!statusResponse.ok) {
-        // Don't immediately kill the job for a temporary status error
-        console.warn(
-          `Status request returned ${statusResponse.status}`
-        );
-        continue;
-      }
-
-      const result = await statusResponse.json();
-
-      console.log(
-        `Generation status: ${result.status}`
-      );
-
-      if (result.status === 'processing') {
-        continue;
-      }
-
-      if (result.status === 'completed') {
-        if (!result.html) {
-          throw new Error(
-            'Generation completed but no HTML was returned'
-          );
-        }
-
-        const fullCode = result.html;
-
-        setDraftHtml(fullCode);
-        setHasReceivedData(true);
-
-        pushHistory(fullCode, draftData);
-
-        setAiPrompt('');
-
-        toast.success('AI generated new code!', {
-          description:
-            'Review changes and save if you like.',
-          position: 'top-center',
-        });
-
-        aiInputRef.current?.focus();
-
-        return;
-      }
-
-      if (result.status === 'failed') {
-        throw new Error(
-          result.error || 'AI generation failed'
-        );
-      }
-
-      if (result.status === 'not_found') {
-        throw new Error(
-          'Generation job was not found'
-        );
-      }
-    }
-
-    throw new Error(
-      'Generation is taking longer than expected.'
-    );
-  } catch (error: any) {
-    console.error('AI generation error:', error);
-
-    toast.error('AI generation failed', {
-      description:
-        error?.message ||
-        'An unexpected error occurred.',
-      position: 'top-center',
-    });
-  } finally {
-    setIsGenerating(false);
+    setIsGenerating(true);
     setHasReceivedData(false);
-  }
-};
+
+    const jobId = crypto.randomUUID();
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId,
+          currentCode: draftHtml,
+          prompt: aiPrompt,
+        }),
+      });
+
+      if (!response.ok && response.status !== 202) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Generation failed (${response.status})`);
+      }
+
+      console.log('Generation started:', jobId);
+
+      const maxAttempts = 180;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        const statusResponse = await fetch(
+          `/api/generate/status?jobId=${encodeURIComponent(jobId)}`,
+          { method: 'GET', cache: 'no-store' }
+        );
+
+        if (!statusResponse.ok) {
+          console.warn(`Status request returned ${statusResponse.status}`);
+          continue;
+        }
+
+        const result = await statusResponse.json();
+        console.log(`Generation status: ${result.status}`);
+
+        if (result.status === 'processing') continue;
+
+        if (result.status === 'completed') {
+          if (!result.html) {
+            throw new Error('Generation completed but no HTML was returned');
+          }
+          const fullCode = result.html;
+          setDraftHtml(fullCode);
+          setHasReceivedData(true);
+          pushHistory(fullCode, draftData);
+          setAiPrompt('');
+          toast.success('AI generated new code!', {
+            description: 'Review changes and save if you like.',
+            position: 'top-center',
+          });
+          aiInputRef.current?.focus();
+          return;
+        }
+
+        if (result.status === 'failed') {
+          throw new Error(result.error || 'AI generation failed');
+        }
+
+        if (result.status === 'not_found') {
+          throw new Error('Generation job was not found');
+        }
+      }
+
+      throw new Error('Generation is taking longer than expected.');
+    } catch (error: any) {
+      console.error('AI generation error:', error);
+      toast.error('AI generation failed', {
+        description: error?.message || 'An unexpected error occurred.',
+        position: 'top-center',
+      });
+    } finally {
+      setIsGenerating(false);
+      setHasReceivedData(false);
+    }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -643,7 +629,6 @@ const handleAIGenerate = async () => {
     }
   };
 
-  // Download HTML
   const handleDownload = () => {
     const fullHtml = savedHtml.replace(
       '<script type="text/babel">',
@@ -669,6 +654,9 @@ ${savedData}
     });
   };
 
+  // ------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------
   if (isLoadingTemplate) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -688,7 +676,9 @@ ${savedData}
             <div className="w-2 h-2 rounded-full bg-yellow-500/80" />
             <div className="w-2 h-2 rounded-full bg-green-500/80" />
           </div>
-          <span className="text-xs font-mono tracking-widest text-white/30 select-none">EDITOR</span>
+          <span className="text-xs font-mono tracking-widest text-white/30 select-none">
+            EDITOR
+          </span>
           <div className="h-4 w-px bg-white/10" />
           <div className="flex items-center gap-2 text-xs text-white/50">
             <Monitor className="w-3 h-3" />
@@ -702,7 +692,9 @@ ${savedData}
             <button
               onClick={() => setHidePreview(false)}
               className={`p-1.5 rounded transition-all ${
-                !hidePreview ? 'bg-white/15 text-white shadow-sm' : 'text-white/40 hover:text-white/70'
+                !hidePreview
+                  ? 'bg-white/15 text-white shadow-sm'
+                  : 'text-white/40 hover:text-white/70'
               }`}
               title="Show preview"
             >
@@ -711,7 +703,9 @@ ${savedData}
             <button
               onClick={() => setHidePreview(true)}
               className={`p-1.5 rounded transition-all ${
-                hidePreview ? 'bg-white/15 text-white shadow-sm' : 'text-white/40 hover:text-white/70'
+                hidePreview
+                  ? 'bg-white/15 text-white shadow-sm'
+                  : 'text-white/40 hover:text-white/70'
               }`}
               title="Hide preview (focus mode)"
             >
@@ -723,7 +717,9 @@ ${savedData}
           <button
             onClick={() => setWordWrapEnabled(!wordWrapEnabled)}
             className={`p-1.5 rounded transition-all ${
-              wordWrapEnabled ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'
+              wordWrapEnabled
+                ? 'bg-white/15 text-white'
+                : 'text-white/40 hover:text-white/70'
             }`}
             title="Toggle word wrap"
           >
@@ -737,7 +733,9 @@ ${savedData}
             <button
               onClick={() => setViewMode('desktop')}
               className={`p-1.5 rounded transition-all ${
-                viewMode === 'desktop' ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'
+                viewMode === 'desktop'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/40 hover:text-white/70'
               }`}
             >
               <Monitor className="w-3.5 h-3.5" />
@@ -745,7 +743,9 @@ ${savedData}
             <button
               onClick={() => setViewMode('mobile')}
               className={`p-1.5 rounded transition-all ${
-                viewMode === 'mobile' ? 'bg-white/15 text-white' : 'text-white/40 hover:text-white/70'
+                viewMode === 'mobile'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/40 hover:text-white/70'
               }`}
             >
               <Smartphone className="w-3.5 h-3.5" />
@@ -765,7 +765,11 @@ ${savedData}
             className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5"
             title="Fullscreen preview"
           >
-            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+            {isFullscreen ? (
+              <Minimize className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize className="w-3.5 h-3.5" />
+            )}
           </button>
 
           <div className="h-4 w-px bg-white/10" />
@@ -878,12 +882,18 @@ ${savedData}
           {/* Editor toolbar */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-white/5">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-mono tracking-widest text-white/30 uppercase">HTML</span>
+              <span className="text-[10px] font-mono tracking-widest text-white/30 uppercase">
+                HTML
+              </span>
               <span className="text-[10px] text-white/20">|</span>
-              <span className="text-[10px] text-white/20">Line {draftHtml.split('\n').length}</span>
+              <span className="text-[10px] text-white/20">
+                Line {draftHtml.split('\n').length}
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-white/20">{draftHtml.length} chars</span>
+              <span className="text-[10px] text-white/20">
+                {draftHtml.length} chars
+              </span>
               {hasUnsavedChanges && (
                 <span className="flex items-center gap-1 text-[10px] text-amber-400/80 animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -904,7 +914,7 @@ ${savedData}
             <MonacoEditor
               height="100%"
               language="html"
-              value={draftHtml}
+              value={previewCode}
               onChange={(value) => setDraftHtml(value || '')}
               theme="photoshop-dark"
               onMount={(editor, monaco) => {
@@ -953,7 +963,9 @@ ${savedData}
                 <div className="flex flex-col items-center gap-4 max-w-xs text-center">
                   <div className="flex items-center gap-3">
                     <Loader2 className="w-5 h-5 animate-spin text-red-400" />
-                    <span className="text-xs font-medium text-white/80 tracking-wide">AI is thinking...</span>
+                    <span className="text-xs font-medium text-white/80 tracking-wide">
+                      AI is thinking...
+                    </span>
                   </div>
                   <p className="text-[11px] text-white/40 italic leading-relaxed transition-opacity duration-300">
                     {loadingMessages[currentMessageIndex]}
