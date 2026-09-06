@@ -35,31 +35,6 @@ export default function IframeWithLinkHandler({
    */
   useEffect(() => {
 
-    console.log("")
-    console.log("========================================")
-    console.log("[PARENT] IFRAME COMPONENT MOUNTED")
-    console.log("========================================")
-
-    console.log(
-      "[PARENT] Username:",
-      username
-    )
-
-    console.log(
-      "[PARENT] HTML length:",
-      content.length
-    )
-
-
-    /*
-     * Show the HTML being sent to iframe.
-     */
-    console.log(
-      "[PARENT] iframe HTML:",
-      content
-    )
-
-
     /*
      * ==========================================================
      * HANDLE MESSAGES FROM IFRAME
@@ -69,12 +44,6 @@ export default function IframeWithLinkHandler({
       event: MessageEvent
     ) => {
 
-      console.log(
-        "[PARENT] MESSAGE RECEIVED:",
-        event.data
-      )
-
-
       /*
        * Only accept our iframe.
        */
@@ -82,10 +51,6 @@ export default function IframeWithLinkHandler({
         event.source !==
         iframeRef.current?.contentWindow
       ) {
-
-        console.log(
-          "[PARENT] Ignoring message from unknown source"
-        )
 
         return
       }
@@ -115,12 +80,6 @@ export default function IframeWithLinkHandler({
           String(
             message.openLink
           )
-
-
-        console.log(
-          "[PARENT] Open link:",
-          url
-        )
 
 
         try {
@@ -197,16 +156,6 @@ export default function IframeWithLinkHandler({
       }
 
 
-      console.log("")
-      console.log("========================================")
-      console.log("[PARENT] FORM DATA RECEIVED")
-      console.log("========================================")
-
-      console.log(
-        message.formData
-      )
-
-
       /*
        * Create real FormData.
        */
@@ -280,14 +229,6 @@ export default function IframeWithLinkHandler({
       )
 
 
-      console.log(
-        "[PARENT] FormData:",
-        Object.fromEntries(
-          formData.entries()
-        )
-      )
-
-
       /*
        * Don't send empty form.
        */
@@ -311,19 +252,9 @@ export default function IframeWithLinkHandler({
        */
       try {
 
-        console.log(
-          "[PARENT] Sending enquiry..."
-        )
-
-
         await sendEnquiry(
           username,
           formData
-        )
-
-
-        console.log(
-          "[PARENT] ✅ ENQUIRY SENT"
         )
 
 
@@ -420,11 +351,6 @@ export default function IframeWithLinkHandler({
       className="w-full h-screen border-0"
 
       onLoad={() => {
-
-        console.log("")
-        console.log("========================================")
-        console.log("[PARENT] ✅ IFRAME LOADED")
-        console.log("========================================")
 
       }}
 

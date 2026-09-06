@@ -48,8 +48,6 @@ export async function generateCodeWithAI(
   prompt: string
 ) {
   try {
-    console.log("im working");
-
     const response = await client.responses.create({
       model: "gpt-5.4-nano",
 
@@ -81,8 +79,6 @@ replace whole site text for ${prompt}
     if (!generatedCode) {
       throw new Error("No code generated.");
     }
-
-    console.log(generatedCode);
 
     return {
       success: true,
@@ -154,7 +150,6 @@ If you create any form, use the following JavaScript submission logic exactly so
     const formData = new FormData(form);
     const values = Object.fromEntries(formData.entries());
 
-    console.log("SENDING DATA:", values);
 
     try {
       window.parent.postMessage(
@@ -164,7 +159,6 @@ If you create any form, use the following JavaScript submission logic exactly so
         "*"
       );
 
-      console.log("✅ postMessage sent to parent");
     } catch (err) {
       console.error("❌ Failed to send postMessage:", err);
     }
@@ -257,78 +251,7 @@ export async function getWebsiteContent(
 // GET ALL WEBSITE TEMPLATES
 // ==================================================
 
-export async function getAllWebsiteTemplates() {
-  try {
-    console.log("[v0] Fetching all templates");
 
-    const templates = await sql`
-      SELECT
-        id,
-        code,
-        code_script,
-        code_data
-      FROM website_template
-      ORDER BY id ASC
-    `;
-
-    console.log(
-      "[v0] All templates fetched:",
-      templates.length
-    );
-
-    return templates;
-  } catch (error) {
-    console.error(
-      "Failed to fetch all website templates:",
-      error
-    );
-
-    return [
-      {
-        id: 1,
-        code: `<div>Template 1 Preview</div>`,
-        code_script: `console.log('Template 1 script');`,
-        code_data: `{"templateId": 1, "name": "Sample Template 1"}`,
-      },
-      {
-        id: 2,
-        code: `<div>Template 2 Preview</div>`,
-        code_script: `console.log('Template 2 script');`,
-        code_data: `{"templateId": 2, "name": "Sample Template 2"}`,
-      },
-      {
-        id: 3,
-        code: `<div>Template 3 Preview</div>`,
-        code_script: `console.log('Template 3 script');`,
-        code_data: `{"templateId": 3, "name": "Sample Template 3"}`,
-      },
-      {
-        id: 4,
-        code: `<div>Template 4 Preview</div>`,
-        code_script: `console.log('Template 4 script');`,
-        code_data: `{"templateId": 4, "name": "Sample Template 4"}`,
-      },
-      {
-        id: 5,
-        code: `<div>Template 5 Preview</div>`,
-        code_script: `console.log('Template 5 script');`,
-        code_data: `{"templateId": 5, "name": "Sample Template 5"}`,
-      },
-      {
-        id: 6,
-        code: `<div>Template 6 Preview</div>`,
-        code_script: `console.log('Template 6 script');`,
-        code_data: `{"templateId": 6, "name": "Sample Template 6"}`,
-      },
-      {
-        id: 7,
-        code: `<div>Template 7 Preview</div>`,
-        code_script: `console.log('Template 7 script');`,
-        code_data: `{"templateId": 7, "name": "Sample Template 7"}`,
-      },
-    ];
-  }
-}
 
 // ==================================================
 // GET WEBSITE HTML
@@ -385,12 +308,23 @@ export async function updateWebsiteContent(
   script: string,
   data: string
 ) {
+  console.log("🚀 updateWebsiteContent called");
+  console.log("👤 Username:", username);
+
   if (username.toLowerCase() === "demo") {
+    console.log("❌ Demo user - redirecting to /lander");
     redirect("/lander");
   }
 
   try {
     const tableName = `${username.toLowerCase()}_website`;
+
+    console.log("📋 Table:", tableName);
+
+    console.log("📦 Website content being saved:");
+    console.log("➡️ HTML:", html);
+    console.log("➡️ Script:", script);
+    console.log("➡️ Data:", data);
 
     await sql.query(
       `
@@ -402,13 +336,18 @@ export async function updateWebsiteContent(
       [html, script, data]
     );
 
+    console.log("✅ WEBSITE UPDATE SUCCESSFUL");
+    console.log("👤 Username:", username);
+    console.log("📋 Table:", tableName);
+
     return {
       success: true,
-      message:
-        "Website content updated successfully!",
+      message: "Website content updated successfully!",
     };
   } catch (error) {
-    console.error(error);
+    console.error("❌ WEBSITE UPDATE FAILED");
+    console.error("👤 Username:", username);
+    console.error("❌ Error:", error);
 
     return {
       success: false,
@@ -428,8 +367,6 @@ export async function trackVisit(
   try {
     const visitsTableName =
       `${username.toLowerCase()}_visits`;
-
-    console.log(ipAddress);
 
     await sql.query(
       `
@@ -630,13 +567,6 @@ export async function copyTemplateToUser(
   templateID: number,
   username: string
 ) {
-  console.log(
-    "[v0] Starting copyTemplateToUser with templateID:",
-    templateID,
-    "username:",
-    username
-  );
-
   try {
     const templateRes = await sql.query(
       `
@@ -762,16 +692,6 @@ export async function sendEnquiry(
       ($1)
     `,
     [finalEntry]
-  );
-
-  console.log(
-    "Enquiry inserted into database:",
-    {
-      table: enquiryTableName,
-      entry: entries,
-      timestamp:
-        new Date().toISOString(),
-    }
   );
 
   return {
@@ -1073,11 +993,6 @@ export async function getLatestPublishedSiteWithNullData(
     const tableName =
       `${username.toLowerCase()}_website`;
 
-    console.log(
-      "Table:",
-      tableName
-    );
-
     const tableExists =
       await sql.query(
         `
@@ -1093,10 +1008,6 @@ export async function getLatestPublishedSiteWithNullData(
     if (
       !tableExists[0]?.exists
     ) {
-      console.log(
-        "Table does not exist."
-      );
-
       return null;
     }
 
@@ -1116,20 +1027,11 @@ export async function getLatestPublishedSiteWithNullData(
     if (
       result.length === 0
     ) {
-      console.log(
-        "No rows found."
-      );
-
       return null;
     }
 
     const latest =
       result[0];
-
-    console.log(
-      "Latest row:",
-      latest
-    );
 
     if (
       latest.code_data !==
@@ -1138,10 +1040,6 @@ export async function getLatestPublishedSiteWithNullData(
         latest.code_data
       ).trim() !== ""
     ) {
-      console.log(
-        "Latest row has code_data. Returning empty editor."
-      );
-
       return null;
     }
 

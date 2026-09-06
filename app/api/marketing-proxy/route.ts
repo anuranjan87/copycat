@@ -54,13 +54,7 @@ async function proxyRequest(
 
     const responseText = await upstreamResponse.text();
 
-    console.log("========================================");
-    console.log("MARKETING API RESPONSE");
-    console.log("Status:", upstreamResponse.status);
-    console.log("OK:", upstreamResponse.ok);
-    console.log("Content-Type:", upstreamResponse.headers.get("content-type"));
-    console.log("Response:", responseText);
-    console.log("========================================");
+   
 
     const contentType =
       upstreamResponse.headers.get("content-type") ||

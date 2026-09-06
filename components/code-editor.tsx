@@ -291,7 +291,6 @@ export function CodeEditor({
           });
         }
       } catch (error) {
-        console.error(error);
         toast.error('Error loading template');
       } finally {
         setIsLoadingTemplate(false);
@@ -328,7 +327,7 @@ ${savedData}
         const { scrollX, scrollY } = iframeRef.current.contentWindow;
         setScrollPosition({ x: scrollX, y: scrollY });
       } catch (error) {
-        console.log('Could not capture scroll position:', error);
+        // ignore
       }
     }
   }, []);
@@ -362,7 +361,7 @@ ${savedData}
             scrollPosition.y
           );
         } catch (error) {
-          console.log('Scroll restore error:', error);
+          // ignore
         }
         if (attempt < 3)
           setTimeout(() => attemptRestore(attempt + 1), attempt * 100);
@@ -395,7 +394,7 @@ ${savedData}
         `;
         doc.head.appendChild(script);
       } catch (error) {
-        console.log('Scroll script injection failed:', error);
+        // ignore
       }
     }
 
@@ -427,7 +426,7 @@ ${savedData}
         window.removeEventListener('message', handleMessage);
       };
     } catch (error) {
-      console.log('Scroll listener error:', error);
+      // ignore
     }
   }, [previewCode, captureScrollPosition]);
 
@@ -460,7 +459,6 @@ ${draftData}
     if (!iframeRef.current) return;
     if (!document.fullscreenElement) {
       iframeRef.current.requestFullscreen().catch((err) => {
-        console.error(`Fullscreen error: ${err.message}`);
         toast.error('Fullscreen failed', {
           description: 'Please check browser permissions',
           position: 'top-center',
@@ -500,11 +498,8 @@ ${draftData}
    * to the main edit page with a flag to force the desktop view.
    */
   const handlePublish = async () => {
-    if (username === 'demo') {
-      // Optionally redirect to sign-up
-      return;
-    }
     setIsPublishing(true);
+
     try {
       const result = await updateWebsiteContent(
         username,
@@ -512,19 +507,24 @@ ${draftData}
         draftData,
         draftData
       );
-      if (result.success) {
-        toast.success('Published!', {
-          description: 'Your website is now live.',
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to publish website', {
           position: 'top-center',
         });
-        // Navigate back to the parent editor, forcing the desktop view
-        // The parent should check for this param and override the mobile detection.
-        router.replace(`/edit_new/${username}`);
-      } else {
-        toast.error(result.error || 'Failed to publish website');
+        return;
       }
-    } catch {
-      toast.error('An unexpected error occurred');
+
+      toast.success('Published!', {
+        description: 'Your website is now live.',
+        position: 'top-center',
+      });
+
+      window.location.reload();
+    } catch (error) {
+      toast.error('An unexpected error occurred', {
+        position: 'top-center',
+      });
     } finally {
       setIsPublishing(false);
     }
@@ -562,8 +562,6 @@ ${draftData}
         throw new Error(errorText || `Generation failed (${response.status})`);
       }
 
-      console.log('Generation started:', jobId);
-
       const maxAttempts = 180;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -574,12 +572,10 @@ ${draftData}
         );
 
         if (!statusResponse.ok) {
-          console.warn(`Status request returned ${statusResponse.status}`);
           continue;
         }
 
         const result = await statusResponse.json();
-        console.log(`Generation status: ${result.status}`);
 
         if (result.status === 'processing') continue;
 
@@ -611,7 +607,6 @@ ${draftData}
 
       throw new Error('Generation is taking longer than expected.');
     } catch (error: any) {
-      console.error('AI generation error:', error);
       toast.error('AI generation failed', {
         description: error?.message || 'An unexpected error occurred.',
         position: 'top-center',

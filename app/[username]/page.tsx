@@ -63,11 +63,7 @@ function normalizeWebsiteData(
   rawData: string | null | undefined
 ): string {
 
-  console.log("")
-  console.log("========================================")
-  console.log("[DATA] RAW DATABASE DATA")
-  console.log("========================================")
-  console.log(rawData)
+  
 
   /*
    * ------------------------------------------------------------
@@ -150,11 +146,7 @@ function normalizeWebsiteData(
           )
           .trim()
 
-        console.log("")
-        console.log("========================================")
-        console.log("[DATA] NORMALIZED DATA")
-        console.log("========================================")
-        console.log(objectLiteral)
+    
 
         return objectLiteral
       }
@@ -199,11 +191,7 @@ function normalizeWebsiteData(
         )
         .trim()
 
-      console.log("")
-      console.log("========================================")
-      console.log("[DATA] NORMALIZED DATA")
-      console.log("========================================")
-      console.log(objectLiteral)
+    
 
       return objectLiteral
     }
@@ -233,11 +221,6 @@ function normalizeWebsiteData(
   const objectLiteral =
     `{\n${source}\n}`
 
-  console.log("")
-  console.log("========================================")
-  console.log("[DATA] NORMALIZED DATA")
-  console.log("========================================")
-  console.log(objectLiteral)
 
   return objectLiteral
 }
@@ -488,11 +471,7 @@ function buildFinalHtml(
   username: string
 ): string {
 
-  console.log("")
-  console.log("========================================")
-  console.log("[HTML] BUILDING FINAL HTML")
-  console.log("========================================")
-
+  
 
   let finalHtml =
     html
@@ -534,10 +513,6 @@ function buildFinalHtml(
 <script>
 window.__SITE_DATA__ = ${normalizedData};
 
-console.log(
-  "[SITE DATA] Loaded:",
-  window.__SITE_DATA__
-);
 </script>
 <!-- WEBSITE_DATA_INJECTION_END -->
 `.trim()
@@ -611,20 +586,11 @@ $&`
     
 const data = window.__SITE_DATA__;
 
-console.log(
-  "[BABEL] data:",
-  data
-);
 
-console.log(
-  "[BABEL] data.form:",
-  data?.form
-);
 
-console.log(
-  "[BABEL] data.form.fields:",
-  data?.form?.fields
-);
+
+
+
 
 `
       )
@@ -643,9 +609,7 @@ console.log(
 <script>
 (function () {
 
-  console.log(
-    "[FORM HANDLER] Script loaded"
-  );
+
 
 
   function getFormData(form) {
@@ -688,9 +652,7 @@ console.log(
     }
 
 
-    console.log(
-      "[FORM HANDLER] Form found"
-    );
+  
 
 
     /*
@@ -719,9 +681,7 @@ console.log(
       "submit",
       function (event) {
 
-        console.log(
-          "[FORM HANDLER] Submit detected"
-        );
+       
 
 
         /*
@@ -738,10 +698,7 @@ console.log(
           getFormData(form);
 
 
-        console.log(
-          "[FORM HANDLER] FORM DATA:",
-          values
-        );
+      
 
 
         /*
@@ -760,9 +717,6 @@ console.log(
         );
 
 
-        console.log(
-          "[FORM HANDLER] Sent to parent"
-        );
 
       },
       true
@@ -861,39 +815,14 @@ console.log(
   );
 
 
-  console.log(
-    "[WEBSITE] iframe JavaScript started"
-  );
 
 
-  console.log(
-    "[WEBSITE] React:",
-    typeof React !== "undefined"
-      ? "LOADED"
-      : "NOT LOADED"
-  );
 
 
-  console.log(
-    "[WEBSITE] ReactDOM:",
-    typeof ReactDOM !== "undefined"
-      ? "LOADED"
-      : "NOT LOADED"
-  );
 
 
-  console.log(
-    "[WEBSITE] Babel:",
-    typeof Babel !== "undefined"
-      ? "LOADED"
-      : "NOT LOADED"
-  );
 
 
-  console.log(
-    "[WEBSITE] Root:",
-    document.getElementById("root")
-  );
 
 
 })();
@@ -952,14 +881,7 @@ ${errorHandlerScript}`
    * FINAL DEBUG
    * ============================================================
    */
-  console.log("")
-  console.log("========================================")
-  console.log("[HTML] FINAL HTML LENGTH")
-  console.log("========================================")
-
-  console.log(
-    finalHtml.length
-  )
+ 
 
 
   /*
@@ -975,23 +897,8 @@ ${errorHandlerScript}`
     dataIndex !== -1
   ) {
 
-    console.log("")
-    console.log("========================================")
-    console.log("[HTML] DATA INJECTION")
-    console.log("========================================")
+  
 
-    console.log(
-      finalHtml.substring(
-        Math.max(
-          0,
-          dataIndex - 300
-        ),
-        Math.min(
-          finalHtml.length,
-          dataIndex + 1500
-        )
-      )
-    )
 
   }
 
@@ -1009,39 +916,15 @@ ${errorHandlerScript}`
     babelIndex !== -1
   ) {
 
-    console.log("")
-    console.log("========================================")
-    console.log("[HTML] BABEL AREA")
-    console.log("========================================")
+ 
 
-    console.log(
-      finalHtml.substring(
-        Math.max(
-          0,
-          babelIndex - 300
-        ),
-        Math.min(
-          finalHtml.length,
-          babelIndex + 2500
-        )
-      )
-    )
 
   }
 
 
-  console.log("")
-  console.log("========================================")
-  console.log("[HTML] FINAL HTML")
-  console.log("========================================")
 
-  console.log(
-    finalHtml
-  )
+ 
 
-  console.log(
-    "========================================"
-  )
 
 
   return finalHtml
@@ -1064,16 +947,8 @@ export default async function UserWebsitePage({
 
   try {
 
-    console.log("")
-    console.log("========================================")
-    console.log("[PAGE] LOADING WEBSITE")
-    console.log("========================================")
 
-    console.log(
-      "Username:",
-      username
-    )
-
+ 
 
     /*
      * Get website content.
@@ -1084,10 +959,7 @@ export default async function UserWebsitePage({
       )
 
 
-    console.log(
-      "[PAGE] Website content:",
-      content
-    )
+  
 
 
     /*
@@ -1160,15 +1032,9 @@ export default async function UserWebsitePage({
       )
 
 
-    console.log("")
-    console.log("========================================")
-    console.log("[PAGE] PASSING HTML TO IFRAME")
-    console.log("========================================")
+   
 
-    console.log(
-      "Length:",
-      finalHtml.length
-    )
+  
 
 
     return (
