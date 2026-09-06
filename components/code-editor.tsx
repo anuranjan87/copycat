@@ -497,38 +497,48 @@ ${draftData}
    * PUBLISH: saves the current draft to the database and navigates back
    * to the main edit page with a flag to force the desktop view.
    */
-  const handlePublish = async () => {
-    setIsPublishing(true);
+ 
+const handlePublish = async () => {
+  setIsPublishing(true);
 
-    try {
-      const result = await updateWebsiteContent(
-        username,
-        draftHtml,
-        draftData,
-        draftData
-      );
+  console.log("Publishing draftData:", draftData);
 
-      if (!result.success) {
-        toast.error(result.error || 'Failed to publish website', {
-          position: 'top-center',
-        });
-        return;
-      }
+  try {
+    const result = await updateWebsiteContent(
+      username,
+      draftHtml,
+      draftData,
+      draftData
+    );
 
-      toast.success('Published!', {
-        description: 'Your website is now live.',
-        position: 'top-center',
+    console.log("Publish result:", result);
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to publish website", {
+        position: "top-center",
       });
-
-      window.location.reload();
-    } catch (error) {
-      toast.error('An unexpected error occurred', {
-        position: 'top-center',
-      });
-    } finally {
-      setIsPublishing(false);
+      return;
     }
-  };
+
+    toast.success("Published!", {
+      description: "Your website is now live.",
+      position: "top-center",
+    });
+
+    // Reload only after the publish was successful
+    window.location.reload();
+  } catch (error) {
+    console.error("Publish error:", error);
+
+    toast.error("An unexpected error occurred", {
+      position: "top-center",
+    });
+  } finally {
+    setIsPublishing(false);
+  }
+};
+
+
 
   // AI generation (streaming)
   const editorRef = useRef<any>(null);
