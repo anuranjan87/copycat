@@ -145,7 +145,7 @@ export const templatesMeta: TemplateMeta[] = [
     title: "Simple Launch",
     description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
-    category: "Landing Page",
+    category: "Entrepreneurs & Startups",
     moveX: 0,
     moveY: 0,
     zoom: 1.03,

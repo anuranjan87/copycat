@@ -749,7 +749,7 @@ export default function Page({ params }: PageProps) {
           ======================================================== */}
 
       <main
-        className="mx-auto mt-12 w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8"
+        className="mx-auto mt-12  w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8"
         style={{
           zoom: "0.92",
         }}
@@ -759,13 +759,12 @@ export default function Page({ params }: PageProps) {
             Header
             ====================================================== */}
 
-         <header className="mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/10 text-primary text-xs font-medium">
-          </div>
+<header className="mb-[6rem] md:mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
+         <div className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/10 text-primary text-xs font-medium">
+</div>
 
           <h1
-            className={`text-3xl sm:text-4xl mb-2 md:text-5xl font-semibold tracking-tight ${
+            className={`text-4xl sm:text-3xl mb-2 md:text-5xl font-semibold tracking-tight ${
               applyRoxFont
                 ? "rox"
                 : ""
@@ -784,8 +783,7 @@ export default function Page({ params }: PageProps) {
             Action bar
             ====================================================== */}
 
-        <div className="mb-10 flex flex-col items-center justify-between gap-5 md:flex-row">
-
+<div className="mb-10 mt-6 flex flex-col items-center justify-between gap-5 md:mt-0 md:flex-row">
           {/* ====================================================
               Categories
               ==================================================== */}
@@ -883,8 +881,7 @@ export default function Page({ params }: PageProps) {
               Search + actions
               ==================================================== */}
 
-          <div className="flex w-full items-center gap-3 md:w-auto">
-
+<div className="hidden w-full items-center gap-3 md:flex md:w-auto">
             {/* Search */}
 
             <div className="relative flex-1 md:w-64">
