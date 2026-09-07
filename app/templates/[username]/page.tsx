@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import * as XLSX from "xlsx";
 import {
@@ -95,9 +95,11 @@ const emailTemplates: EmailTemplate[] = [
 export default function Page({ params }: PageProps) {
   const { username } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isPremium } = useSubscription();
 
-  
+  const categoryStorageKey = `workspace-selected-category-${username.toLowerCase()}`;
+
   // ------------------------------------------------------------
   // General state
   // ------------------------------------------------------------
@@ -118,6 +120,53 @@ export default function Page({ params }: PageProps) {
     useState("Colors");
 
   // ------------------------------------------------------------
+  // Persist and restore the last selected category
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    const urlCategory = searchParams.get("category");
+
+    if (
+      urlCategory &&
+      CATEGORIES.some((category) => category.name === urlCategory)
+    ) {
+      setActiveCategory(urlCategory);
+
+      try {
+        localStorage.setItem(categoryStorageKey, urlCategory);
+      } catch (error) {
+        console.error("Failed to save URL category:", error);
+      }
+
+      return;
+    }
+
+    try {
+      const savedCategory = localStorage.getItem(categoryStorageKey);
+
+      if (
+        savedCategory &&
+        CATEGORIES.some((category) => category.name === savedCategory)
+      ) {
+        setActiveCategory(savedCategory);
+      }
+    } catch (error) {
+      console.error("Failed to restore selected category:", error);
+    }
+  }, [searchParams, categoryStorageKey]);
+
+  const handleCategoryChange = (categoryName: string) => {
+    setActiveCategory(categoryName);
+
+    try {
+      localStorage.setItem(categoryStorageKey, categoryName);
+    } catch (error) {
+      console.error("Failed to save selected category:", error);
+    }
+  };
+
+
+  // ------------------------------------------------------------
   // Blank Editor animation
   // ------------------------------------------------------------
 
@@ -130,6 +179,25 @@ export default function Page({ params }: PageProps) {
   // ------------------------------------------------------------
 
   const categoryScrollRef = useRef<HTMLDivElement>(null);
+
+  // Keep the selected category at the far left of the scroller.
+  useEffect(() => {
+    const element = categoryScrollRef.current;
+    if (!element) return;
+
+    const selectedPill = Array.from(
+      element.querySelectorAll<HTMLElement>("[data-category]")
+    ).find((pill) => pill.dataset.category === activeCategory);
+
+    if (!selectedPill) return;
+
+    window.requestAnimationFrame(() => {
+      element.scrollTo({
+        left: Math.max(0, selectedPill.offsetLeft),
+        behavior: "smooth",
+      });
+    });
+  }, [activeCategory]);
 
   // ------------------------------------------------------------
   // Email campaign modal
@@ -222,12 +290,20 @@ export default function Page({ params }: PageProps) {
       return;
     }
 
+    try {
+      localStorage.setItem(categoryStorageKey, activeCategory);
+    } catch (error) {
+      console.error("Failed to save selected category:", error);
+    }
+
     setSelectedTemplateId(templateId);
     setIsNavigating(true);
 
     window.setTimeout(() => {
       router.push(
-        `/edit_new/${username}?templateId=${templateId}`
+        `/edit_new/${username}?templateId=${encodeURIComponent(
+          templateId
+        )}&category=${encodeURIComponent(activeCategory)}`
       );
     }, 300);
   };
@@ -781,10 +857,11 @@ export default function Page({ params }: PageProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        setActiveCategory(
+                        handleCategoryChange(
                           category.name
                         )
                       }
+                      data-category={category.name}
                       className={
                         isActive
                           ? "h-9 shrink-0 gap-2 whitespace-nowrap rounded-full border border-foreground bg-foreground px-4 text-sm font-medium text-background transition-all hover:bg-foreground/90 hover:text-background"
@@ -889,7 +966,7 @@ export default function Page({ params }: PageProps) {
       {/* UI Component Subcategory Pills */}
       <CategoryPills
         activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
+        onCategoryChange={handleCategoryChange}
         activeUIComponent={activeUIComponent}
         onUIComponentChange={setActiveUIComponent}
       />
@@ -1433,26 +1510,34 @@ function TemplateCard({
     id: string
   ) => void;
 }) {
+  // Compute transform values with fallbacks (0, 0, 1)
+  const moveX = template.moveX ?? 0;
+  const moveY = template.moveY ?? 0;
+  const zoom = template.zoom ?? 1;
+  const transformStyle = `translate(${moveX}px, ${moveY}px) scale(${zoom})`;
+
   return (
     <Card
       onClick={() =>
         onSelect(template.id)
       }
-      className="group flex cursor-pointer flex-col overflow-hidden border-muted/60 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+        style={{ zoom: 1 }}  className="group max-w-[300px] flex cursor-pointer flex-col overflow-hidden border-muted/60 transition-all duration-300 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
     >
 
-      {/* Image */}
-
-      <div className="relative aspect-[16/10] overflow-hidden border-b border-muted/40 bg-muted/30">
-
-        <img
-          src={template.localImage}
-          alt={template.title}
-          className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
-        />
+      {/* Image container with transform applied */}
+      <div
+        className="relative aspect-[16/10] overflow-hidden border-b border-muted/40 bg-muted/30"
+        style={{ transform: transformStyle   }}
+      >
+          <div className="w-full overflow-hidden bg-white">
+      <img
+        src={template.localImage}
+        alt={template.title}
+        className="w-full h-full object-contain"
+      />
+    </div>
 
         {/* Hover overlay */}
-
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
 
           <Button
@@ -1470,7 +1555,6 @@ function TemplateCard({
       </div>
 
       {/* Content */}
-
       <CardContent className="flex flex-1 flex-col justify-between space-y-4 p-5">
 
         <div>

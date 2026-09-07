@@ -1,179 +1,308 @@
-import { LayoutTemplate, Rocket, BriefcaseBusiness, UserRound, PenLine, Bot, Palette, ChevronDown, } from "lucide-react"; export interface TemplateMeta { id: string; localImage: string; title: string; description: string; mood: string; category: string; } export const CATEGORIES = [ { name: "Landing Page", icon: LayoutTemplate, }, { name: "Entrepreneurs & Startups", icon: Rocket, }, { name: "Professional Services", icon: BriefcaseBusiness, }, { name: "Individuals", icon: UserRound, }, { name: "Blog & Content", icon: PenLine, }, { name: "AI Agent", icon: Bot, }, { name: "UI Components", icon: Palette, hasSubcategories: true, }, ]; export const UI_COMPONENT_CATEGORIES = [ "Colors", "Gradients", "Buttons", "Cards", "Forms", "Navigation", "Typography", "Animations", ];
+import { LayoutTemplate, Rocket, BriefcaseBusiness, UserRound, PenLine, Bot, Palette,GraduationCap , ChevronDown, } from "lucide-react"; export interface TemplateMeta { id: string; localImage: string; title: string; description: string; mood: string; category: string; } export const CATEGORIES = [ { name: "Landing Page", icon: LayoutTemplate, }, { name: "Entrepreneurs & Startups", icon: Rocket, }, { name: "Professional Services", icon: BriefcaseBusiness, }, { name: "Job Search", icon: GraduationCap, }, { name: "Blog & Content", icon: PenLine, }, { name: "AI Agent", icon: Bot, }, { name: "UI Components", icon: Palette, hasSubcategories: true, }, ]; export const UI_COMPONENT_CATEGORIES = [ "Colors", "Gradients", "Buttons", "Cards", "Forms", "Navigation", "Typography", "Animations", ];
 
-
+export interface TemplateMeta {
+  id: string;
+  localImage: string;
+  title: string;
+  description: string;
+  mood: string;
+  category: string;
+  // New properties (all optional)
+  moveX?: number;   // horizontal shift (positive = right)
+  moveY?: number;   // vertical shift (positive = down)
+  zoom?: number;    // scale factor (1 = normal)
+}
 
 export const templatesMeta: TemplateMeta[] = [
   {
     id: "1",
     localImage: "/1.png",
     title: "Light House",
-    description:
-      "Warm, inviting landing page with a bold hero section.",
+    description: "Warm, inviting landing page with a bold hero section.",
     mood: "Landing page",
     category: "Landing Page",
+    moveX: 4,
+    moveY: 7,
+    zoom: 1.15,
   },
-
   {
     id: "2",
     localImage: "/2.png",
     title: "Modern SaaS",
-    description:
-      "Clean SaaS landing page designed for modern digital products.",
+    description: "Clean SaaS landing page designed for modern digital products.",
     mood: "SaaS",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "3",
     localImage: "/3.png",
     title: "Creative Studio",
-    description:
-      "Bold creative layout for agencies, studios and digital teams.",
+    description: "Bold creative layout for agencies, studios and digital teams.",
     mood: "Creative",
-    category: "Individuals",
+    category: "Blog & Content",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "4",
     localImage: "/4.png",
     title: "Personal Portfolio",
-    description:
-      "Minimal portfolio experience for showcasing your work and skills.",
+    description: "Minimal portfolio experience for showcasing your work and skills.",
     mood: "Portfolio",
-    category: "Individuals",
+    category: "Blog & Content",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "5",
     localImage: "/5.png",
     title: "Digital Journal",
-    description:
-      "Elegant editorial layout for articles, stories and personal writing.",
+    description: "Elegant editorial layout for articles, stories and personal writing.",
     mood: "Editorial",
     category: "Blog & Content",
+    moveX: -7,
+    moveY: -3,
+    zoom: 1.04,
   },
-
   {
     id: "6",
     localImage: "/6.png",
     title: "Business Pro",
-    description:
-      "Professional business website with a clear and trustworthy layout.",
+    description: "Professional business website with a clear and trustworthy layout.",
     mood: "Corporate",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "7",
     localImage: "/7.png",
     title: "Product Launch",
-    description:
-      "High-impact product landing page built for launches and campaigns.",
+    description: "High-impact product landing page built for launches and campaigns.",
     mood: "Landing page",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 9,
+    zoom: 1.03,
   },
-
   {
     id: "8",
     localImage: "/8.png",
     title: "Startup Flow",
-    description:
-      "Modern startup website focused on clarity, conversion and growth.",
+    description: "Modern startup website focused on clarity, conversion and growth.",
     mood: "SaaS",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
-  {
-    id: "9",
-    localImage: "/9.png",
-    title: "Designer Portfolio",
-    description:
-      "Visual-first portfolio for designers, creators and freelancers.",
-    mood: "Portfolio",
-    category: "Individuals",
-  },
+  
 
   {
     id: "10",
     localImage: "/10.png",
     title: "Insight",
-    description:
-      "Content-focused website for publishing ideas, insights and stories.",
+    description: "Content-focused website for publishing ideas, insights and stories.",
     mood: "Editorial",
     category: "Blog & Content",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "11",
     localImage: "/11.png",
     title: "Enterprise",
-    description:
-      "Structured corporate layout for established companies and teams.",
+    description: "Structured corporate layout for established companies and teams.",
     mood: "Corporate",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-
   {
     id: "12",
     localImage: "/12.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
-    category: "Individuals",
+    category: "Job Search",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
+ 
+  
   {
-    id: "15",
-    localImage: "/15.png",
+    id: "13",
+    localImage: "/13.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
-    category: "Entrepreneurs & Startups",
+    category: "Landing Page",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1.03,
   },
-   {
+ 
+  {
     id: "16",
     localImage: "/16.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
     category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-   
-   {
+  {
     id: "19",
     localImage: "/19.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
-    category: "Individuals",
+    category: "Job Search",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
-   {
+  {
     id: "27",
     localImage: "/27.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
     category: "AI Agent",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
   },
   {
     id: "28",
     localImage: "/28.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
     category: "Blog & Content",
-  },{
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
+  },
+  {
     id: "29",
     localImage: "/29.png",
     title: "Simple Launch",
-    description:
-      "Simple, focused landing page designed to turn visitors into customers.",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
     category: "Blog & Content",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
+  },
+  {
+    id: "31",
+    localImage: "/31.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: 4,
+    zoom: 1,
+  },
+  {
+    id: "32",
+    localImage: "/32.png",  // note: image path is same as 31, but keep as-is
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Entrepreneurs & Startups",
+    moveX: 0,
+    moveY: -3,
+    zoom: 1,
+  },
+  {
+    id: "33",
+    localImage: "/33.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 0,
+    moveY: 9,
+    zoom: 1.1,
+  },
+  {
+    id: "35",
+    localImage: "/35.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 2,
+    moveY: 0,
+    zoom: 1.05,
+  },
+  {
+    id: "36",
+    localImage: "/36.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1.04,
+  },
+   {
+    id: "14",
+    localImage: "/14.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Blog & Content",
+    moveX: 0,
+    moveY: 0,
+    zoom: 1,
+  },
+  {
+    id: "34",
+    localImage: "/34.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 0,
+    moveY: -2,
+    zoom: 1,
+  },
+   {
+    id: "30",
+    localImage: "/30.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 0,
+    moveY: -2,
+    zoom: 1,
+  },
+   {
+    id: "37",
+    localImage: "/37.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Professional Services",
+    moveX: 0,
+    moveY: -2,
+    zoom: 1,
   },
 ];

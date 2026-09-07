@@ -22,23 +22,21 @@ const IMAGE_EXTENSIONS = [
    HELPERS
 ========================================================= */
 
-function isImage(filename: string) {
+function isImage(filename: string): boolean {
   return IMAGE_EXTENSIONS.includes(
     path.extname(filename).toLowerCase()
   );
 }
 
-function safePublicPath(filename: string) {
-  const fullPath = path.resolve(
-    PUBLIC_DIR,
-    filename
-  );
+/**
+ * Prevent access outside the public directory.
+ */
+function safePublicPath(filename: string): string {
+  const fullPath = path.resolve(PUBLIC_DIR, filename);
 
   if (
     fullPath !== PUBLIC_DIR &&
-    !fullPath.startsWith(
-      PUBLIC_DIR + path.sep
-    )
+    !fullPath.startsWith(PUBLIC_DIR + path.sep)
   ) {
     throw new Error("Invalid file path");
   }
@@ -46,11 +44,10 @@ function safePublicPath(filename: string) {
   return fullPath;
 }
 
-/* =========================================================
-   SAFE IMAGE FILENAME
-========================================================= */
-
-function sanitizeFilename(filename: string) {
+/**
+ * Make uploaded filenames safe.
+ */
+function sanitizeFilename(filename: string): string {
   const extension = path.extname(filename).toLowerCase();
 
   const basename = path
@@ -62,6 +59,78 @@ function sanitizeFilename(filename: string) {
   return `${basename || "image"}${extension}`;
 }
 
+/**
+ * Recursively find image files inside public/.
+ *
+ * This avoids relying on recursive fs.readdir().
+ */
+async function getImageFiles(
+  directory: string,
+  relativeDirectory = ""
+): Promise<string[]> {
+  const entries = await fs.readdir(directory, {
+    withFileTypes: true,
+  });
+
+  const results: string[] = [];
+
+  for (const entry of entries) {
+    const absolutePath = path.join(
+      directory,
+      entry.name
+    );
+
+    const relativePath = path.join(
+      relativeDirectory,
+      entry.name
+    );
+
+    if (entry.isDirectory()) {
+      const nestedFiles = await getImageFiles(
+        absolutePath,
+        relativePath
+      );
+
+      results.push(...nestedFiles);
+      continue;
+    }
+
+    if (
+      entry.isFile() &&
+      isImage(entry.name)
+    ) {
+      results.push(relativePath);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Normalize Windows paths to web paths.
+ */
+function normalizeWebPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/");
+}
+
+/**
+ * Return a consistent JSON error response.
+ */
+function errorResponse(
+  message: string,
+  status = 500
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: message,
+    },
+    {
+      status,
+    }
+  );
+}
+
 /* =========================================================
    GET
 ========================================================= */
@@ -70,9 +139,7 @@ export async function GET(
   request: NextRequest
 ) {
   const type =
-    request.nextUrl.searchParams.get(
-      "type"
-    );
+    request.nextUrl.searchParams.get("type");
 
   try {
     /* -----------------------------------------------------
@@ -105,29 +172,18 @@ export async function GET(
         recursive: true,
       });
 
-      const files = await fs.readdir(
-        PUBLIC_DIR,
-        {
-          recursive: true,
-        }
-      );
+      const files =
+        await getImageFiles(PUBLIC_DIR);
 
-      const images = files
-        .filter((file) =>
-          isImage(file)
-        )
-        .map((file) => ({
-          name: file.replace(
-            /\\/g,
-            "/"
-          ),
-          url:
-            "/" +
-            file.replace(
-              /\\/g,
-              "/"
-            ),
-        }));
+      const images = files.map((file) => {
+        const normalized =
+          normalizeWebPath(file);
+
+        return {
+          name: normalized,
+          url: `/${normalized}`,
+        };
+      });
 
       return NextResponse.json({
         success: true,
@@ -135,29 +191,23 @@ export async function GET(
       });
     }
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid type",
-      },
-      {
-        status: 400,
-      }
+    /* -----------------------------------------------------
+       INVALID TYPE
+    ----------------------------------------------------- */
+
+    return errorResponse(
+      "Invalid type",
+      400
     );
   } catch (error) {
     console.error(
-      "GET admin API error:",
+      "GET /admin/api error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to load data",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      "Failed to load data",
+      500
     );
   }
 }
@@ -171,9 +221,7 @@ export async function POST(
   request: NextRequest
 ) {
   const type =
-    request.nextUrl.searchParams.get(
-      "type"
-    );
+    request.nextUrl.searchParams.get("type");
 
   try {
     /* -----------------------------------------------------
@@ -188,15 +236,9 @@ export async function POST(
         formData.get("file");
 
       if (!(file instanceof File)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "No image file provided",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "No image file provided",
+          400
         );
       }
 
@@ -205,19 +247,12 @@ export async function POST(
       --------------------------------------------------- */
 
       if (
-        !file.type.startsWith(
-          "image/"
-        )
+        !file.type ||
+        !file.type.startsWith("image/")
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Only image files are allowed",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "Only image files are allowed",
+          400
         );
       }
 
@@ -226,18 +261,12 @@ export async function POST(
       --------------------------------------------------- */
 
       const originalName =
-        file.name || "image";
+        file.name?.trim() || "image";
 
       if (!isImage(originalName)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Unsupported image format",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "Unsupported image format",
+          400
         );
       }
 
@@ -249,19 +278,10 @@ export async function POST(
       const MAX_FILE_SIZE =
         10 * 1024 * 1024;
 
-      if (
-        file.size >
-        MAX_FILE_SIZE
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Image must be smaller than 10 MB",
-          },
-          {
-            status: 400,
-          }
+      if (file.size > MAX_FILE_SIZE) {
+        return errorResponse(
+          "Image must be smaller than 10 MB",
+          400
         );
       }
 
@@ -269,12 +289,9 @@ export async function POST(
          MAKE SURE PUBLIC EXISTS
       --------------------------------------------------- */
 
-      await fs.mkdir(
-        PUBLIC_DIR,
-        {
-          recursive: true,
-        }
-      );
+      await fs.mkdir(PUBLIC_DIR, {
+        recursive: true,
+      });
 
       /* ---------------------------------------------------
          SANITIZE FILE NAME
@@ -285,13 +302,10 @@ export async function POST(
           originalName
         );
 
-      let finalName =
-        safeName;
+      let finalName = safeName;
 
       let filePath =
-        safePublicPath(
-          finalName
-        );
+        safePublicPath(finalName);
 
       /* ---------------------------------------------------
          DON'T OVERWRITE EXISTING FILES
@@ -301,14 +315,10 @@ export async function POST(
 
       while (true) {
         try {
-          await fs.access(
-            filePath
-          );
+          await fs.access(filePath);
 
           const extension =
-            path.extname(
-              safeName
-            );
+            path.extname(safeName);
 
           const basename =
             path.basename(
@@ -320,9 +330,7 @@ export async function POST(
             `${basename}-${counter}${extension}`;
 
           filePath =
-            safePublicPath(
-              finalName
-            );
+            safePublicPath(finalName);
 
           counter++;
         } catch {
@@ -365,12 +373,28 @@ export async function POST(
     ----------------------------------------------------- */
 
     if (type === "templates") {
-      const body =
-        await request.json();
+      let body: Record<
+        string,
+        unknown
+      >;
+
+      try {
+        body =
+          await request.json();
+      } catch (error) {
+        console.error(
+          "Invalid JSON in template POST:",
+          error
+        );
+
+        return errorResponse(
+          "Invalid JSON request body",
+          400
+        );
+      }
 
       const code =
-        typeof body.code ===
-        "string"
+        typeof body.code === "string"
           ? body.code
           : "";
 
@@ -408,8 +432,7 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        template:
-          result[0],
+        template: result[0],
       });
     }
 
@@ -417,30 +440,19 @@ export async function POST(
        INVALID TYPE
     ----------------------------------------------------- */
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid type",
-      },
-      {
-        status: 400,
-      }
+    return errorResponse(
+      "Invalid type",
+      400
     );
   } catch (error) {
     console.error(
-      "POST admin API error:",
+      "POST /admin/api error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Failed to process request",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      "Failed to process request",
+      500
     );
   }
 }
@@ -454,9 +466,7 @@ export async function PATCH(
   request: NextRequest
 ) {
   const type =
-    request.nextUrl.searchParams.get(
-      "type"
-    );
+    request.nextUrl.searchParams.get("type");
 
   try {
     /* -----------------------------------------------------
@@ -464,31 +474,37 @@ export async function PATCH(
     ----------------------------------------------------- */
 
     if (type === "templates") {
-      const body =
-        await request.json();
+      let body: Record<
+        string,
+        unknown
+      >;
 
-      const id = Number(
-        body.id
-      );
+      try {
+        body =
+          await request.json();
+      } catch (error) {
+        console.error(
+          "Invalid JSON in template PATCH:",
+          error
+        );
 
-      if (
-        !Number.isInteger(id)
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Invalid template ID",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "Invalid JSON request body",
+          400
+        );
+      }
+
+      const id = Number(body.id);
+
+      if (!Number.isInteger(id)) {
+        return errorResponse(
+          "Invalid template ID",
+          400
         );
       }
 
       const code =
-        typeof body.code ===
-        "string"
+        typeof body.code === "string"
           ? body.code
           : "";
 
@@ -518,25 +534,16 @@ export async function PATCH(
           code_data
       `;
 
-      if (
-        result.length === 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Template not found",
-          },
-          {
-            status: 404,
-          }
+      if (result.length === 0) {
+        return errorResponse(
+          "Template not found",
+          404
         );
       }
 
       return NextResponse.json({
         success: true,
-        template:
-          result[0],
+        template: result[0],
       });
     }
 
@@ -545,32 +552,40 @@ export async function PATCH(
     ----------------------------------------------------- */
 
     if (type === "images") {
-      const body =
-        await request.json();
+      let body: Record<
+        string,
+        unknown
+      >;
+
+      try {
+        body =
+          await request.json();
+      } catch (error) {
+        console.error(
+          "Invalid JSON in image PATCH:",
+          error
+        );
+
+        return errorResponse(
+          "Invalid JSON request body",
+          400
+        );
+      }
 
       const oldName =
-        body.oldName;
+        typeof body.oldName === "string"
+          ? body.oldName.trim()
+          : "";
 
       const newName =
-        body.newName;
+        typeof body.newName === "string"
+          ? body.newName.trim()
+          : "";
 
-      if (
-        typeof oldName !==
-          "string" ||
-        typeof newName !==
-          "string" ||
-        !oldName.trim() ||
-        !newName.trim()
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Old and new file names are required",
-          },
-          {
-            status: 400,
-          }
+      if (!oldName || !newName) {
+        return errorResponse(
+          "Old and new file names are required",
+          400
         );
       }
 
@@ -578,46 +593,28 @@ export async function PATCH(
         !isImage(oldName) ||
         !isImage(newName)
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Only image files can be renamed",
-          },
-          {
-            status: 400,
-          }
+        return errorResponse(
+          "Only image files can be renamed",
+          400
         );
       }
 
       const oldPath =
-        safePublicPath(
-          oldName
-        );
+        safePublicPath(oldName);
 
       const newPath =
-        safePublicPath(
-          newName
-        );
+        safePublicPath(newName);
 
       /* ---------------------------------------------------
          CHECK SOURCE EXISTS
       --------------------------------------------------- */
 
       try {
-        await fs.access(
-          oldPath
-        );
+        await fs.access(oldPath);
       } catch {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Image not found",
-          },
-          {
-            status: 404,
-          }
+        return errorResponse(
+          "Image not found",
+          404
         );
       }
 
@@ -626,19 +623,11 @@ export async function PATCH(
       --------------------------------------------------- */
 
       try {
-        await fs.access(
-          newPath
-        );
+        await fs.access(newPath);
 
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "A file with that name already exists",
-          },
-          {
-            status: 409,
-          }
+        return errorResponse(
+          "A file with that name already exists",
+          409
         );
       } catch {
         // Destination doesn't exist.
@@ -660,30 +649,19 @@ export async function PATCH(
        INVALID TYPE
     ----------------------------------------------------- */
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid type",
-      },
-      {
-        status: 400,
-      }
+    return errorResponse(
+      "Invalid type",
+      400
     );
   } catch (error) {
     console.error(
-      "PATCH admin API error:",
+      "PATCH /admin/api error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Failed to update",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      "Failed to update",
+      500
     );
   }
 }
@@ -697,9 +675,7 @@ export async function DELETE(
   request: NextRequest
 ) {
   const type =
-    request.nextUrl.searchParams.get(
-      "type"
-    );
+    request.nextUrl.searchParams.get("type");
 
   try {
     /* -----------------------------------------------------
@@ -713,18 +689,10 @@ export async function DELETE(
         )
       );
 
-      if (
-        !Number.isInteger(id)
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Invalid template ID",
-          },
-          {
-            status: 400,
-          }
+      if (!Number.isInteger(id)) {
+        return errorResponse(
+          "Invalid template ID",
+          400
         );
       }
 
@@ -734,18 +702,10 @@ export async function DELETE(
         RETURNING id
       `;
 
-      if (
-        result.length === 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Template not found",
-          },
-          {
-            status: 404,
-          }
+      if (result.length === 0) {
+        return errorResponse(
+          "Template not found",
+          404
         );
       }
 
@@ -766,59 +726,43 @@ export async function DELETE(
           "name"
         );
 
-      if (!name) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Image name is required",
-          },
-          {
-            status: 400,
-          }
+      if (!name?.trim()) {
+        return errorResponse(
+          "Image name is required",
+          400
         );
       }
 
-      if (!isImage(name)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Only image files can be deleted",
-          },
-          {
-            status: 400,
-          }
+      const cleanName = name.trim();
+
+      if (!isImage(cleanName)) {
+        return errorResponse(
+          "Only image files can be deleted",
+          400
         );
       }
 
       const filePath =
-        safePublicPath(name);
+        safePublicPath(cleanName);
 
       /* ---------------------------------------------------
          CHECK FILE EXISTS
       --------------------------------------------------- */
 
       try {
-        await fs.access(
-          filePath
-        );
+        await fs.access(filePath);
       } catch {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Image not found",
-          },
-          {
-            status: 404,
-          }
+        return errorResponse(
+          "Image not found",
+          404
         );
       }
 
-      await fs.unlink(
-        filePath
-      );
+      /* ---------------------------------------------------
+         DELETE FILE
+      --------------------------------------------------- */
+
+      await fs.unlink(filePath);
 
       return NextResponse.json({
         success: true,
@@ -831,30 +775,19 @@ export async function DELETE(
        INVALID TYPE
     ----------------------------------------------------- */
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Invalid type",
-      },
-      {
-        status: 400,
-      }
+    return errorResponse(
+      "Invalid type",
+      400
     );
   } catch (error) {
     console.error(
-      "DELETE admin API error:",
+      "DELETE /admin/api error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Failed to delete",
-      },
-      {
-        status: 500,
-      }
+    return errorResponse(
+      "Failed to delete",
+      500
     );
   }
 }

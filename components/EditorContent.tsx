@@ -115,6 +115,9 @@ export default function New({ username, initialContent }: NewMobileProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get('templateId')
+  const categoryFromUrl = searchParams.get('category')
+
+  const categoryStorageKey = `workspace-selected-category-${username.toLowerCase()}`
 
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [isPublishing, setIsPublishing] = useState(false)
@@ -662,7 +665,18 @@ if (!confirm(message)) return;
           description: 'Your website is now live.',
           position: 'top-center',
         })
-        router.replace(`/edit_new/${username}`)
+        const nextParams = new URLSearchParams()
+
+        if (templateId) {
+          nextParams.set('templateId', templateId)
+        }
+
+        if (categoryFromUrl) {
+          nextParams.set('category', categoryFromUrl)
+        }
+
+        const query = nextParams.toString()
+        router.replace(`/edit_new/${username}${query ? `?${query}` : ''}`)
       } else {
         toast.error(result.error || 'Failed to publish website')
       }
@@ -723,6 +737,29 @@ if (!confirm(message)) return;
   // Format time
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  // Return to templates while preserving the last selected category.
+  const handleCloseEditor = () => {
+    let category = categoryFromUrl
+
+    try {
+      if (!category) {
+        category = localStorage.getItem(categoryStorageKey)
+      }
+
+      if (category) {
+        localStorage.setItem(categoryStorageKey, category)
+      }
+    } catch (error) {
+      console.error('Failed to restore selected category:', error)
+    }
+
+    const templatesUrl = category
+      ? `/templates/${username}?category=${encodeURIComponent(category)}`
+      : `/templates/${username}`
+
+    router.push(templatesUrl)
   }
 
   if (isLoadingTemplate) {
@@ -866,7 +903,11 @@ if (!confirm(message)) return;
         <div className="flex items-center gap-4">
           {/* Quick links */}
           <a
-            href={`/templates/${username}`}
+            href={
+              categoryFromUrl
+                ? `/templates/${username}?category=${encodeURIComponent(categoryFromUrl)}`
+                : `/templates/${username}`
+            }
             className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
           >
             <Pickaxe className="h-4 w-4" />
@@ -908,7 +949,7 @@ if (!confirm(message)) return;
           </button>
 
           <button
-            onClick={() => router.back()}
+            onClick={handleCloseEditor}
             className="text-slate-400 hover:text-white transition-transform hover:scale-110"
           >
             <XCircle className="h-5 w-5" />
