@@ -349,7 +349,7 @@ export default function Premium({ username }: PremiumProps) {
           orderData?.currency ||
           "INR",
 
-        name: "7Winks",
+        name: "7Wingz",
 
         description:
           `${getRechargeLabel(
@@ -579,7 +579,7 @@ export default function Premium({ username }: PremiumProps) {
 
             <img
               src="/jas.gif"
-              alt="7Winks"
+              alt="7Wingz"
               className="mt-12 w-56 h-auto"
             />
 

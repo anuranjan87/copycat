@@ -159,10 +159,10 @@ export default function PricingPage() {
 
         currency: data.currency,
 
-        name: "7Winks",
+        name: "7Wingz",
 
         description:
-          "7Winks Premium",
+          "7Wingz Premium",
 
         order_id: data.orderId,
 
@@ -426,7 +426,7 @@ function FreePricing({
               <div className="w-2 h-2 rounded-full bg-black/70" />
 
               <span className="text-[10px] uppercase tracking-[0.25em] text-black/45">
-                7Winks Premium
+                7Wingz Premium
               </span>
 
             </div>
@@ -524,7 +524,7 @@ function FreePricing({
 
                 <img
                   src="/jas.gif"
-                  alt="7Winks"
+                  alt="7Wingz"
                   className="absolute z-10 w-[210px] sm:w-[245px] h-auto left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_20px_25px_rgba(0,0,0,0.12)]"
                 />
 
@@ -641,7 +641,7 @@ function FreePricing({
           <div className="mt-24 pt-8 border-t border-black/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4">
 
             <p className="text-[10px] uppercase tracking-[0.22em] text-black/20">
-              7Winks
+              7Wingz
             </p>
 
             <p className="text-[10px] text-black/20">
