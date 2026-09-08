@@ -345,7 +345,7 @@ ${cleanHtml}`
           setSavedData(extracted)
           toast.info('Template loaded', {
             description: 'Ready to customise. Click Publish to make it live.',
-            position: 'bottom-left',
+            position: 'top-left',
           })
         } else {
           toast.error('Failed to load template', {

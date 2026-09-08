@@ -25,7 +25,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
 import { CodeEditor } from '@/components/code-editor'
-import PremiumRequiredModal from "@/components/ui_components/PremiumRequiredModal" // <--- Added Import
+import PremiumRequiredModal from "@/components/ui_components/PremiumRequiredModal"
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -47,11 +47,6 @@ function cleanGeneratedCode(raw: string): string {
 
 /**
  * Free AI usage is stored server-side in Upstash Redis.
- *
- * IMPORTANT:
- * - Never access UPSTASH_REDIS_REST_TOKEN from this client component.
- * - The client talks to /api/ai/usage.
- * - The API route is responsible for reading/incrementing Redis securely.
  */
 const DAILY_AI_LIMIT = 2
 
@@ -61,10 +56,6 @@ type AIUsageResponse = {
   limit: number
 }
 
-/**
- * Read the current AI usage from the server.
- * Redis credentials never reach the browser.
- */
 async function getDailyAIUsage(): Promise<AIUsageResponse> {
   const response = await fetch('/api/ai/usage', {
     method: 'GET',
@@ -91,12 +82,6 @@ async function getDailyAIUsage(): Promise<AIUsageResponse> {
   }
 }
 
-/**
- * Reserve one free AI generation before calling the AI service.
- *
- * The API route performs the limit check + increment atomically in Redis.
- * If generation fails, release the reservation with releaseDailyAIUsage().
- */
 async function reserveDailyAIUsage(): Promise<AIUsageResponse> {
   const response = await fetch('/api/ai/usage', {
     method: 'POST',
@@ -109,7 +94,6 @@ async function reserveDailyAIUsage(): Promise<AIUsageResponse> {
   })
 
   const data = await response.json().catch(() => ({}))
-
   if (!response.ok) {
     const error = new Error(data?.error || 'Failed to update AI usage')
     ;(error as Error & { code?: string }).code = data?.code
@@ -127,11 +111,6 @@ async function reserveDailyAIUsage(): Promise<AIUsageResponse> {
   }
 }
 
-/**
- * Release a reserved free AI generation when the AI request fails.
- *
- * This keeps failed generations from consuming the daily allowance.
- */
 async function releaseDailyAIUsage(): Promise<void> {
   try {
     const response = await fetch('/api/ai/usage', {
@@ -141,7 +120,6 @@ async function releaseDailyAIUsage(): Promise<void> {
         'Cache-Control': 'no-cache',
       },
     })
-
     if (!response.ok) {
       console.error('Failed to release AI usage reservation')
     }
@@ -160,7 +138,6 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ),
 })
 
-// Custom theme + disable error diagnostics
 const handleEditorMount = (editor: any, monaco: any) => {
   if (monaco.languages?.typescript?.javascriptDefaults) {
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
@@ -209,9 +186,127 @@ export interface NewMobileProps {
     script: string
     data: string
   }
+  onToggleAdvanced?: () => void // Added this prop
 }
 
-export default function EditorContent({ username, initialContent }: NewMobileProps) {
+// ------------------------------------------------------------
+// DataForm component – displays all fields as editable inputs
+// ------------------------------------------------------------
+function DataForm({
+  dataString,
+  onUpdate,
+}: {
+  dataString: string
+  onUpdate: (newString: string) => void
+}) {
+  const [localData, setLocalData] = useState<Record<string, any>>({})
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  // Parse the raw data string into an object
+  const parseData = useCallback((str: string): Record<string, any> | null => {
+    if (!str.trim()) return {}
+    try {
+      // Wrap with {} and evaluate as JavaScript object literal
+      const parsed = new Function(`return ({ ${str} })`)()
+      return parsed
+    } catch {
+      return null
+    }
+  }, [])
+
+  // Update local state when the raw string changes externally
+  useEffect(() => {
+    const parsed = parseData(dataString)
+    if (parsed !== null) {
+      setLocalData(parsed)
+      setParseError(null)
+    } else {
+      setParseError('Invalid data format – please use valid JavaScript object syntax.')
+    }
+  }, [dataString, parseData])
+
+  // Convert an object back to a string (without outer braces)
+  const stringifyData = (obj: Record<string, any>): string => {
+    // Use JSON.stringify to get a valid string, then remove outer braces and trim
+    const json = JSON.stringify(obj, null, 2)
+    // Remove the outer { and } and the trailing newline
+    let inner = json.slice(1, -1).trim()
+    // If it's empty, return empty string
+    if (inner === '') return ''
+    // Remove quotes from keys? Not necessary, but we keep them to be safe.
+    // The data script can handle quoted keys.
+    return inner
+  }
+
+  const handleInputChange = (key: string, value: string) => {
+    // Try to preserve the type: number, boolean, null, etc.
+    let parsedValue: any = value
+    if (value === 'true') parsedValue = true
+    else if (value === 'false') parsedValue = false
+    else if (value === 'null') parsedValue = null
+    else if (value === 'undefined') parsedValue = undefined
+    else if (!isNaN(Number(value)) && value.trim() !== '') {
+      parsedValue = Number(value)
+    }
+    // else keep as string
+
+    const updated = { ...localData, [key]: parsedValue }
+    setLocalData(updated)
+
+    // Convert back to string and call parent updater
+    const newString = stringifyData(updated)
+    onUpdate(newString)
+  }
+
+  if (parseError) {
+    return (
+      <div className="flex items-center justify-center h-full text-red-400 text-sm p-4">
+        <AlertCircle className="w-5 h-5 mr-2" />
+        {parseError}
+      </div>
+    )
+  }
+
+  const keys = Object.keys(localData)
+  if (keys.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-400 text-sm p-4">
+        No data fields found. Add keys in the raw editor.
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full overflow-auto p-4 custom-scrollbar">
+      <div className="space-y-3">
+        {keys.map((key) => {
+          const value = localData[key]
+          const displayValue = value === undefined ? '' : String(value)
+          return (
+            <div key={key} className="flex items-center gap-3">
+              <label
+                htmlFor={`field-${key}`}
+                className="w-28 text-sm text-slate-300 truncate font-mono"
+              >
+                {key}
+              </label>
+              <input
+                id={`field-${key}`}
+                type="text"
+                value={displayValue}
+                onChange={(e) => handleInputChange(key, e.target.value)}
+                className="flex-1 bg-slate-800/60 border border-slate-700/30 rounded px-3 py-1.5 text-sm text-slate-200 focus:ring-1 focus:ring-blue-400 focus:border-transparent transition"
+                placeholder={typeof value === 'number' ? 'number' : 'value'}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function EditorContent_new({ username, initialContent, onToggleAdvanced }: NewMobileProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get('templateId')
@@ -232,10 +327,14 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
 
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false) // <--- Added State
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false)
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [lastPublished, setLastPublished] = useState<Date | null>(null)
+
+  // New state for form view toggle
+  const [useFormView, setUseFormView] = useState(false)
+  
 
   const loadingMessages = [
     'The person who asks the questions is the one who is in control of the conversation. — Classic Sales Maxim',
@@ -297,15 +396,10 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
 
   useEffect(() => {
     let cancelled = false
-
     async function fetchPremiumStatus() {
       try {
         setIsLoadingStatus(true)
-
-        // AI usage is now read from the server-side Redis-backed API.
-        // No localStorage is used for the AI allowance.
         const data = await getDailyAIUsage()
-
         if (!cancelled) {
           setPremiumStatus({
             premium: data.premium,
@@ -315,9 +409,7 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
         }
       } catch (error) {
         console.error('Usage fetch error:', error)
-
         if (!cancelled) {
-          // Fail closed if the server cannot tell us the user's real usage.
           setPremiumStatus({
             premium: false,
             usage: DAILY_AI_LIMIT,
@@ -330,9 +422,7 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
         }
       }
     }
-
     fetchPremiumStatus()
-
     return () => {
       cancelled = true
     }
@@ -344,15 +434,11 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
   const findDataDeclaration = (source: string) => {
     const declarationRegex = /(?:^|[\r\n])\s*(?:const|let|var)\s+data\s*=\s*\{/i
     const match = source.match(declarationRegex)
-
     if (!match || match.index === undefined) return null
-
     const declarationText = match[0]
     const braceOffset = declarationText.indexOf('{')
     const openingBrace = match.index + braceOffset
-
     if (braceOffset === -1 || openingBrace < 0) return null
-
     return {
       start: match.index,
       openingBrace,
@@ -388,12 +474,10 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
           escaped = false
           continue
         }
-
         if (char === '\\') {
           escaped = true
           continue
         }
-
         if (char === quote) quote = null
         continue
       }
@@ -425,69 +509,49 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
         if (depth === 0) return i
       }
     }
-
     return -1
   }
 
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
-
     const trimmed = dataString.trim()
     if (!trimmed) return ''
-
     const declaration = findDataDeclaration(trimmed)
-
     if (!declaration) {
       return trimmed
     }
-
     const closingBrace = findMatchingClosingBrace(
       trimmed,
       declaration.openingBrace
     )
-
     if (closingBrace === -1) return trimmed
-
     const prefix = trimmed.slice(0, declaration.start).trim()
     const body = trimmed
       .slice(declaration.openingBrace + 1, closingBrace)
       .trim()
-
     return [prefix, body].filter(Boolean).join('\n\n').trim()
   }
 
   const buildDataScript = (dataString: string) => {
     const trimmed = dataString.trim()
-
     if (!trimmed) return 'const data = {};'
-
     const declaration = findDataDeclaration(trimmed)
-
     if (declaration) {
       const closingBrace = findMatchingClosingBrace(
         trimmed,
         declaration.openingBrace
       )
-
       if (closingBrace !== -1) {
         return trimmed.slice(declaration.start).trim()
       }
     }
-
     return `const data = {\n${trimmed}\n};`
   }
 
   const injectDataIntoHtml = useCallback(
     (html: string, data: string) => {
-      if (!html) {
-        return html
-      }
-
-      const safeData =
-        typeof data === 'string'
-          ? data.trim()
-          : ''
-
+      if (!html) return html
+      const safeData = typeof data === 'string' ? data.trim() : ''
       let cleanHtml = html
         .replace(
           /<script>\s*(?:var|const|let)\s+data\s*=\s*\{[\s\S]*?\}\s*;?\s*<\/script>\s*/i,
@@ -502,11 +566,9 @@ ${safeData}
 }
 </script>
 `
-
       const babelScriptMatch = cleanHtml.match(
         /<script\b[^>]*type=["']text\/babel["'][^>]*>/i
       )
-
       if (babelScriptMatch) {
         return cleanHtml.replace(
           babelScriptMatch[0],
@@ -514,7 +576,6 @@ ${safeData}
 ${babelScriptMatch[0]}`
         )
       }
-
       if (cleanHtml.includes('</body>')) {
         return cleanHtml.replace(
           '</body>',
@@ -522,7 +583,6 @@ ${babelScriptMatch[0]}`
 </body>`
         )
       }
-
       return `${dataBlock}
 ${cleanHtml}`
     },
@@ -571,7 +631,7 @@ ${cleanHtml}`
           setSavedData(extracted)
           toast.info('Template loaded', {
             description: 'Ready to customise. Click Publish to make it live.',
-            position: 'bottom-left',
+            position: 'top-left',
           })
         } else {
           toast.error('Failed to load template', {
@@ -602,14 +662,11 @@ ${cleanHtml}`
       setInputBarVisible(true)
       return
     }
-
     setInputBarVisible(false)
     setShowEditLayoutMessage(true)
-
     const timer = setTimeout(() => {
       setShowEditLayoutMessage(false)
     }, 3000)
-
     return () => clearTimeout(timer)
   }, [devMode])
 
@@ -622,13 +679,10 @@ ${cleanHtml}`
       draftHtml,
       draftData
     )
-
     const key = `draft_preview_${Date.now()}`
     sessionStorage.setItem(key, currentPreviewCode)
-
     const draftUrl =
       `/draft/${username}?previewKey=${encodeURIComponent(key)}`
-
     window.open(draftUrl, '_blank')
   }
 
@@ -714,7 +768,6 @@ ${cleanHtml}`
       draftHtml,
       draftData
     )
-
     const blob = new Blob([fullHtml], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -771,15 +824,12 @@ ${cleanHtml}`
           position: 'top-center',
         })
         const nextParams = new URLSearchParams()
-
         if (templateId) {
           nextParams.set('templateId', templateId)
         }
-
         if (categoryFromUrl) {
           nextParams.set('category', categoryFromUrl)
         }
-
         const query = nextParams.toString()
         router.replace(`/edit_new/${username}${query ? `?${query}` : ''}`)
       } else {
@@ -793,7 +843,7 @@ ${cleanHtml}`
   }
 
   // ------------------------------------------------------------
-  // AI Generation with premium/daily browser usage check
+  // AI Generation
   // ------------------------------------------------------------
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
@@ -803,9 +853,7 @@ ${cleanHtml}`
       return
     }
 
-    // Always check the server first. Browser state is never authoritative.
     let currentStatus: AIUsageResponse
-
     try {
       currentStatus = await getDailyAIUsage()
     } catch (error) {
@@ -833,16 +881,10 @@ ${cleanHtml}`
     })
 
     let usageReserved = false
-
-    // Reserve the free generation BEFORE calling the AI service.
-    // Redis does the limit check atomically, so multiple tabs cannot
-    // generate past the daily allowance.
     if (!currentStatus.premium) {
       try {
         const reservation = await reserveDailyAIUsage()
-
         usageReserved = true
-
         setPremiumStatus({
           premium: reservation.premium,
           usage: reservation.usage,
@@ -850,9 +892,7 @@ ${cleanHtml}`
         })
       } catch (error) {
         const usageError = error as Error & { code?: string }
-
         console.error('Failed to reserve AI usage:', usageError)
-
         if (usageError.code === 'LIMIT_REACHED') {
           setPremiumStatus({
             premium: false,
@@ -862,7 +902,6 @@ ${cleanHtml}`
           setIsPremiumModalOpen(true)
           return
         }
-
         toast.error('Unable to start AI generation. Please try again.', {
           position: 'top-center',
         })
@@ -871,10 +910,8 @@ ${cleanHtml}`
     }
 
     setIsGenerating(true)
-
     try {
       const currentCode = devMode ? draftHtml : draftData
-
       const result = await generateCodeWithAI(currentCode, aiPrompt)
 
       if (result.success && result.generatedCode) {
@@ -889,25 +926,18 @@ ${cleanHtml}`
         }
 
         setAiPrompt('')
-
-        // The Redis reservation now represents the successful generation.
         usageReserved = false
-
         toast.success('Code updated with AI!', {
           description: 'Your changes are ready.',
           position: 'top-center',
         })
-
         aiInputRef.current?.focus()
       } else {
-        // Failed AI generations should not consume the user's allowance.
         if (usageReserved) {
           await releaseDailyAIUsage()
           usageReserved = false
-
           try {
             const refreshed = await getDailyAIUsage()
-
             setPremiumStatus({
               premium: refreshed.premium,
               usage: refreshed.premium ? 0 : refreshed.usage,
@@ -917,20 +947,16 @@ ${cleanHtml}`
             console.error('Failed to refresh AI usage:', refreshError)
           }
         }
-
         toast.error(result.error || 'AI generation failed', {
           position: 'top-center',
         })
       }
     } catch (error) {
       console.error('AI generation error:', error)
-
-      // Return the reserved slot when generation throws.
       if (usageReserved) {
         await releaseDailyAIUsage()
         usageReserved = false
       }
-
       toast.error('An unexpected error occurred', {
         position: 'top-center',
       })
@@ -938,7 +964,6 @@ ${cleanHtml}`
       setIsGenerating(false)
     }
   }
-
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -951,25 +976,29 @@ ${cleanHtml}`
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // MODIFIED: handleCloseEditor now calls onToggleAdvanced if available
   const handleCloseEditor = () => {
-    let category = categoryFromUrl
+    // If we have the callback, toggle the parent's advanced mode and return early
+    if (onToggleAdvanced) {
+      onToggleAdvanced()
+      return
+    }
 
+    // Original fallback logic (if callback not provided)
+    let category = categoryFromUrl
     try {
       if (!category) {
         category = localStorage.getItem(categoryStorageKey)
       }
-
       if (category) {
         localStorage.setItem(categoryStorageKey, category)
       }
     } catch (error) {
       console.error('Failed to restore selected category:', error)
     }
-
     const templatesUrl = category
       ? `/templates/${username}?category=${encodeURIComponent(category)}`
       : `/templates/${username}`
-
     router.push(templatesUrl)
   }
 
@@ -1000,7 +1029,6 @@ ${cleanHtml}`
     )
   }
 
-  // Determine if AI is disabled due to limit
   const isAILimitReached =
     !!premiumStatus &&
     !premiumStatus.premium &&
@@ -1008,7 +1036,6 @@ ${cleanHtml}`
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200 overflow-hidden">
-
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
@@ -1030,7 +1057,6 @@ ${cleanHtml}`
             box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
           }
         }
-
         @keyframes fadeInOut {
           0% {
             opacity: 0;
@@ -1086,13 +1112,12 @@ ${cleanHtml}`
       <nav className="flex-shrink-0 border-b border-slate-700/20 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-2 flex items-center justify-between z-10">
         <div className="flex items-center gap-6">
           <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
-            <div className="flex items-center gap-1">
-              <img
-                src="https://i.postimg.cc/4NQdKMq5/e54598bb-7c66-4f95-af44-fe2a2d3ba44a-removebg-preview.png"
-                alt="Secure"
-                className="h-8 w-8 object-contain"
-              />
-            </div>
+             <div className="hidden items-center gap-2 text-xs text-slate-400 md:flex">
+                        <Sparkles className="h-4 w-4 text-blue-400" />
+                        <span className="font-medium text-slate-300">
+                          Customize your website
+                        </span>
+                      </div>
             <div className="h-4 w-px bg-slate-700/20" />
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3 text-slate-400" />
@@ -1173,78 +1198,53 @@ ${cleanHtml}`
         {/* Preview Panel */}
         <div className="flex-[0.59] flex flex-col min-w-0 bg-slate-900/50 border border-slate-700/20 rounded-lg relative shadow-2xl shadow-black/20">
           <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-slate-700/10 bg-slate-900/30 rounded-t-lg">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center bg-slate-800/20 rounded-md p-0.5">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-700/20 px-4 py-2">
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg bg-slate-800/70 p-0.5">
                 <button
                   onClick={() => setViewMode('mobile')}
-                  className={`p-1.5 rounded transition ${
+                  className={`rounded-md px-2.5 py-1 text-xs transition ${
                     viewMode === 'mobile'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/20'
+                      ? 'bg-blue-500/20 text-blue-300'
+                      : 'text-slate-500 hover:text-white'
                   }`}
-                  aria-label="Mobile view"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    className="w-4 h-4"
-                  >
-                    <rect x="7" y="2" width="10" height="20" rx="2" />
-                    <circle cx="12" cy="18" r="1" />
-                  </svg>
+                  Mobile
                 </button>
                 <button
                   onClick={() => setViewMode('desktop')}
-                  className={`p-1.5 rounded transition ${
+                  className={`rounded-md px-2.5 py-1 text-xs transition ${
                     viewMode === 'desktop'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-700/20'
+                      ? 'bg-blue-500/20 text-blue-300'
+                      : 'text-slate-500 hover:text-white'
                   }`}
-                  aria-label="Desktop view"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    className="w-4 h-4"
-                  >
-                    <rect x="3" y="4" width="18" height="12" rx="2" />
-                    <path d="M8 20h8M12 16v4" />
-                  </svg>
-                </button>
-
-                <button
-                  onClick={toggleFullscreen}
-                  className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/20 transition"
-                  title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                >
-                  {isFullscreen ? <Minimize className="w-4 h-4" /> : <Fullscreen className="w-4 h-4" />}
+                  Desktop
                 </button>
               </div>
 
               <button
-                onClick={openDraftPreview}
-                className="text-xs text-slate-400 hover:text-white hover:bg-slate-700/20 px-2 py-1 rounded transition flex items-center gap-1"
-                title="Open full screen preview in new tab"
+                onClick={toggleFullscreen}
+                className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-800 hover:text-white"
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="w-4 h-4"
-                >
-                  <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" />
-                </svg>
-                <span className="hidden sm:inline">Preview</span>
+                {isFullscreen ? (
+                  <Minimize className="h-4 w-4" />
+                ) : (
+                  <Fullscreen className="h-4 w-4" />
+                )}
+              </button>
+
+              <button
+                onClick={openDraftPreview}
+                className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-white"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                Preview
               </button>
             </div>
+
+          </div>
 
             <div className="flex items-center flex-1 justify-end relative">
               {devMode ? (
@@ -1281,9 +1281,9 @@ ${cleanHtml}`
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       onKeyDown={handleKeyPress}
-                      readOnly={!!isAILimitReached || isGenerating} // <--- Changed to readOnly
+                      readOnly={!!isAILimitReached || isGenerating}
                       onClick={() => {
-                        if (isAILimitReached) setIsPremiumModalOpen(true) // <--- Added onClick
+                        if (isAILimitReached) setIsPremiumModalOpen(true)
                       }}
                       className="w-full rounded-full bg-slate-800/30 border border-slate-700/30 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-transparent transition-all duration-200"
                     />
@@ -1291,12 +1291,12 @@ ${cleanHtml}`
                     <button
                       onClick={() => {
                         if (isAILimitReached) {
-                          setIsPremiumModalOpen(true) // <--- Added onClick
+                          setIsPremiumModalOpen(true)
                         } else {
                           handleAIGenerate()
                         }
                       }}
-                      disabled={isGenerating || !aiPrompt.trim()} // <--- Removed isAILimitReached
+                      disabled={isGenerating || !aiPrompt.trim()}
                       className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-blue-500/20 hover:bg-blue-500/40 transition disabled:opacity-50"
                     >
                       {isGenerating ? (
@@ -1307,7 +1307,6 @@ ${cleanHtml}`
                     </button>
                   </div>
 
-                  {/* Usage badge */}
                   {!isLoadingStatus && premiumStatus && !premiumStatus.premium && (
                     <span className="text-[10px] text-slate-400 whitespace-nowrap">
                       {Math.max(
@@ -1373,6 +1372,9 @@ ${cleanHtml}`
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {/* New Toggle Button */}
+             
+
               <span className="text-slate-500 text-xs">Dev mode</span>
               <button
                 onClick={() => setDevMode(!devMode)}
@@ -1398,43 +1400,54 @@ ${cleanHtml}`
           </div>
 
           <div className="flex-1 min-h-0 relative mt-2">
-            <MonacoEditor
-              height="100%"
-              language={devMode ? 'html' : 'javascript'}
-              value={devMode ? draftHtml : draftData}
-              onChange={(value) => {
-                if (devMode) setDraftHtml(value || '')
-                else setDraftData(value || '')
-              }}
-              theme="trust-dark"
-              onMount={handleEditorMount}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 13,
-                fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-                lineNumbers: 'off',
-                autoClosingBrackets: 'never',
-                autoClosingQuotes: 'never',
-                matchBrackets: 'never',
-                scrollBeyondLastLine: false,
-                renderLineHighlight: 'none',
-                unicodeHighlight: {
-                  ambiguousCharacters: false,
-                  invisibleCharacters: false,
-                  nonBasicASCII: false,
-                },
-                automaticLayout: true,
-                glyphMargin: false,
-                folding: false,
-                find: {
-                  addExtraSpaceOnTop: false,
-                  autoFindInSelection: 'never',
-                  seedSearchStringFromSelection: 'never',
-                },
-                readOnly: isGenerating,
-                padding: { top: 8, bottom: 8 },
-              }}
-            />
+            {useFormView && !devMode ? (
+              // Show the form for data editing (only when not in dev mode)
+              <DataForm
+                dataString={draftData}
+                onUpdate={(newData) => {
+                  setDraftData(newData)
+                  // Auto-save? We keep unsaved state via hasUnsavedChanges
+                }}
+              />
+            ) : (
+              <MonacoEditor
+                height="100%"
+                language={devMode ? 'html' : 'javascript'}
+                value={devMode ? draftHtml : draftData}
+                onChange={(value) => {
+                  if (devMode) setDraftHtml(value || '')
+                  else setDraftData(value || '')
+                }}
+                theme="trust-dark"
+                onMount={handleEditorMount}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+                  lineNumbers: 'off',
+                  autoClosingBrackets: 'never',
+                  autoClosingQuotes: 'never',
+                  matchBrackets: 'never',
+                  scrollBeyondLastLine: false,
+                  renderLineHighlight: 'none',
+                  unicodeHighlight: {
+                    ambiguousCharacters: false,
+                    invisibleCharacters: false,
+                    nonBasicASCII: false,
+                  },
+                  automaticLayout: true,
+                  glyphMargin: false,
+                  folding: false,
+                  find: {
+                    addExtraSpaceOnTop: false,
+                    autoFindInSelection: 'never',
+                    seedSearchStringFromSelection: 'never',
+                  },
+                  readOnly: isGenerating,
+                  padding: { top: 8, bottom: 8 },
+                }}
+              />
+            )}
 
             {isGenerating && (
               <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-md">
@@ -1486,12 +1499,8 @@ ${cleanHtml}`
       {/* Footer trust bar */}
       <div className="flex-shrink-0 border-t border-slate-700/20 bg-slate-900/30 px-6 py-1.5 flex items-center justify-between text-xs text-slate-500 backdrop-blur-sm">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Shield className="h-3 w-3 text-blue-400/70" />
-            Secure connection
-          </span>
+        
           <span className="hidden sm:inline">•</span>
-          <span className="hidden sm:inline">Your data is encrypted</span>
         </div>
         <div className="flex items-center gap-4">
           <a href="/legal/privacy" className="hover:text-slate-300 transition">Privacy</a>
@@ -1505,13 +1514,12 @@ ${cleanHtml}`
         </div>
       </div>
 
-      {/* Premium Required Modal - Added at the end */}
-   <PremiumRequiredModal
-  open={isPremiumModalOpen}
-  onOpenChange={setIsPremiumModalOpen}
-  feature="Unlimited generation"
-  subheading="5 daily AI content generations"
-/>
+      <PremiumRequiredModal
+        open={isPremiumModalOpen}
+        onOpenChange={setIsPremiumModalOpen}
+        feature="Unlimited generation"
+        subheading="5 daily AI content generations"
+      />
     </div>
   )
 }

@@ -6,7 +6,7 @@ import { getWebsiteContent } from "@/lib/website-actions";
 
 // Dynamic imports
 const DesktopComponent = dynamic<ComponentProps>(
-  () => import("@/components/EditorContent"),
+  () => import("@/components/EditorContent1"),
   { ssr: true }
 );
 
