@@ -956,7 +956,7 @@ export default async function handler(request: Request) {
 }
 
 export const config: Config = {
-  path: "/api/generate",
+  path: "/api/ai/generate",
   method: "POST",
   background: true,
 };

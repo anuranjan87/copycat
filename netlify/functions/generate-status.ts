@@ -65,6 +65,6 @@ export default async function handler(request: Request) {
 }
 
 export const config: Config = {
-  path: "/api/generate/status",
+  path: "/api/ai/generate/status",
   method: "GET",
 };

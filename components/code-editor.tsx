@@ -577,7 +577,7 @@ const handlePublish = async () => {
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         const statusResponse = await fetch(
-          `/api/generate/status?jobId=${encodeURIComponent(jobId)}`,
+          `/api/ai/generate/status?jobId=${encodeURIComponent(jobId)}`,
           { method: 'GET', cache: 'no-store' }
         );
 
