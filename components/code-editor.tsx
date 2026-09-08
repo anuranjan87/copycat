@@ -6,7 +6,6 @@ import { updateWebsiteContent, getTemplateById } from '@/lib/website-actions';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
-import PremiumRequiredModal from '@/components/ui_components/PremiumRequiredModal';
 import {
   SendIcon,
   Loader2,
@@ -122,10 +121,6 @@ export function CodeEditor({
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasReceivedData, setHasReceivedData] = useState(false);
-  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
-  const [isLoadingAIStatus, setIsLoadingAIStatus] = useState(true);
-  const [aiCredits, setAiCredits] = useState(0);
-  const [isPremium, setIsPremium] = useState(false);
   const [generationSummary, setGenerationSummary] = useState<{
     open: boolean;
     durationMs: number;
@@ -569,47 +564,61 @@ const handlePublish = async () => {
 
 
   // ------------------------------------------------------------
-  // Premium AI generation
+  // AI generation
   //
-  // The server is the source of truth:
-  // - Clerk identifies the user
-  // - Postgres checks premium status and AI credits
-  // - One AI credit is reserved before generation
-  // - Actual token usage is returned after generation
-  // - The server adjusts the final credit charge and returns balance
+  // POST /api/ai/generate starts a Netlify Background Function.
+  // The POST returns 202 immediately. The finished HTML is retrieved
+  // by polling GET /api/ai/generate-status?jobId=...
   // ------------------------------------------------------------
   const editorRef = useRef<any>(null);
 
-  const loadAIStatus = useCallback(async () => {
-    try {
-      setIsLoadingAIStatus(true);
+  const sleep = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
 
-      const response = await fetch('/api/ai/generate', {
-        method: 'GET',
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
-      });
+  const pollGenerationStatus = useCallback(async (jobId: string) => {
+    const pollingStartedAt = performance.now();
+    const maxWaitMs = 10 * 60 * 1000;
+    const pollIntervalMs = 1500;
+
+    while (performance.now() - pollingStartedAt < maxWaitMs) {
+      const response = await fetch(
+        `/api/ai/generate-status?jobId=${encodeURIComponent(jobId)}`,
+        {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        }
+      );
 
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        throw new Error(data?.error || 'Unable to check AI status');
+      if (data?.status === 'completed') {
+        if (!data?.html || typeof data.html !== 'string') {
+          throw new Error(
+            'AI generation completed, but no HTML was returned.'
+          );
+        }
+        return data;
       }
 
-      setIsPremium(Boolean(data.premium));
-      setAiCredits(Number(data.aiCredits || 0));
-    } catch (error) {
-      console.error('Failed to load AI status:', error);
-      setIsPremium(false);
-      setAiCredits(0);
-    } finally {
-      setIsLoadingAIStatus(false);
-    }
-  }, []);
+      if (data?.status === 'failed') {
+        throw new Error(data?.error || 'AI generation failed.');
+      }
 
-  useEffect(() => {
-    loadAIStatus();
-  }, [loadAIStatus]);
+      if (!response.ok && data?.status !== 'processing') {
+        throw new Error(
+          data?.error ||
+            `Unable to check generation status (${response.status})`
+        );
+      }
+
+      await sleep(pollIntervalMs);
+    }
+
+    throw new Error(
+      'AI generation is taking longer than expected. Please check again shortly.'
+    );
+  }, []);
 
   const handleAIGenerate = async () => {
     const prompt = aiPrompt.trim();
@@ -621,32 +630,16 @@ const handlePublish = async () => {
       return;
     }
 
-    if (isLoadingAIStatus) {
-      toast.info('Checking your Premium AI access...', {
-        position: 'top-center',
-      });
-      return;
-    }
-
-    if (!isPremium) {
-      setIsPremiumModalOpen(true);
-      return;
-    }
-
-    if (aiCredits <= 0) {
-      toast.error('You have no AI credits left.', {
-        description: 'Recharge your AI credits from the Premium Plan.',
-        position: 'top-center',
-      });
-      return;
-    }
+    if (isGenerating) return;
 
     setIsGenerating(true);
     setHasReceivedData(false);
 
     const startedAt = performance.now();
+    const jobId = crypto.randomUUID();
 
     try {
+      // Start the Netlify Background Function.
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: {
@@ -654,61 +647,61 @@ const handlePublish = async () => {
           'Cache-Control': 'no-cache',
         },
         body: JSON.stringify({
+          jobId,
           currentCode: draftHtml,
           prompt,
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const startData = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        if (data?.code === 'PREMIUM_REQUIRED') {
-          setIsPremium(false);
-          setIsPremiumModalOpen(true);
-          return;
+      if (response.status !== 202) {
+        if (startData?.code === 'PREMIUM_REQUIRED') {
+          throw new Error(
+            'AI website generation requires Premium access.'
+          );
         }
 
-        if (data?.code === 'NO_AI_CREDITS') {
-          setAiCredits(Number(data?.aiCredits || 0));
-          toast.error('No AI credits remaining', {
-            description: 'Recharge your AI credits from the Premium Plan.',
-            position: 'top-center',
-          });
-          return;
+        if (startData?.code === 'NO_AI_CREDITS') {
+          throw new Error('No AI credits remaining.');
         }
 
         throw new Error(
-          data?.message ||
-            data?.error ||
-            `Generation failed (${response.status})`
+          startData?.error ||
+            startData?.message ||
+            `Unable to start AI generation (${response.status})`
         );
       }
 
-      if (!data?.html) {
-        throw new Error('AI generation completed but no HTML was returned.');
-      }
+      // Background functions do not return the completed result in the POST.
+      // Poll the separate status endpoint until the job is complete.
+      const result = await pollGenerationStatus(jobId);
 
-      const durationMs = Math.max(0, performance.now() - startedAt);
-      const fullCode = String(data.html);
+      const fullCode = String(result.html);
+      const durationMs =
+        Number(result.durationMs) > 0
+          ? Number(result.durationMs)
+          : Math.max(0, performance.now() - startedAt);
 
       setDraftHtml(fullCode);
       setHasReceivedData(true);
+
+      // Keep the current data object associated with the generated HTML.
       pushHistory(fullCode, draftData);
       setAiPrompt('');
 
-      const summary = {
+      const usage = result.usage || {};
+
+      setGenerationSummary({
         open: true,
         durationMs,
-        creditsUsed: Number(data.creditsUsed || 1),
-        remainingCredits: Number(data.remainingCredits || 0),
-        inputTokens: Number(data.usage?.inputTokens || 0),
-        outputTokens: Number(data.usage?.outputTokens || 0),
-        totalTokens: Number(data.usage?.totalTokens || 0),
-        estimatedCostUsd: Number(data.usage?.estimatedCostUsd || 0),
-      };
-
-      setAiCredits(summary.remainingCredits);
-      setGenerationSummary(summary);
+        creditsUsed: Number(result.creditsUsed || 0),
+        remainingCredits: Number(result.remainingCredits || 0),
+        inputTokens: Number(usage.inputTokens || 0),
+        outputTokens: Number(usage.outputTokens || 0),
+        totalTokens: Number(usage.totalTokens || 0),
+        estimatedCostUsd: Number(usage.estimatedCostUsd || 0),
+      });
 
       toast.success('AI generated new code!', {
         description: 'Review the changes and save if you like.',
@@ -717,14 +710,13 @@ const handlePublish = async () => {
 
       aiInputRef.current?.focus();
     } catch (error: any) {
+      console.error('AI generation failed:', error);
+
       toast.error('AI generation failed', {
-        description: error?.message || 'An unexpected error occurred.',
+        description:
+          error?.message || 'An unexpected error occurred.',
         position: 'top-center',
       });
-
-      // The API refunds the reserved credit if generation itself fails.
-      // Refresh the balance so the UI is synchronized with Postgres.
-      await loadAIStatus();
     } finally {
       setIsGenerating(false);
       setHasReceivedData(false);
@@ -1140,13 +1132,6 @@ ${savedData}
           </div>
         </div>
       </div>
-
-      <PremiumRequiredModal
-        open={isPremiumModalOpen}
-        onOpenChange={setIsPremiumModalOpen}
-        feature="AI Website Generator"
-        subheading="AI website generation is available exclusively for Premium members. Upgrade to unlock AI-powered editing."
-      />
 
       {generationSummary.open && (
         <div

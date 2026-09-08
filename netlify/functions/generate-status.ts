@@ -1,70 +1,234 @@
 import { getStore } from "@netlify/blobs";
 import type { Config } from "@netlify/functions";
 
-const jobs = getStore("website-generation-jobs");
+const jobs = getStore(
+  "website-generation-jobs"
+);
 
-type GenerationJob =
-  | {
-      status: "processing";
-      createdAt?: string;
-    }
-  | {
-      status: "completed";
-      html: string;
-      completedAt?: string;
-    }
-  | {
-      status: "failed";
-      error: string;
-      failedAt?: string;
-    };
+/* ============================================================
+   JOB ID VALIDATION
+============================================================ */
 
-export default async function handler(request: Request) {
+function isValidJobId(
+  value: string | null
+): boolean {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9_-]{8,128}$/.test(
+      value
+    )
+  );
+}
+
+/* ============================================================
+   GET STATUS
+============================================================ */
+
+export default async function handler(
+  request: Request
+) {
   try {
-    const url = new URL(request.url);
-    const jobId = url.searchParams.get("jobId")?.trim() || "";
-
-    if (!jobId || !/^[A-Za-z0-9_-]{8,128}$/.test(jobId)) {
-      return Response.json(
-        { error: "A valid jobId is required" },
-        { status: 400 }
+    const url =
+      new URL(
+        request.url
       );
-    }
 
-    const raw = await jobs.get(jobId, {
-      type: "text",
-    });
+    const jobId =
+      url.searchParams.get(
+        "jobId"
+      );
 
-    if (!raw) {
+    if (
+      !isValidJobId(jobId)
+    ) {
       return Response.json(
         {
-          status: "not_found",
-          jobId,
+          success: false,
+
+          error:
+            "A valid jobId is required.",
         },
-        { status: 404 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const job = JSON.parse(raw) as GenerationJob;
+    const job =
+      await jobs.get(
+        jobId,
+        {
+          type: "json",
 
-    return Response.json({
-      jobId,
-      ...job,
-    });
-  } catch (error: any) {
-    console.error("Generation status error:", error);
+          /*
+            Strong consistency is useful here because
+            the frontend is polling for a freshly completed job.
+          */
+          consistency:
+            "strong",
+        }
+      );
+
+    if (!job) {
+      return Response.json(
+        {
+          success: false,
+
+          status: "not_found",
+
+          error:
+            "Generation job not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+      Still running.
+    */
+
+    if (
+      job.status ===
+        "processing"
+    ) {
+      return Response.json({
+        success: true,
+
+        status: "processing",
+
+        stage:
+          job.stage ||
+          "processing",
+
+        jobId,
+
+        createdAt:
+          job.createdAt,
+
+        updatedAt:
+          job.updatedAt,
+      });
+    }
+
+    /*
+      Generation failed.
+    */
+
+    if (
+      job.status ===
+        "failed"
+    ) {
+      return Response.json(
+        {
+          success: false,
+
+          status: "failed",
+
+          jobId,
+
+          error:
+            job.error ||
+            "AI generation failed.",
+
+          failedAt:
+            job.failedAt,
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+      Generation completed.
+    */
+
+    if (
+      job.status ===
+        "completed"
+    ) {
+      return Response.json({
+        success: true,
+
+        status: "completed",
+
+        jobId,
+
+        html:
+          typeof job.html ===
+          "string"
+            ? job.html
+            : "",
+
+        usage:
+          job.usage || {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            estimatedCostUsd: 0,
+          },
+
+        durationMs:
+          Number(
+            job.durationMs || 0
+          ),
+
+        imageCount:
+          Number(
+            job.imageCount || 0
+          ),
+
+        completedAt:
+          job.completedAt,
+      });
+    }
+
+    /*
+      Unknown job state.
+    */
 
     return Response.json(
       {
-        error: "Failed to read generation status",
-        message: error?.message || "Unknown error",
+        success: false,
+
+        status: "unknown",
+
+        jobId,
+
+        error:
+          `Unknown generation status: ${String(
+            job.status
+          )}`,
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
+    );
+  } catch (error: any) {
+    console.error(
+      "Generation status error:",
+      error
+    );
+
+    return Response.json(
+      {
+        success: false,
+
+        error:
+          error?.message ||
+          "Unable to retrieve generation status.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
 export const config: Config = {
-  path: "/api/ai/generate/status",
+  path: "/api/ai/generate-status",
+
   method: "GET",
 };

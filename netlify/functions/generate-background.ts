@@ -8,13 +8,16 @@ const openai = new OpenAI({
 
 const jobs = getStore("website-generation-jobs");
 
-
 const UNSPLASH_API = "https://api.unsplash.com";
 
 const UNSPLASH_SOURCE =
   process.env.UNSPLASH_UTM_SOURCE ||
   process.env.NEXT_PUBLIC_APP_NAME ||
-  "your_app_name";
+  "7wingz";
+
+/* ============================================================
+   TYPES
+============================================================ */
 
 type UnsplashImage = {
   id: number;
@@ -28,17 +31,79 @@ type UnsplashImage = {
   downloadLocation: string;
 };
 
-// -----------------------------------------------------------------------------
-// Unsplash image search
-// -----------------------------------------------------------------------------
+type GenerationUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+};
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function estimateCost(
+  inputTokens: number,
+  outputTokens: number
+): number {
+  /*
+    This is only a UI estimate.
+
+    Do not treat this as billing information.
+    Update these values when you want exact model pricing.
+  */
+
+  const inputPricePerMillion = 0.25;
+  const outputPricePerMillion = 2.0;
+
+  const cost =
+    (inputTokens / 1_000_000) *
+      inputPricePerMillion +
+    (outputTokens / 1_000_000) *
+      outputPricePerMillion;
+
+  return Number(cost.toFixed(6));
+}
+
+function createJobId(): string {
+  return crypto.randomUUID();
+}
+
+function isValidJobId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9_-]{8,128}$/.test(value)
+  );
+}
+
+function jsonError(
+  message: string,
+  status = 500
+) {
+  return Response.json(
+    {
+      success: false,
+      error: message,
+    },
+    { status }
+  );
+}
+
+/* ============================================================
+   UNSPLASH SEARCH
+============================================================ */
 
 async function searchUnsplash(
   query: string
 ): Promise<UnsplashImage[]> {
-  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  const accessKey =
+    process.env.UNSPLASH_ACCESS_KEY;
 
   if (!accessKey) {
-    console.warn("UNSPLASH_ACCESS_KEY is not configured");
+    console.warn(
+      "UNSPLASH_ACCESS_KEY is not configured."
+    );
+
     return [];
   }
 
@@ -48,67 +113,77 @@ async function searchUnsplash(
     `&per_page=20`;
 
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       method: "GET",
+
       headers: {
-        Authorization: `Client-ID ${accessKey}`,
+        Authorization:
+          `Client-ID ${accessKey}`,
+
         Accept: "application/json",
       },
+
       cache: "no-store",
     });
 
-    if (!res.ok) {
+    if (!response.ok) {
       console.error(
-        `Unsplash API error: ${res.status} ${res.statusText}`
+        `Unsplash API error: ${response.status} ${response.statusText}`
       );
 
       return [];
     }
 
-    const data = await res.json();
+    const data =
+      await response.json();
 
     return (data.results || [])
       .filter(
         (photo: any) =>
-          typeof photo?.urls?.regular === "string" &&
+          typeof photo?.urls?.regular ===
+            "string" &&
           photo.urls.regular.length > 0
       )
-      .map((photo: any, index: number) => ({
-        id: index + 1,
+      .map(
+        (
+          photo: any,
+          index: number
+        ) => ({
+          id: index + 1,
 
-        photoId: photo.id || "",
+          photoId:
+            photo.id || "",
 
-        // IMPORTANT:
-        // This is the exact URL returned by Unsplash.
-        url: photo.urls.regular,
+          url:
+            photo.urls.regular,
 
-        thumb:
-          photo.urls.small ||
-          photo.urls.regular,
+          thumb:
+            photo.urls.small ||
+            photo.urls.regular,
 
-        alt:
-          photo.alt_description ||
-          photo.description ||
-          query,
+          alt:
+            photo.alt_description ||
+            photo.description ||
+            query,
 
-        photographer:
-          photo.user?.name ||
-          "Unsplash photographer",
+          photographer:
+            photo.user?.name ||
+            "Unsplash photographer",
 
-        photographerUrl:
-          photo.user?.links?.html ||
-          "https://unsplash.com",
+          photographerUrl:
+            photo.user?.links?.html ||
+            "https://unsplash.com",
 
-        unsplashUrl:
-          photo.links?.html ||
-          "https://unsplash.com",
+          unsplashUrl:
+            photo.links?.html ||
+            "https://unsplash.com",
 
-        // IMPORTANT:
-        // Used only for download tracking.
-        downloadLocation:
-          photo.links?.download_location ||
-          "",
-      }));
+          downloadLocation:
+            photo.links
+              ?.download_location ||
+            "",
+        })
+      );
   } catch (error) {
     console.error(
       "Unsplash search failed:",
@@ -119,9 +194,9 @@ async function searchUnsplash(
   }
 }
 
-// -----------------------------------------------------------------------------
-// Track Unsplash download / usage event
-// -----------------------------------------------------------------------------
+/* ============================================================
+   UNSPLASH DOWNLOAD TRACKING
+============================================================ */
 
 async function trackUnsplashDownload(
   downloadLocation: string
@@ -129,7 +204,10 @@ async function trackUnsplashDownload(
   const accessKey =
     process.env.UNSPLASH_ACCESS_KEY;
 
-  if (!accessKey || !downloadLocation) {
+  if (
+    !accessKey ||
+    !downloadLocation
+  ) {
     return;
   }
 
@@ -137,12 +215,6 @@ async function trackUnsplashDownload(
     const parsed =
       new URL(downloadLocation);
 
-    /*
-     * Security:
-     * Never allow an arbitrary URL to be fetched.
-     *
-     * We only allow the exact Unsplash API origin.
-     */
     if (
       parsed.origin !==
       UNSPLASH_API
@@ -155,10 +227,6 @@ async function trackUnsplashDownload(
       return;
     }
 
-    /*
-     * Preserve all query parameters returned by Unsplash
-     * and add our access key.
-     */
     parsed.searchParams.set(
       "client_id",
       accessKey
@@ -181,24 +249,20 @@ async function trackUnsplashDownload(
 
     if (!response.ok) {
       console.warn(
-        `Unsplash download tracking failed: ${response.status} ${response.statusText}`
+        `Unsplash tracking failed: ${response.status} ${response.statusText}`
       );
     }
   } catch (error) {
-    /*
-     * Tracking failure must NEVER
-     * break website generation.
-     */
     console.warn(
-      "Unsplash download tracking error:",
+      "Unsplash tracking error:",
       error
     );
   }
 }
 
-// -----------------------------------------------------------------------------
-// Extract image URLs from generated HTML
-// -----------------------------------------------------------------------------
+/* ============================================================
+   HTML IMAGE HELPERS
+============================================================ */
 
 function extractImageUrls(
   html: string
@@ -219,10 +283,6 @@ function extractImageUrls(
   return urls;
 }
 
-// -----------------------------------------------------------------------------
-// Remove invalid image URLs
-// -----------------------------------------------------------------------------
-
 function removeInvalidImageUrls(
   html: string,
   allowedUrls: Set<string>
@@ -234,10 +294,10 @@ function removeInvalidImageUrls(
     /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
 
     (
-      fullMatch: string,
-      prefix: string,
-      url: string,
-      suffix: string
+      fullMatch,
+      prefix,
+      url,
+      suffix
     ) => {
       if (
         allowedUrls.has(url)
@@ -245,19 +305,14 @@ function removeInvalidImageUrls(
         return fullMatch;
       }
 
-      console.warn(
-        "Removing invalid image URL:",
-        url
+      return (
+        `${prefix}` +
+        `${transparentPixel}` +
+        `${suffix}`
       );
-
-      return `${prefix}${transparentPixel}${suffix}`;
     }
   );
 }
-
-// -----------------------------------------------------------------------------
-// Add required Unsplash UTM parameters
-// -----------------------------------------------------------------------------
 
 function addUnsplashUtm(
   url: string
@@ -291,10 +346,6 @@ function addUnsplashUtm(
   }
 }
 
-// -----------------------------------------------------------------------------
-// Escape attribution text
-// -----------------------------------------------------------------------------
-
 function escapeHtml(
   value: string
 ): string {
@@ -321,10 +372,6 @@ function escapeHtml(
     );
 }
 
-// -----------------------------------------------------------------------------
-// Automatically add Unsplash attribution
-// -----------------------------------------------------------------------------
-
 function addUnsplashAttribution(
   html: string,
   imageLibrary: UnsplashImage[]
@@ -349,10 +396,10 @@ function addUnsplashAttribution(
     /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
 
     (
-      fullMatch: string,
-      prefix: string,
-      url: string,
-      suffix: string
+      fullMatch,
+      prefix,
+      url,
+      suffix
     ) => {
       const image =
         byUrl.get(url);
@@ -398,64 +445,24 @@ function addUnsplashAttribution(
   );
 }
 
-// -----------------------------------------------------------------------------
-// POST
-// -----------------------------------------------------------------------------
+/* ============================================================
+   GENERATE IMAGE QUERY
+============================================================ */
 
-async function runGeneration(
-  request: Request
-): Promise<void> {
-  const body =
-    await request.json();
-
-  const jobId =
-    typeof body?.jobId === "string" &&
-    /^[A-Za-z0-9_-]{8,128}$/.test(body.jobId)
-      ? body.jobId
-      : crypto.randomUUID();
-
-  await jobs.setJSON(jobId, {
-    status: "processing",
-    createdAt: new Date().toISOString(),
-  });
-
+async function createImageQuery(
+  prompt: string
+): Promise<string> {
   try {
+    const response =
+      await openai.responses.create({
+        model: "gpt-4.1-nano",
 
-    // =========================================================================
-    // PARSE NORMAL GENERATION REQUEST
-    // =========================================================================
+        stream: false,
 
-    const currentCode =
-      typeof body.currentCode ===
-      "string"
-        ? body.currentCode
-        : "";
-
-    const prompt =
-      typeof body.prompt ===
-      "string"
-        ? body.prompt.trim()
-        : "";
-
-   if (!prompt) {
-  await jobs.setJSON(jobId, {
-    status: "failed",
-    error: "Prompt is required",
-    failedAt: new Date().toISOString(),
-  });
-
-  return;
-}
-
-    // =========================================================================
-    // STEP 1
-    // Automatically determine image search query.
-    // =========================================================================
-
-    const imageQueryPrompt = `
+        input: `
 Create ONE concise Unsplash search query for the website below.
 
-The query should describe the main visual subject of the website.
+The query should describe the main visual subject.
 
 Examples:
 - kids playing games
@@ -473,40 +480,167 @@ No explanation.
 
 Website request:
 ${prompt}
-`.trim();
+        `.trim(),
+      });
 
-    const queryResponse =
-      await openai.responses.create(
-        {
-          model:
-            "gpt-4.1-nano",
+    return (
+      response.output_text ||
+      prompt
+    )
+      .trim()
+      .replace(
+        /^["']|["']$/g,
+        ""
+      )
+      .slice(0, 150);
+  } catch (error) {
+    console.warn(
+      "Image query generation failed. Using user prompt.",
+      error
+    );
 
-          stream: false,
+    return prompt
+      .trim()
+      .slice(0, 150);
+  }
+}
 
-          input:
-            imageQueryPrompt,
-        }
-      );
+/* ============================================================
+   SAVE JOB
+============================================================ */
+
+async function updateJob(
+  jobId: string,
+  data: Record<string, any>
+) {
+  await jobs.setJSON(
+    jobId,
+    {
+      ...data,
+      updatedAt:
+        new Date().toISOString(),
+    }
+  );
+}
+
+/* ============================================================
+   GENERATION
+============================================================ */
+
+async function runGeneration(
+  request: Request
+): Promise<void> {
+  let body: any;
+
+  try {
+    body =
+      await request.json();
+  } catch {
+    console.error(
+      "Invalid JSON request body."
+    );
+
+    return;
+  }
+
+  const jobId =
+    isValidJobId(body?.jobId)
+      ? body.jobId
+      : createJobId();
+
+  const currentCode =
+    typeof body?.currentCode ===
+    "string"
+      ? body.currentCode
+      : "";
+
+  const prompt =
+    typeof body?.prompt ===
+    "string"
+      ? body.prompt.trim()
+      : "";
+
+  console.log(
+    "=================================================="
+  );
+
+  console.log(
+    "AI BACKGROUND GENERATION"
+  );
+
+  console.log(
+    "Job:",
+    jobId
+  );
+
+  console.log(
+    "Prompt:",
+    prompt
+  );
+
+  console.log(
+    "=================================================="
+  );
+
+  await updateJob(
+    jobId,
+    {
+      status: "processing",
+      createdAt:
+        new Date().toISOString(),
+    }
+  );
+
+  if (!prompt) {
+    await updateJob(
+      jobId,
+      {
+        status: "failed",
+        error:
+          "Prompt is required",
+        failedAt:
+          new Date().toISOString(),
+      }
+    );
+
+    return;
+  }
+
+  try {
+    /* ========================================================
+       STEP 1 — IMAGE QUERY
+    ======================================================== */
+
+    await updateJob(
+      jobId,
+      {
+        status: "processing",
+        stage: "image_query",
+      }
+    );
 
     const imageQuery =
-      (
-        queryResponse.output_text ||
+      await createImageQuery(
         prompt
-      )
-        .trim()
-        .replace(
-          /^["']|["']$/g,
-          ""
-        )
-        .slice(
-          0,
-          150
-        );
+      );
 
-    // =========================================================================
-    // STEP 2
-    // Search Unsplash BEFORE generating the website.
-    // =========================================================================
+    console.log(
+      "Image query:",
+      imageQuery
+    );
+
+    /* ========================================================
+       STEP 2 — UNSPLASH
+    ======================================================== */
+
+    await updateJob(
+      jobId,
+      {
+        status: "processing",
+        stage: "images",
+        imageQuery,
+      }
+    );
 
     const imageResults =
       await searchUnsplash(
@@ -531,17 +665,12 @@ ${prompt}
       );
 
     console.log(
-      `Image query: "${imageQuery}"`
-    );
-
-    console.log(
       `Images found: ${imageResults.length}`
     );
 
-    // =========================================================================
-    // STEP 3
-    // Build image library for OpenAI.
-    // =========================================================================
+    /* ========================================================
+       STEP 3 — IMAGE LIBRARY
+    ======================================================== */
 
     const imageLibrary =
       imageResults.length > 0
@@ -561,17 +690,24 @@ UNSPLASH URL: ${addUnsplashUtm(
                   image.unsplashUrl
                 )}
 DOWNLOAD LOCATION: ${image.downloadLocation}
-`.trim()
+                `.trim()
             )
             .join(
               "\n\n"
             )
         : "NO IMAGES WERE AVAILABLE.";
 
-    // =========================================================================
-    // STEP 4
-    // Generate website.
-    // =========================================================================
+    /* ========================================================
+       STEP 4 — GENERATE WEBSITE
+    ======================================================== */
+
+    await updateJob(
+      jobId,
+      {
+        status: "processing",
+        stage: "generating",
+      }
+    );
 
     const systemPrompt = `
 You are an expert HTML and Tailwind CSS developer.
@@ -579,19 +715,19 @@ You are an expert HTML and Tailwind CSS developer.
 Your task is to generate or update a modern, polished,
 responsive HTML website.
 
-===============================================================================
+============================================================
 CORE RULES
-===============================================================================
+============================================================
 
-- If Current code is provided, UPDATE the existing code.
-- Preserve existing functionality unless the user explicitly asks to change it.
+- If current code is provided, UPDATE the existing code.
+- Preserve existing functionality unless the user asks to change it.
 - Apply the user's requested changes.
 - Return the COMPLETE final HTML.
 - Never return only changed sections.
 
-===============================================================================
+============================================================
 OUTPUT
-===============================================================================
+============================================================
 
 - First line MUST be:
 <!-- generated code -->
@@ -601,217 +737,131 @@ OUTPUT
 - Never include explanations.
 - Never include commentary outside the HTML.
 
-===============================================================================
+============================================================
 HTML
-===============================================================================
+============================================================
 
 - Return a complete HTML document.
-- Use semantic HTML where appropriate.
+- Use semantic HTML.
 - Make the page fully responsive.
-- Make the design visually rich and polished.
-- Use Tailwind CSS classes.
+- Make the design polished and visually rich.
+- Use Tailwind CSS.
 
-Use:
+Include:
 
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 
-===============================================================================
-AUTOMATIC IMAGE REQUIREMENT
-===============================================================================
+============================================================
+IMAGES
+============================================================
 
-Images are AUTOMATICALLY REQUIRED.
-
-The user does NOT need to mention images.
-
-Unless the user's request explicitly says:
+Images are automatically required unless the user explicitly requests:
 
 - no images
 - without images
 - remove images
 - text only
 
-you MUST create an image-rich website.
+The final website should be image-rich.
 
-Do NOT create a mostly text-based website.
+Use images for:
 
-===============================================================================
-IMAGE DENSITY
-===============================================================================
+- hero sections
+- cards
+- products
+- services
+- articles
+- projects
+- destinations
+- activities
+- galleries
+- major visual sections
 
-Use PLENTIFUL images throughout the website.
-
-Use images whenever they make visual sense.
-
-HERO:
-- Prefer a large hero image when appropriate.
-
-CARDS:
-- Use an image for EACH card whenever cards represent
-  people, products, destinations, activities, services,
-  projects, articles, locations, or visual subjects.
-
-FEATURES:
-- Use images where visually appropriate.
-
-PRODUCTS:
-- Use an image for EACH product.
-
-SERVICES:
-- Use images for service cards when appropriate.
-
-BLOG:
-- Use an image for EACH article.
-
-GALLERY:
-- Prefer 6-12 images.
-
-PORTFOLIO:
-- Prefer an image for every project.
-
-DESTINATIONS:
-- Use an image for every destination.
-
-ACTIVITIES:
-- Use an image for every activity.
-
-MAJOR SECTIONS:
-- Add large visual imagery where appropriate.
-
-The final result should feel:
-
-IMAGE-RICH
-VISUAL
-PREMIUM
-MODERN
-
-rather than:
-
-TEXT-HEAVY
-EMPTY
-PLAIN
-
-===============================================================================
+============================================================
 UNSPLASH IMAGE LIBRARY
-===============================================================================
+============================================================
 
-The following images were retrieved specifically for this website.
-
-ONLY use image URLs from this image library.
+ONLY use URLs from this image library.
 
 ${imageLibrary}
 
-===============================================================================
+============================================================
 ABSOLUTE IMAGE URL RULE
-===============================================================================
-
-You MUST copy image URLs EXACTLY as provided above.
+============================================================
 
 NEVER:
 
-- invent an image URL
-- invent an Unsplash photo ID
-- construct an Unsplash URL
-- modify an Unsplash URL
-- add parameters to an image URL
-- remove parameters from an image URL
-- change an image URL
-- use an image URL from your own knowledge
-- use an image URL from the current code
+- invent image URLs
+- invent Unsplash photo IDs
+- construct Unsplash URLs
+- modify Unsplash URLs
+- add parameters to image URLs
+- remove parameters from image URLs
 - use random external image URLs
 - use placeholder image services
 
-ONLY use image URLs supplied in the IMAGE LIBRARY.
+ONLY use URLs supplied in the image library.
 
-===============================================================================
+============================================================
 ATTRIBUTION
-===============================================================================
+============================================================
 
-Every Unsplash image must be displayed with attribution.
+Every Unsplash image must have attribution.
 
-Use the supplied photographer information.
-
-The required attribution format is:
+Use:
 
 Photo by PHOTOGRAPHER on Unsplash
 
-The attribution links must point to the supplied:
+Use the supplied photographer URL and Unsplash URL.
 
-PHOTOGRAPHER URL
-
-and
-
-UNSPLASH URL
-
-Do not invent attribution URLs.
-
-The server will also enforce attribution after generation.
-
-Do not remove or hide the attribution.
-
-===============================================================================
-IMAGE REUSE
-===============================================================================
-
-You may reuse images from the image library.
-
-If the website needs more images than are available:
-
-- reuse existing images
-- use different crops
-- use different sizes
-- use different aspect ratios
-- use different sections
-- use different layouts
-
-NEVER invent additional image URLs.
-
-===============================================================================
+============================================================
 CURRENT CODE
-===============================================================================
+============================================================
 
 ${
   currentCode ||
-  "(No existing code was provided. Create the page from scratch.)"
+  "(No existing code was provided. Create the website from scratch.)"
 }
 
-===============================================================================
+============================================================
 USER REQUEST
-===============================================================================
+============================================================
 
 ${prompt}
-`.trim();
+    `.trim();
 
-    // =========================================================================
-    // STEP 5
-    // ONE FINAL OPENAI REQUEST
-    //
-    // stream:false is intentional for Netlify.
-    // =========================================================================
+    /* ========================================================
+       STEP 5 — OPENAI
+    ======================================================== */
+
+    const startedAt =
+      Date.now();
 
     const finalResponse =
-      await openai.responses.create(
-        {
-          model:
-            "gpt-5.6-luna",
+      await openai.responses.create({
+        model:
+          "gpt-5.6-luna",
 
-          stream: false,
+        stream: false,
 
-          input:
-            systemPrompt,
-        }
-      );
+        input:
+          systemPrompt,
+      });
 
-    let htmlText =
+    let html =
       finalResponse.output_text ||
       "";
 
-    // =========================================================================
-    // STEP 6
-    // Remove accidental Markdown fences.
-    // =========================================================================
+    const durationMs =
+      Date.now() -
+      startedAt;
 
-    htmlText =
-      htmlText
+    /* ========================================================
+       STEP 6 — CLEAN MARKDOWN
+    ======================================================== */
+
+    html =
+      html
         .replace(
           /^```html\s*/i,
           ""
@@ -826,19 +876,20 @@ ${prompt}
         )
         .trim();
 
-    // =========================================================================
-    // STEP 7
-    // Validate generated image URLs.
-    // =========================================================================
+    if (!html) {
+      throw new Error(
+        "OpenAI returned empty HTML."
+      );
+    }
+
+    /* ========================================================
+       STEP 7 — IMAGE VALIDATION
+    ======================================================== */
 
     const generatedImageUrls =
       extractImageUrls(
-        htmlText
+        html
       );
-
-    console.log(
-      `Generated image count: ${generatedImageUrls.length}`
-    );
 
     const invalidImageUrls =
       generatedImageUrls.filter(
@@ -849,64 +900,48 @@ ${prompt}
       );
 
     if (
-      invalidImageUrls.length >
-      0
+      invalidImageUrls.length > 0
     ) {
       console.warn(
-        "Invalid image URLs generated:",
+        "Invalid image URLs found:",
         invalidImageUrls
       );
 
-      htmlText =
+      html =
         removeInvalidImageUrls(
-          htmlText,
+          html,
           allowedImageUrls
         );
     }
 
-    // =========================================================================
-    // STEP 8
-    // Enforce Unsplash attribution.
-    // =========================================================================
+    /* ========================================================
+       STEP 8 — ATTRIBUTION
+    ======================================================== */
 
-    htmlText =
+    html =
       addUnsplashAttribution(
-        htmlText,
+        html,
         imageResults
       );
 
-    // =========================================================================
-    // STEP 9
-    // Track images actually used.
-    // =========================================================================
+    /* ========================================================
+       STEP 9 — TRACK USED IMAGES
+    ======================================================== */
 
-    const finalGeneratedImageUrls =
+    const finalImageUrls =
       extractImageUrls(
-        htmlText
+        html
       );
 
     const usedImages =
       imageResults.filter(
         (image) =>
-          finalGeneratedImageUrls.includes(
+          finalImageUrls.includes(
             image.url
           ) &&
           image.downloadLocation
       );
 
-    console.log(
-      `Unsplash images used: ${usedImages.length}`
-    );
-
-    /*
-     * Track only images actually
-     * inserted into the generated website.
-     *
-     * All requests run in parallel.
-     *
-     * A tracking failure will NEVER
-     * break website generation.
-     */
     await Promise.allSettled(
       usedImages.map(
         (image) =>
@@ -916,47 +951,118 @@ ${prompt}
       )
     );
 
-    // =========================================================================
-    // STEP 10
-    // SAVE RESULT FOR THE STATUS ENDPOINT
-    // =========================================================================
+    /* ========================================================
+       STEP 10 — USAGE
+    ======================================================== */
 
-    const completedAt = new Date().toISOString();
+    const usage: any =
+      (finalResponse as any)
+        ?.usage || {};
 
-    await jobs.setJSON(jobId, {
-      status: "completed",
-      html: htmlText,
-      completedAt,
-    });
+    const inputTokens =
+      Number(
+        usage.input_tokens ??
+          usage.inputTokens ??
+          0
+      );
 
-    console.log(`Generation completed: ${jobId}`);
+    const outputTokens =
+      Number(
+        usage.output_tokens ??
+          usage.outputTokens ??
+          0
+      );
+
+    const totalTokens =
+      Number(
+        usage.total_tokens ??
+          usage.totalTokens ??
+          inputTokens +
+            outputTokens
+      );
+
+    const estimatedCostUsd =
+      estimateCost(
+        inputTokens,
+        outputTokens
+      );
+
+    const generationUsage:
+      GenerationUsage = {
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        estimatedCostUsd,
+      };
+
+    /* ========================================================
+       STEP 11 — COMPLETE JOB
+    ======================================================== */
+
+    await updateJob(
+      jobId,
+      {
+        status: "completed",
+
+        stage: "completed",
+
+        html,
+
+        usage:
+          generationUsage,
+
+        durationMs,
+
+        imageCount:
+          usedImages.length,
+
+        completedAt:
+          new Date().toISOString(),
+      }
+    );
+
+    console.log(
+      "Generation completed:",
+      jobId
+    );
   } catch (error: any) {
     console.error(
-      "API Route Error:",
+      "AI generation failed:",
       error
     );
 
-    await jobs.setJSON(jobId, {
-      status: "failed",
-      error:
-        error?.message ||
-        "Unknown error",
-      failedAt: new Date().toISOString(),
-    });
+    await updateJob(
+      jobId,
+      {
+        status: "failed",
 
-    throw error;
+        error:
+          error?.message ||
+          "AI generation failed.",
+
+        failedAt:
+          new Date().toISOString(),
+      }
+    );
   }
 }
 
-export default async function handler(request: Request) {
-  // Netlify sends HTTP 202 immediately because this function is configured
-  // as a Background Function. The generation continues after the client
-  // receives the 202 response.
-  await runGeneration(request);
+/* ============================================================
+   NETLIFY BACKGROUND FUNCTION
+============================================================ */
+
+export default async function handler(
+  request: Request
+) {
+  await runGeneration(
+    request
+  );
 }
 
 export const config: Config = {
   path: "/api/ai/generate",
+
   method: "POST",
+
   background: true,
 };
