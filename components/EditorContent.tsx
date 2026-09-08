@@ -46,44 +46,107 @@ function cleanGeneratedCode(raw: string): string {
 }
 
 /**
- * Free AI usage is intentionally stored in the browser.
- * This is a UX/product limit, not a secure billing limit.
+ * Free AI usage is stored server-side in Upstash Redis.
+ *
+ * IMPORTANT:
+ * - Never access UPSTASH_REDIS_REST_TOKEN from this client component.
+ * - The client talks to /api/ai/usage.
+ * - The API route is responsible for reading/incrementing Redis securely.
  */
 const DAILY_AI_LIMIT = 2
 
-function getDailyAIStorageKey(username: string) {
-  const today = new Date().toISOString().slice(0, 10)
-  return `ai-daily-usage-${username.toLowerCase()}-${today}`
+type AIUsageResponse = {
+  premium: boolean
+  usage: number
+  limit: number
 }
 
-function getDailyAIUsage(username: string): number {
-  if (typeof window === 'undefined') return 0
+/**
+ * Read the current AI usage from the server.
+ * Redis credentials never reach the browser.
+ */
+async function getDailyAIUsage(): Promise<AIUsageResponse> {
+  const response = await fetch('/api/ai/usage', {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+    },
+  })
 
-  try {
-    const key = getDailyAIStorageKey(username)
-    const value = localStorage.getItem(key)
-    const usage = value ? Number(value) : 0
+  if (!response.ok) {
+    throw new Error('Failed to fetch AI usage')
+  }
 
-    if (!Number.isFinite(usage) || usage < 0) return 0
+  const data = await response.json()
 
-    return Math.min(Math.floor(usage), DAILY_AI_LIMIT)
-  } catch (error) {
-    console.error('Failed to read daily AI usage:', error)
-    return 0
+  return {
+    premium: Boolean(data.premium),
+    usage: Number.isFinite(Number(data.usage))
+      ? Math.max(0, Math.floor(Number(data.usage)))
+      : 0,
+    limit: Number.isFinite(Number(data.limit))
+      ? Math.max(0, Math.floor(Number(data.limit)))
+      : DAILY_AI_LIMIT,
   }
 }
 
-function setDailyAIUsage(username: string, usage: number) {
-  if (typeof window === 'undefined') return
+/**
+ * Reserve one free AI generation before calling the AI service.
+ *
+ * The API route performs the limit check + increment atomically in Redis.
+ * If generation fails, release the reservation with releaseDailyAIUsage().
+ */
+async function reserveDailyAIUsage(): Promise<AIUsageResponse> {
+  const response = await fetch('/api/ai/usage', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+    },
+    body: JSON.stringify({ action: 'reserve' }),
+  })
 
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    const error = new Error(data?.error || 'Failed to update AI usage')
+    ;(error as Error & { code?: string }).code = data?.code
+    throw error
+  }
+
+  return {
+    premium: Boolean(data.premium),
+    usage: Number.isFinite(Number(data.usage))
+      ? Math.max(0, Math.floor(Number(data.usage)))
+      : 0,
+    limit: Number.isFinite(Number(data.limit))
+      ? Math.max(0, Math.floor(Number(data.limit)))
+      : DAILY_AI_LIMIT,
+  }
+}
+
+/**
+ * Release a reserved free AI generation when the AI request fails.
+ *
+ * This keeps failed generations from consuming the daily allowance.
+ */
+async function releaseDailyAIUsage(): Promise<void> {
   try {
-    const key = getDailyAIStorageKey(username)
-    localStorage.setItem(
-      key,
-      String(Math.max(0, Math.min(Math.floor(usage), DAILY_AI_LIMIT)))
-    )
+    const response = await fetch('/api/ai/usage', {
+      method: 'DELETE',
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to release AI usage reservation')
+    }
   } catch (error) {
-    console.error('Failed to save daily AI usage:', error)
+    console.error('Failed to release AI usage reservation:', error)
   }
 }
 
@@ -239,43 +302,25 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
       try {
         setIsLoadingStatus(true)
 
-        // This request only checks premium status.
-        // Free-user daily usage is kept in browser localStorage,
-        // so AI generations do not require a usage DB read/write.
-        const res = await fetch('/api/ai/usage', {
-          method: 'GET',
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
-        })
-
-        if (!res.ok) {
-          throw new Error('Failed to fetch subscription status')
-        }
-
-        const data = await res.json()
+        // AI usage is now read from the server-side Redis-backed API.
+        // No localStorage is used for the AI allowance.
+        const data = await getDailyAIUsage()
 
         if (!cancelled) {
-          const usage = data.premium
-            ? 0
-            : getDailyAIUsage(username)
-
           setPremiumStatus({
-            premium: Boolean(data.premium),
-            usage,
-            limit: DAILY_AI_LIMIT,
+            premium: data.premium,
+            usage: data.premium ? 0 : data.usage,
+            limit: data.limit || DAILY_AI_LIMIT,
           })
         }
       } catch (error) {
         console.error('Usage fetch error:', error)
 
         if (!cancelled) {
-          // If the status request fails, fail closed for free AI usage.
-          // Premium status cannot safely be assumed.
-          const usage = getDailyAIUsage(username)
-
+          // Fail closed if the server cannot tell us the user's real usage.
           setPremiumStatus({
             premium: false,
-            usage,
+            usage: DAILY_AI_LIMIT,
             limit: DAILY_AI_LIMIT,
           })
         }
@@ -291,7 +336,7 @@ export default function EditorContent({ username, initialContent }: NewMobilePro
     return () => {
       cancelled = true
     }
-  }, [username])
+  }, [])
 
   // ------------------------------------------------------------
   // DATA.JS HELPERS
@@ -758,37 +803,70 @@ ${cleanHtml}`
       return
     }
 
-    // Premium users are unlimited.
-    // Free users have 2 generations per browser per day.
-    if (premiumStatus && !premiumStatus.premium) {
-      const currentUsage = getDailyAIUsage(username)
+    // Always check the server first. Browser state is never authoritative.
+    let currentStatus: AIUsageResponse
 
-      if (currentUsage >= DAILY_AI_LIMIT) {
-        setPremiumStatus((prev) =>
-          prev
-            ? {
-                ...prev,
-                usage: DAILY_AI_LIMIT,
-                limit: DAILY_AI_LIMIT,
-              }
-            : prev
-        )
-        setIsPremiumModalOpen(true)
+    try {
+      currentStatus = await getDailyAIUsage()
+    } catch (error) {
+      console.error('Failed to check AI usage:', error)
+      toast.error('Unable to verify AI usage. Please try again.', {
+        position: 'top-center',
+      })
+      return
+    }
+
+    if (!currentStatus.premium && currentStatus.usage >= currentStatus.limit) {
+      setPremiumStatus({
+        premium: false,
+        usage: currentStatus.usage,
+        limit: currentStatus.limit,
+      })
+      setIsPremiumModalOpen(true)
+      return
+    }
+
+    setPremiumStatus({
+      premium: currentStatus.premium,
+      usage: currentStatus.premium ? 0 : currentStatus.usage,
+      limit: currentStatus.limit || DAILY_AI_LIMIT,
+    })
+
+    let usageReserved = false
+
+    // Reserve the free generation BEFORE calling the AI service.
+    // Redis does the limit check atomically, so multiple tabs cannot
+    // generate past the daily allowance.
+    if (!currentStatus.premium) {
+      try {
+        const reservation = await reserveDailyAIUsage()
+
+        usageReserved = true
+
+        setPremiumStatus({
+          premium: reservation.premium,
+          usage: reservation.usage,
+          limit: reservation.limit || DAILY_AI_LIMIT,
+        })
+      } catch (error) {
+        const usageError = error as Error & { code?: string }
+
+        console.error('Failed to reserve AI usage:', usageError)
+
+        if (usageError.code === 'LIMIT_REACHED') {
+          setPremiumStatus({
+            premium: false,
+            usage: DAILY_AI_LIMIT,
+            limit: DAILY_AI_LIMIT,
+          })
+          setIsPremiumModalOpen(true)
+          return
+        }
+
+        toast.error('Unable to start AI generation. Please try again.', {
+          position: 'top-center',
+        })
         return
-      }
-
-      // Keep the React state synchronized with localStorage in case
-      // another component/action changed the value during this session.
-      if (currentUsage !== premiumStatus.usage) {
-        setPremiumStatus((prev) =>
-          prev
-            ? {
-                ...prev,
-                usage: currentUsage,
-                limit: DAILY_AI_LIMIT,
-              }
-            : prev
-        )
       }
     }
 
@@ -812,23 +890,8 @@ ${cleanHtml}`
 
         setAiPrompt('')
 
-        // Only consume a free generation AFTER the AI generation succeeds.
-        // This means failed generations do not use the user's daily allowance.
-        if (premiumStatus && !premiumStatus.premium) {
-          const newUsage = getDailyAIUsage(username) + 1
-
-          setDailyAIUsage(username, newUsage)
-
-          setPremiumStatus((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  usage: newUsage,
-                  limit: DAILY_AI_LIMIT,
-                }
-              : prev
-          )
-        }
+        // The Redis reservation now represents the successful generation.
+        usageReserved = false
 
         toast.success('Code updated with AI!', {
           description: 'Your changes are ready.',
@@ -837,12 +900,37 @@ ${cleanHtml}`
 
         aiInputRef.current?.focus()
       } else {
+        // Failed AI generations should not consume the user's allowance.
+        if (usageReserved) {
+          await releaseDailyAIUsage()
+          usageReserved = false
+
+          try {
+            const refreshed = await getDailyAIUsage()
+
+            setPremiumStatus({
+              premium: refreshed.premium,
+              usage: refreshed.premium ? 0 : refreshed.usage,
+              limit: refreshed.limit || DAILY_AI_LIMIT,
+            })
+          } catch (refreshError) {
+            console.error('Failed to refresh AI usage:', refreshError)
+          }
+        }
+
         toast.error(result.error || 'AI generation failed', {
           position: 'top-center',
         })
       }
     } catch (error) {
       console.error('AI generation error:', error)
+
+      // Return the reserved slot when generation throws.
+      if (usageReserved) {
+        await releaseDailyAIUsage()
+        usageReserved = false
+      }
+
       toast.error('An unexpected error occurred', {
         position: 'top-center',
       })
