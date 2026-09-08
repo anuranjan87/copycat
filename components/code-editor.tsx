@@ -6,6 +6,7 @@ import { updateWebsiteContent, getTemplateById } from '@/lib/website-actions';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
+import PremiumRequiredModal from '@/components/ui_components/PremiumRequiredModal';
 import {
   SendIcon,
   Loader2,
@@ -24,6 +25,10 @@ import {
   XCircle,
   Undo2,
   Redo2,
+  Clock3,
+  Coins,
+  CreditCard,
+  CheckCircle2,
 } from 'lucide-react';
 
 // Dynamically import Monaco Editor (no SSR)
@@ -117,6 +122,29 @@ export function CodeEditor({
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasReceivedData, setHasReceivedData] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [isLoadingAIStatus, setIsLoadingAIStatus] = useState(true);
+  const [aiCredits, setAiCredits] = useState(0);
+  const [isPremium, setIsPremium] = useState(false);
+  const [generationSummary, setGenerationSummary] = useState<{
+    open: boolean;
+    durationMs: number;
+    creditsUsed: number;
+    remainingCredits: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd: number;
+  }>({
+    open: false,
+    durationMs: 0,
+    creditsUsed: 0,
+    remainingCredits: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    estimatedCostUsd: 0,
+  });
 
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
   const [hidePreview, setHidePreview] = useState(false);
@@ -540,12 +568,74 @@ const handlePublish = async () => {
 
 
 
-  // AI generation (streaming)
+  // ------------------------------------------------------------
+  // Premium AI generation
+  //
+  // The server is the source of truth:
+  // - Clerk identifies the user
+  // - Postgres checks premium status and AI credits
+  // - One AI credit is reserved before generation
+  // - Actual token usage is returned after generation
+  // - The server adjusts the final credit charge and returns balance
+  // ------------------------------------------------------------
   const editorRef = useRef<any>(null);
 
+  const loadAIStatus = useCallback(async () => {
+    try {
+      setIsLoadingAIStatus(true);
+
+      const response = await fetch('/api/ai/generate', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to check AI status');
+      }
+
+      setIsPremium(Boolean(data.premium));
+      setAiCredits(Number(data.aiCredits || 0));
+    } catch (error) {
+      console.error('Failed to load AI status:', error);
+      setIsPremium(false);
+      setAiCredits(0);
+    } finally {
+      setIsLoadingAIStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAIStatus();
+  }, [loadAIStatus]);
+
   const handleAIGenerate = async () => {
-    if (!aiPrompt.trim()) {
+    const prompt = aiPrompt.trim();
+
+    if (!prompt) {
       toast.error('Please enter a prompt for AI assistance', {
+        position: 'top-center',
+      });
+      return;
+    }
+
+    if (isLoadingAIStatus) {
+      toast.info('Checking your Premium AI access...', {
+        position: 'top-center',
+      });
+      return;
+    }
+
+    if (!isPremium) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
+
+    if (aiCredits <= 0) {
+      toast.error('You have no AI credits left.', {
+        description: 'Recharge your AI credits from the Premium Plan.',
         position: 'top-center',
       });
       return;
@@ -554,73 +644,87 @@ const handlePublish = async () => {
     setIsGenerating(true);
     setHasReceivedData(false);
 
-    const jobId = crypto.randomUUID();
+    const startedAt = performance.now();
 
     try {
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
         body: JSON.stringify({
-          jobId,
           currentCode: draftHtml,
-          prompt: aiPrompt,
+          prompt,
         }),
       });
 
-      if (!response.ok && response.status !== 202) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Generation failed (${response.status})`);
-      }
+      const data = await response.json().catch(() => ({}));
 
-      const maxAttempts = 180;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        const statusResponse = await fetch(
-          `/api/ai/generate/status?jobId=${encodeURIComponent(jobId)}`,
-          { method: 'GET', cache: 'no-store' }
-        );
-
-        if (!statusResponse.ok) {
-          continue;
-        }
-
-        const result = await statusResponse.json();
-
-        if (result.status === 'processing') continue;
-
-        if (result.status === 'completed') {
-          if (!result.html) {
-            throw new Error('Generation completed but no HTML was returned');
-          }
-          const fullCode = result.html;
-          setDraftHtml(fullCode);
-          setHasReceivedData(true);
-          pushHistory(fullCode, draftData);
-          setAiPrompt('');
-          toast.success('AI generated new code!', {
-            description: 'Review changes and save if you like.',
-            position: 'top-center',
-          });
-          aiInputRef.current?.focus();
+      if (!response.ok) {
+        if (data?.code === 'PREMIUM_REQUIRED') {
+          setIsPremium(false);
+          setIsPremiumModalOpen(true);
           return;
         }
 
-        if (result.status === 'failed') {
-          throw new Error(result.error || 'AI generation failed');
+        if (data?.code === 'NO_AI_CREDITS') {
+          setAiCredits(Number(data?.aiCredits || 0));
+          toast.error('No AI credits remaining', {
+            description: 'Recharge your AI credits from the Premium Plan.',
+            position: 'top-center',
+          });
+          return;
         }
 
-        if (result.status === 'not_found') {
-          throw new Error('Generation job was not found');
-        }
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            `Generation failed (${response.status})`
+        );
       }
 
-      throw new Error('Generation is taking longer than expected.');
+      if (!data?.html) {
+        throw new Error('AI generation completed but no HTML was returned.');
+      }
+
+      const durationMs = Math.max(0, performance.now() - startedAt);
+      const fullCode = String(data.html);
+
+      setDraftHtml(fullCode);
+      setHasReceivedData(true);
+      pushHistory(fullCode, draftData);
+      setAiPrompt('');
+
+      const summary = {
+        open: true,
+        durationMs,
+        creditsUsed: Number(data.creditsUsed || 1),
+        remainingCredits: Number(data.remainingCredits || 0),
+        inputTokens: Number(data.usage?.inputTokens || 0),
+        outputTokens: Number(data.usage?.outputTokens || 0),
+        totalTokens: Number(data.usage?.totalTokens || 0),
+        estimatedCostUsd: Number(data.usage?.estimatedCostUsd || 0),
+      };
+
+      setAiCredits(summary.remainingCredits);
+      setGenerationSummary(summary);
+
+      toast.success('AI generated new code!', {
+        description: 'Review the changes and save if you like.',
+        position: 'top-center',
+      });
+
+      aiInputRef.current?.focus();
     } catch (error: any) {
       toast.error('AI generation failed', {
         description: error?.message || 'An unexpected error occurred.',
         position: 'top-center',
       });
+
+      // The API refunds the reserved credit if generation itself fails.
+      // Refresh the balance so the UI is synchronized with Postgres.
+      await loadAIStatus();
     } finally {
       setIsGenerating(false);
       setHasReceivedData(false);
@@ -1036,6 +1140,155 @@ ${savedData}
           </div>
         </div>
       </div>
+
+      <PremiumRequiredModal
+        open={isPremiumModalOpen}
+        onOpenChange={setIsPremiumModalOpen}
+        feature="AI Website Generator"
+        subheading="AI website generation is available exclusively for Premium members. Upgrade to unlock AI-powered editing."
+      />
+
+      {generationSummary.open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="generation-summary-title"
+        >
+          <div className="relative w-full max-w-[460px] overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-white shadow-2xl">
+            <div className="h-1 w-full bg-gradient-to-r from-pink-500 via-rose-500 to-orange-400" />
+
+            <div className="p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-500/10">
+                    <CheckCircle2 className="h-5 w-5 text-green-400" />
+                  </div>
+
+                  <div>
+                    <h2
+                      id="generation-summary-title"
+                      className="text-lg font-semibold tracking-tight"
+                    >
+                      Generation Complete
+                    </h2>
+                    <p className="text-xs text-white/40">
+                      Your website has been updated successfully.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setGenerationSummary((prev) => ({
+                      ...prev,
+                      open: false,
+                    }))
+                  }
+                  className="rounded-lg p-2 text-white/40 transition hover:bg-white/5 hover:text-white"
+                  aria-label="Close"
+                >
+                  <XCircle className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-white/40">
+                    <Clock3 className="h-4 w-4" />
+                    <span className="text-[11px] uppercase tracking-wider">
+                      Generation time
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold">
+                    {(generationSummary.durationMs / 1000).toFixed(2)}s
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-white/40">
+                    <Coins className="h-4 w-4" />
+                    <span className="text-[11px] uppercase tracking-wider">
+                      Credits used
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold">
+                    {generationSummary.creditsUsed}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-white/40">
+                    <CreditCard className="h-4 w-4" />
+                    <span className="text-[11px] uppercase tracking-wider">
+                      Balance
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold">
+                    {generationSummary.remainingCredits}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-white/40">
+                    <Sparkles className="h-4 w-4" />
+                    <span className="text-[11px] uppercase tracking-wider">
+                      Tokens
+                    </span>
+                  </div>
+                  <p className="text-xl font-semibold">
+                    {generationSummary.totalTokens.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/5 bg-black/20 p-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/40">Input tokens</span>
+                  <span className="font-medium text-white/80">
+                    {generationSummary.inputTokens.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-white/40">Output tokens</span>
+                  <span className="font-medium text-white/80">
+                    {generationSummary.outputTokens.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2 text-xs">
+                  <span className="text-white/40">Estimated API cost</span>
+                  <span className="font-medium text-white/80">
+                    ${generationSummary.estimatedCostUsd.toFixed(6)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-xl bg-pink-500/5 px-4 py-3">
+                <p className="text-center text-xs leading-5 text-white/50">
+                  Need more AI credits? You can recharge anytime by going to
+                  your <span className="font-semibold text-pink-400">Premium Plan</span>.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setGenerationSummary((prev) => ({
+                    ...prev,
+                    open: false,
+                  }))
+                }
+                className="mt-5 h-11 w-full rounded-xl bg-pink-500 text-sm font-semibold text-white transition hover:bg-pink-600"
+              >
+                Continue Editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Bar */}
       <footer className="flex-shrink-0 px-4 py-1 bg-[#141414] border-t border-white/5 flex items-center justify-between text-[10px] text-white/30">

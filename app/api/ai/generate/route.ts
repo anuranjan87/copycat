@@ -1,8 +1,51 @@
 import OpenAI from "openai";
+import { auth } from "@clerk/nextjs/server";
+import { neon } from "@neondatabase/serverless";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const sql = neon(process.env.POSTGRES_URL!);
+
+// One credit is the minimum charge for a successful AI generation.
+// The actual charge is calculated from token usage and the configured
+// USD value of one credit.
+const AI_CREDIT_USD_VALUE = Number(
+  process.env.AI_CREDIT_USD_VALUE || "0.01"
+);
+
+const INPUT_PRICE_PER_1M = Number(
+  process.env.AI_INPUT_PRICE_PER_1M || "0"
+);
+
+const OUTPUT_PRICE_PER_1M = Number(
+  process.env.AI_OUTPUT_PRICE_PER_1M || "0"
+);
+
+function calculateEstimatedCostUsd(
+  inputTokens: number,
+  outputTokens: number
+) {
+  return (
+    (inputTokens / 1_000_000) * INPUT_PRICE_PER_1M +
+    (outputTokens / 1_000_000) * OUTPUT_PRICE_PER_1M
+  );
+}
+
+function calculateCreditsUsed(estimatedCostUsd: number) {
+  if (
+    !Number.isFinite(AI_CREDIT_USD_VALUE) ||
+    AI_CREDIT_USD_VALUE <= 0
+  ) {
+    return 1;
+  }
+
+  return Math.max(
+    1,
+    Math.ceil(estimatedCostUsd / AI_CREDIT_USD_VALUE)
+  );
+}
 
 const UNSPLASH_API = "https://api.unsplash.com";
 
@@ -394,12 +437,99 @@ function addUnsplashAttribution(
 }
 
 // -----------------------------------------------------------------------------
+// GET - Premium status + AI credit balance
+// -----------------------------------------------------------------------------
+
+export async function GET() {
+  try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized",
+          code: "UNAUTHORIZED",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const rows = await sql`
+      SELECT
+        status,
+        expires_at,
+        ai_credits
+      FROM subscriptions
+      WHERE user_id = ${userId}
+      LIMIT 1
+    `;
+
+    if (rows.length === 0) {
+      return new Response(
+        JSON.stringify({
+          premium: false,
+          aiCredits: 0,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const subscription = rows[0];
+    const expiresAt = subscription.expires_at
+      ? new Date(subscription.expires_at)
+      : null;
+
+    const premium =
+      subscription.status === "premium" &&
+      (!expiresAt || expiresAt > new Date());
+
+    return new Response(
+      JSON.stringify({
+        premium,
+        aiCredits: Number(subscription.ai_credits || 0),
+        expiresAt: subscription.expires_at || null,
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error: any) {
+    console.error("AI status error:", error);
+
+    return new Response(
+      JSON.stringify({
+        error: "Failed to check AI access",
+        code: "AI_STATUS_FAILED",
+        message: error?.message || "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
 // POST
 // -----------------------------------------------------------------------------
 
 export async function POST(
   request: Request
 ) {
+  let reservedCredit = false;
+  let authenticatedUserId: string | null = null;
+
   try {
     const body =
       await request.json();
@@ -466,6 +596,27 @@ export async function POST(
     }
 
     // =========================================================================
+    // AUTHENTICATE NORMAL GENERATION REQUEST
+    // =========================================================================
+
+    const { userId } = await auth();
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized",
+          code: "UNAUTHORIZED",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    authenticatedUserId = userId;
+
+    // =========================================================================
     // PARSE NORMAL GENERATION REQUEST
     // =========================================================================
 
@@ -497,6 +648,73 @@ export async function POST(
         }
       );
     }
+
+    // =========================================================================
+    // RESERVE ONE AI CREDIT BEFORE STARTING GENERATION
+    //
+    // This is atomic, so two browser tabs cannot spend the same final credit.
+    // If generation later fails, the catch block refunds this reservation.
+    // =========================================================================
+
+    const reserved = await sql`
+      UPDATE subscriptions
+      SET
+        ai_credits = ai_credits - 1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+        AND status = 'premium'
+        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+        AND ai_credits >= 1
+      RETURNING ai_credits
+    `;
+
+    if (reserved.length === 0) {
+      const subscription = await sql`
+        SELECT
+          status,
+          expires_at,
+          ai_credits
+        FROM subscriptions
+        WHERE user_id = ${userId}
+        LIMIT 1
+      `;
+
+      const row = subscription[0];
+      const expiresAt = row?.expires_at
+        ? new Date(row.expires_at)
+        : null;
+
+      const premium =
+        row?.status === "premium" &&
+        (!expiresAt || expiresAt > new Date());
+
+      if (!premium) {
+        return new Response(
+          JSON.stringify({
+            error: "Premium membership is required for AI generation.",
+            code: "PREMIUM_REQUIRED",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "You do not have enough AI credits.",
+          code: "NO_AI_CREDITS",
+          aiCredits: Number(row?.ai_credits || 0),
+        }),
+        {
+          status: 402,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    reservedCredit = true;
 
     // =========================================================================
     // STEP 1
@@ -991,6 +1209,24 @@ ${prompt}
       "API Route Error:",
       error
     );
+
+    // Refund the reserved credit when generation fails before finalization.
+    if (reservedCredit && authenticatedUserId) {
+      try {
+        await sql`
+          UPDATE subscriptions
+          SET
+            ai_credits = ai_credits + 1,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ${authenticatedUserId}
+        `;
+      } catch (refundError) {
+        console.error(
+          "Failed to refund reserved AI credit:",
+          refundError
+        );
+      }
+    }
 
     return new Response(
       JSON.stringify({
