@@ -15,20 +15,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Zap,
-  Fingerprint,
   Save,
   Globe,
   Shield,
   Clock,
-  HelpCircle,
-  User,
-  Settings,
 } from 'lucide-react'
 import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from '@/lib/website-actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
 import { CodeEditor } from '@/components/code-editor'
+import PremiumRequiredModal from "@/components/ui_components/PremiumRequiredModal" // <--- Added Import
 
 // Helper to strip markdown code fences
 function cleanGeneratedCode(raw: string): string {
@@ -37,8 +34,6 @@ function cleanGeneratedCode(raw: string): string {
     .replace(/\s*```$/i, '')
     .trim()
 
-  // AI sometimes returns an object wrapped in an extra pair of braces.
-  // Keep complete `const data = {...};` declarations untouched.
   if (
     cleaned.startsWith('{') &&
     cleaned.endsWith('}') &&
@@ -48,6 +43,48 @@ function cleanGeneratedCode(raw: string): string {
   }
 
   return cleaned
+}
+
+/**
+ * Free AI usage is intentionally stored in the browser.
+ * This is a UX/product limit, not a secure billing limit.
+ */
+const DAILY_AI_LIMIT = 2
+
+function getDailyAIStorageKey(username: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  return `ai-daily-usage-${username.toLowerCase()}-${today}`
+}
+
+function getDailyAIUsage(username: string): number {
+  if (typeof window === 'undefined') return 0
+
+  try {
+    const key = getDailyAIStorageKey(username)
+    const value = localStorage.getItem(key)
+    const usage = value ? Number(value) : 0
+
+    if (!Number.isFinite(usage) || usage < 0) return 0
+
+    return Math.min(Math.floor(usage), DAILY_AI_LIMIT)
+  } catch (error) {
+    console.error('Failed to read daily AI usage:', error)
+    return 0
+  }
+}
+
+function setDailyAIUsage(username: string, usage: number) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const key = getDailyAIStorageKey(username)
+    localStorage.setItem(
+      key,
+      String(Math.max(0, Math.min(Math.floor(usage), DAILY_AI_LIMIT)))
+    )
+  } catch (error) {
+    console.error('Failed to save daily AI usage:', error)
+  }
 }
 
 // Dynamically import Monaco Editor
@@ -111,7 +148,7 @@ export interface NewMobileProps {
   }
 }
 
-export default function New({ username, initialContent }: NewMobileProps) {
+export default function EditorContent({ username, initialContent }: NewMobileProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const templateId = searchParams.get('templateId')
@@ -132,8 +169,8 @@ export default function New({ username, initialContent }: NewMobileProps) {
 
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false) // <--- Added State
 
-  // Last saved timestamp
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [lastPublished, setLastPublished] = useState<Date | null>(null)
 
@@ -186,12 +223,79 @@ export default function New({ username, initialContent }: NewMobileProps) {
   }, [inputBarVisible])
 
   // ------------------------------------------------------------
+  // Premium & AI usage state
+  // ------------------------------------------------------------
+  const [premiumStatus, setPremiumStatus] = useState<{
+    premium: boolean
+    usage: number
+    limit: number
+  } | null>(null)
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchPremiumStatus() {
+      try {
+        setIsLoadingStatus(true)
+
+        // This request only checks premium status.
+        // Free-user daily usage is kept in browser localStorage,
+        // so AI generations do not require a usage DB read/write.
+        const res = await fetch('/api/ai/usage', {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        })
+
+        if (!res.ok) {
+          throw new Error('Failed to fetch subscription status')
+        }
+
+        const data = await res.json()
+
+        if (!cancelled) {
+          const usage = data.premium
+            ? 0
+            : getDailyAIUsage(username)
+
+          setPremiumStatus({
+            premium: Boolean(data.premium),
+            usage,
+            limit: DAILY_AI_LIMIT,
+          })
+        }
+      } catch (error) {
+        console.error('Usage fetch error:', error)
+
+        if (!cancelled) {
+          // If the status request fails, fail closed for free AI usage.
+          // Premium status cannot safely be assumed.
+          const usage = getDailyAIUsage(username)
+
+          setPremiumStatus({
+            premium: false,
+            usage,
+            limit: DAILY_AI_LIMIT,
+          })
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingStatus(false)
+        }
+      }
+    }
+
+    fetchPremiumStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [username])
+
+  // ------------------------------------------------------------
   // DATA.JS HELPERS
   // ------------------------------------------------------------
-  // The Data editor supports both an object body and a complete
-  // `const data = {...};` file. Helpful user comments are preserved.
-
-  /** Find a complete `const/let/var data = {` declaration. */
   const findDataDeclaration = (source: string) => {
     const declarationRegex = /(?:^|[\r\n])\s*(?:const|let|var)\s+data\s*=\s*\{/i
     const match = source.match(declarationRegex)
@@ -210,7 +314,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
     }
   }
 
-  /** Find the matching closing brace while respecting strings/comments. */
   const findMatchingClosingBrace = (source: string, openingBrace: number) => {
     let depth = 0
     let quote: '"' | "'" | '`' | null = null
@@ -281,12 +384,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
     return -1
   }
 
-  /**
-   * Extract the editable data body from data.js.
-   *
-   * If comments exist before `const data`, they are kept in the editor.
-   * Comments inside the object are naturally preserved as well.
-   */
   const extractDataFields = (dataString: string) => {
     if (!dataString) return ''
 
@@ -296,7 +393,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
     const declaration = findDataDeclaration(trimmed)
 
     if (!declaration) {
-      // Already an object body. Keep every comment exactly as supplied.
       return trimmed
     }
 
@@ -305,7 +401,6 @@ export default function New({ username, initialContent }: NewMobileProps) {
       declaration.openingBrace
     )
 
-    // Never destroy incomplete user code.
     if (closingBrace === -1) return trimmed
 
     const prefix = trimmed.slice(0, declaration.start).trim()
@@ -313,17 +408,9 @@ export default function New({ username, initialContent }: NewMobileProps) {
       .slice(declaration.openingBrace + 1, closingBrace)
       .trim()
 
-    // Keep useful comments/documentation that appeared before `const data`.
-    // The declaration itself is removed because the editor represents the
-    // editable object body.
     return [prefix, body].filter(Boolean).join('\n\n').trim()
   }
 
-  /**
-   * Build one executable `const data = {...};` declaration for preview,
-   * publishing, and download. If the editor contains a full declaration,
-   * it is normalized without duplicating `const data`.
-   */
   const buildDataScript = (dataString: string) => {
     const trimmed = dataString.trim()
 
@@ -338,42 +425,32 @@ export default function New({ username, initialContent }: NewMobileProps) {
       )
 
       if (closingBrace !== -1) {
-        // Already a complete declaration. Preserve it exactly, including
-        // comments before and inside the data object.
         return trimmed.slice(declaration.start).trim()
       }
     }
 
-    // Object body (including comments) -> complete declaration.
     return `const data = {\n${trimmed}\n};`
   }
 
-  // Inject data consistently for iframe preview, full preview and download.
- const injectDataIntoHtml = useCallback(
-  (html: string, data: string) => {
-    if (!html) {
-      return html
-    }
+  const injectDataIntoHtml = useCallback(
+    (html: string, data: string) => {
+      if (!html) {
+        return html
+      }
 
-    const safeData =
-      typeof data === 'string'
-        ? data.trim()
-        : ''
+      const safeData =
+        typeof data === 'string'
+          ? data.trim()
+          : ''
 
-    // Remove an existing data script first.
-    // This prevents duplicate var data declarations.
-    let cleanHtml = html
-      .replace(
-        /<script>\s*(?:var|const|let)\s+data\s*=\s*\{[\s\S]*?\}\s*;?\s*<\/script>\s*/i,
-        ''
-      )
-      .trim()
+      let cleanHtml = html
+        .replace(
+          /<script>\s*(?:var|const|let)\s+data\s*=\s*\{[\s\S]*?\}\s*;?\s*<\/script>\s*/i,
+          ''
+        )
+        .trim()
 
-    // ----------------------------------------------------------
-    // Build the exact data block we want.
-    // ----------------------------------------------------------
-
-    const dataBlock = `
+      const dataBlock = `
 <script>
 var data={
 ${safeData}
@@ -381,42 +458,31 @@ ${safeData}
 </script>
 `
 
-    // ----------------------------------------------------------
-    // Insert data BEFORE the Babel script.
-    // ----------------------------------------------------------
+      const babelScriptMatch = cleanHtml.match(
+        /<script\b[^>]*type=["']text\/babel["'][^>]*>/i
+      )
 
-    const babelScriptMatch = cleanHtml.match(
-      /<script\b[^>]*type=["']text\/babel["'][^>]*>/i
-    )
-
-    if (babelScriptMatch) {
-      return cleanHtml.replace(
-        babelScriptMatch[0],
-        `${dataBlock}
+      if (babelScriptMatch) {
+        return cleanHtml.replace(
+          babelScriptMatch[0],
+          `${dataBlock}
 ${babelScriptMatch[0]}`
-      )
-    }
+        )
+      }
 
-    // ----------------------------------------------------------
-    // If there is no Babel script, put data before </body>.
-    // ----------------------------------------------------------
-
-    if (cleanHtml.includes('</body>')) {
-      return cleanHtml.replace(
-        '</body>',
-        `${dataBlock}
+      if (cleanHtml.includes('</body>')) {
+        return cleanHtml.replace(
+          '</body>',
+          `${dataBlock}
 </body>`
-      )
-    }
+        )
+      }
 
-    // ----------------------------------------------------------
-    // Final fallback.
-    // ----------------------------------------------------------
-    return `${dataBlock}
+      return `${dataBlock}
 ${cleanHtml}`
-  },
-  []
-)
+    },
+    []
+  )
 
   const [isFullscreen, setIsFullscreen] = useState(false)
 
@@ -479,16 +545,12 @@ ${cleanHtml}`
 
   const hasUnsavedChanges = draftHtml !== savedHtml || draftData !== savedData
 
-const finalCode = injectDataIntoHtml(savedHtml, savedData)
+  const finalCode = injectDataIntoHtml(savedHtml, savedData)
 
   const [devMode, setDevMode] = useState(false)
   const [showEditLayoutMessage, setShowEditLayoutMessage] = useState(false)
   const [isLayoutEditor, setIsLayoutEditor] = useState(false)
 
-  // When Dev Mode is enabled:
-  // - hide the AI input bar
-  // - show the Edit Layout button
-  // - show its helper message for 3 seconds
   useEffect(() => {
     if (!devMode) {
       setShowEditLayoutMessage(false)
@@ -510,7 +572,6 @@ const finalCode = injectDataIntoHtml(savedHtml, savedData)
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 })
   const isRestoringScroll = useRef(false)
 
-  // Open draft preview tab
   const openDraftPreview = () => {
     const currentPreviewCode = injectDataIntoHtml(
       draftHtml,
@@ -648,13 +709,12 @@ const finalCode = injectDataIntoHtml(savedHtml, savedData)
   }, [handleSave])
 
   const handlePublish = async () => {
-    // Confirm publish action to avoid accidental
-const message =
-  username.toLowerCase() === "demo"
-    ? "You need to onboard first. We'll send you to the signup page. Continue?"
-    : "Publishing will make your website public. Are you sure?";
+    const message =
+      username.toLowerCase() === "demo"
+        ? "You need to onboard first. We'll send you to the signup page. Continue?"
+        : "Publishing will make your website public. Are you sure?"
 
-if (!confirm(message)) return;
+    if (!confirm(message)) return
 
     setIsPublishing(true)
     try {
@@ -687,16 +747,56 @@ if (!confirm(message)) return;
     }
   }
 
+  // ------------------------------------------------------------
+  // AI Generation with premium/daily browser usage check
+  // ------------------------------------------------------------
   const handleAIGenerate = async () => {
     if (!aiPrompt.trim()) {
-      toast.error('Please enter a prompt for AI assistance', { position: 'top-center' })
+      toast.error('Please enter a prompt for AI assistance', {
+        position: 'top-center',
+      })
       return
+    }
+
+    // Premium users are unlimited.
+    // Free users have 2 generations per browser per day.
+    if (premiumStatus && !premiumStatus.premium) {
+      const currentUsage = getDailyAIUsage(username)
+
+      if (currentUsage >= DAILY_AI_LIMIT) {
+        setPremiumStatus((prev) =>
+          prev
+            ? {
+                ...prev,
+                usage: DAILY_AI_LIMIT,
+                limit: DAILY_AI_LIMIT,
+              }
+            : prev
+        )
+        setIsPremiumModalOpen(true)
+        return
+      }
+
+      // Keep the React state synchronized with localStorage in case
+      // another component/action changed the value during this session.
+      if (currentUsage !== premiumStatus.usage) {
+        setPremiumStatus((prev) =>
+          prev
+            ? {
+                ...prev,
+                usage: currentUsage,
+                limit: DAILY_AI_LIMIT,
+              }
+            : prev
+        )
+      }
     }
 
     setIsGenerating(true)
 
     try {
       const currentCode = devMode ? draftHtml : draftData
+
       const result = await generateCodeWithAI(currentCode, aiPrompt)
 
       if (result.success && result.generatedCode) {
@@ -711,21 +811,46 @@ if (!confirm(message)) return;
         }
 
         setAiPrompt('')
+
+        // Only consume a free generation AFTER the AI generation succeeds.
+        // This means failed generations do not use the user's daily allowance.
+        if (premiumStatus && !premiumStatus.premium) {
+          const newUsage = getDailyAIUsage(username) + 1
+
+          setDailyAIUsage(username, newUsage)
+
+          setPremiumStatus((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  usage: newUsage,
+                  limit: DAILY_AI_LIMIT,
+                }
+              : prev
+          )
+        }
+
         toast.success('Code updated with AI!', {
           description: 'Your changes are ready.',
           position: 'top-center',
         })
+
         aiInputRef.current?.focus()
       } else {
-        toast.error(result.error || 'AI generation failed', { position: 'top-center' })
+        toast.error(result.error || 'AI generation failed', {
+          position: 'top-center',
+        })
       }
     } catch (error) {
       console.error('AI generation error:', error)
-      toast.error('An unexpected error occurred', { position: 'top-center' })
+      toast.error('An unexpected error occurred', {
+        position: 'top-center',
+      })
     } finally {
       setIsGenerating(false)
     }
   }
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -734,12 +859,10 @@ if (!confirm(message)) return;
     }
   }
 
-  // Format time
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Return to templates while preserving the last selected category.
   const handleCloseEditor = () => {
     let category = categoryFromUrl
 
@@ -771,8 +894,6 @@ if (!confirm(message)) return;
     )
   }
 
-  // When Edit Layout is clicked, replace the entire New UI
-  // FIX: pass disableTemplateLoad={true} to prevent reloading the original template from URL
   if (isLayoutEditor) {
     return (
       <div className="flex h-screen bg-[#030712] relative">
@@ -788,8 +909,14 @@ if (!confirm(message)) return;
           />
         </main>
       </div>
-    );
+    )
   }
+
+  // Determine if AI is disabled due to limit
+  const isAILimitReached =
+    !!premiumStatus &&
+    !premiumStatus.premium &&
+    premiumStatus.usage >= DAILY_AI_LIMIT
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200 overflow-hidden">
@@ -867,10 +994,9 @@ if (!confirm(message)) return;
         }
       `}</style>
 
-      {/* Top Navigation - subtle visible border */}
+      {/* Top Navigation */}
       <nav className="flex-shrink-0 border-b border-slate-700/20 bg-slate-900/80 backdrop-blur-md px-4 sm:px-8 py-2 flex items-center justify-between z-10">
         <div className="flex items-center gap-6">
-          {/* Trust indicators */}
           <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
             <div className="flex items-center gap-1">
               <img
@@ -901,7 +1027,6 @@ if (!confirm(message)) return;
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Quick links */}
           <a
             href={
               categoryFromUrl
@@ -932,7 +1057,6 @@ if (!confirm(message)) return;
 
           <div className="h-6 w-px bg-slate-700/20" />
 
-          {/* Publish button */}
           <button
             onClick={handlePublish}
             disabled={isPublishing}
@@ -958,9 +1082,8 @@ if (!confirm(message)) return;
       </nav>
 
       <div className="flex-1 flex gap-3 mt-3 py-1 min-h-0 overflow-hidden px-2 sm:px-4">
-        {/* Preview Panel - visible subtle border */}
+        {/* Preview Panel */}
         <div className="flex-[0.59] flex flex-col min-w-0 bg-slate-900/50 border border-slate-700/20 rounded-lg relative shadow-2xl shadow-black/20">
-          {/* Header with internal subtle divider */}
           <div className="px-4 py-2 flex items-center justify-between gap-3 border-b border-slate-700/10 bg-slate-900/30 rounded-t-lg">
             <div className="flex items-center gap-4">
               <div className="flex items-center bg-slate-800/20 rounded-md p-0.5">
@@ -1038,7 +1161,6 @@ if (!confirm(message)) return;
             <div className="flex items-center flex-1 justify-end relative">
               {devMode ? (
                 <div className="relative">
-                  {/* Edit Layout button */}
                   <button
                     onClick={() => {
                       setIsLayoutEditor(true)
@@ -1050,7 +1172,6 @@ if (!confirm(message)) return;
                     <span>Edit Layout</span>
                   </button>
 
-                  {/* Temporary helper message */}
                   {showEditLayoutMessage && (
                     <div
                       className="absolute right-0 top-full mt-2 z-50 w-56 rounded-lg bg-slate-800 border border-slate-700/60 px-3 py-2.5 text-xs text-slate-200 shadow-xl"
@@ -1072,13 +1193,22 @@ if (!confirm(message)) return;
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       onKeyDown={handleKeyPress}
-                      disabled={isGenerating}
+                      readOnly={!!isAILimitReached || isGenerating} // <--- Changed to readOnly
+                      onClick={() => {
+                        if (isAILimitReached) setIsPremiumModalOpen(true) // <--- Added onClick
+                      }}
                       className="w-full rounded-full bg-slate-800/30 border border-slate-700/30 text-sm text-slate-200 placeholder-slate-500 px-4 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-transparent transition-all duration-200"
                     />
 
                     <button
-                      onClick={handleAIGenerate}
-                      disabled={isGenerating || !aiPrompt.trim()}
+                      onClick={() => {
+                        if (isAILimitReached) {
+                          setIsPremiumModalOpen(true) // <--- Added onClick
+                        } else {
+                          handleAIGenerate()
+                        }
+                      }}
+                      disabled={isGenerating || !aiPrompt.trim()} // <--- Removed isAILimitReached
                       className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-blue-500/20 hover:bg-blue-500/40 transition disabled:opacity-50"
                     >
                       {isGenerating ? (
@@ -1088,6 +1218,16 @@ if (!confirm(message)) return;
                       )}
                     </button>
                   </div>
+
+                  {/* Usage badge */}
+                  {!isLoadingStatus && premiumStatus && !premiumStatus.premium && (
+                    <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                      {Math.max(
+                        DAILY_AI_LIMIT - premiumStatus.usage,
+                        0
+                      )} remaining
+                    </span>
+                  )}
 
                   <button
                     onClick={() => setInputBarVisible(false)}
@@ -1109,7 +1249,7 @@ if (!confirm(message)) return;
             </div>
           </div>
 
-          {/* Preview iframe area - subtle inner border on iframe */}
+          {/* Preview iframe area */}
           <div className="flex-1 overflow-auto flex items-center justify-center bg-black/40 p-6 relative">
             <div
               className={`transition-all duration-300 ${
@@ -1127,12 +1267,11 @@ if (!confirm(message)) return;
                 style={{ aspectRatio: viewMode === 'desktop' ? '16/9' : '9/13', background: 'black' }}
               />
             </div>
-            {/* Subtle glow */}
             <div className="absolute inset-0 pointer-events-none rounded-lg border border-blue-500/5 shadow-[inset_0_0_80px_rgba(59,130,246,0.03)]" />
           </div>
         </div>
 
-        {/* Code Editor Panel - visible subtle border */}
+        {/* Code Editor Panel */}
         <div className="flex-[0.4] flex flex-col min-w-0 bg-slate-900/50 border border-slate-700/20 rounded-lg relative shadow-2xl shadow-black/20">
           <div className="px-4 py-2 border-b border-slate-700/10 flex items-center justify-between bg-slate-900/30 rounded-t-lg">
             <div className="flex items-center gap-3">
@@ -1256,7 +1395,7 @@ if (!confirm(message)) return;
         </div>
       </div>
 
-      {/* Footer trust bar - visible subtle border */}
+      {/* Footer trust bar */}
       <div className="flex-shrink-0 border-t border-slate-700/20 bg-slate-900/30 px-6 py-1.5 flex items-center justify-between text-xs text-slate-500 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
@@ -1277,6 +1416,14 @@ if (!confirm(message)) return;
           </a>
         </div>
       </div>
+
+      {/* Premium Required Modal - Added at the end */}
+   <PremiumRequiredModal
+  open={isPremiumModalOpen}
+  onOpenChange={setIsPremiumModalOpen}
+  feature="Unlimited generation"
+  subheading="5 daily AI content generations"
+/>
     </div>
   )
 }

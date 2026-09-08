@@ -18,12 +18,14 @@ interface PremiumRequiredModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   feature?: string;
+  subheading?: string;
 }
 
 export default function PremiumRequiredModal({
   open,
   onOpenChange,
   feature = "This feature",
+  subheading = "This feature is available exclusively for Premium members. Upgrade to unlock it.",
 }: PremiumRequiredModalProps) {
   const router = useRouter();
 
@@ -84,10 +86,9 @@ export default function PremiumRequiredModal({
               {feature} is Premium
             </DialogTitle>
 
-            {/* Description */}
+            {/* Subheading */}
             <DialogDescription className="mx-auto mt-2 max-w-[310px] text-center text-[13px] leading-5 text-gray-500">
-              This feature is available exclusively for Premium members.
-              Upgrade to unlock it.
+              {subheading}
             </DialogDescription>
           </DialogHeader>
 
@@ -168,4 +169,3 @@ export default function PremiumRequiredModal({
     </Dialog>
   );
 }
-
