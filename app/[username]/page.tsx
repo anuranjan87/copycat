@@ -1,4 +1,3 @@
-
 import {
   getWebsiteContent,
   trackVisit,
@@ -42,18 +41,21 @@ function normalizeWebsiteData(
     declarationMatch &&
     declarationMatch.index !== undefined
   ) {
-    const declarationStart = declarationMatch.index
+    const declarationStart =
+      declarationMatch.index
 
-    const openingBrace = source.indexOf(
-      "{",
-      declarationStart
-    )
+    const openingBrace =
+      source.indexOf(
+        "{",
+        declarationStart
+      )
 
     if (openingBrace !== -1) {
-      const closingBrace = findMatchingBrace(
-        source,
-        openingBrace
-      )
+      const closingBrace =
+        findMatchingBrace(
+          source,
+          openingBrace
+        )
 
       if (closingBrace !== -1) {
         return source
@@ -74,10 +76,11 @@ function normalizeWebsiteData(
    * }
    */
   if (source.startsWith("{")) {
-    const closingBrace = findMatchingBrace(
-      source,
-      0
-    )
+    const closingBrace =
+      findMatchingBrace(
+        source,
+        0
+      )
 
     if (closingBrace !== -1) {
       return source
@@ -249,6 +252,105 @@ function hasBabelScript(
 
 /*
  * ================================================================
+ * INJECT OPENAI API KEY
+ * ================================================================
+ *
+ * Reads:
+ *
+ * process.env.OPENAI_API_KEY
+ *
+ * and makes it available to the rendered HTML as:
+ *
+ * window.OPENAI_API_KEY
+ *
+ * The value is JSON encoded so special characters in the key
+ * cannot break the generated JavaScript.
+ *
+ * IMPORTANT:
+ * This intentionally exposes the key to the rendered iframe/browser.
+ * ================================================================
+ */
+
+function injectOpenAIKey(
+  html: string
+): string {
+  const apiKey =
+    process.env.OPENAI_API_KEY
+
+  /*
+   * Remove any previously injected key.
+   */
+  let finalHtml = html.replace(
+    /\s*<!-- OPENAI_API_KEY_INJECTION_START -->[\s\S]*?<!-- OPENAI_API_KEY_INJECTION_END -->\s*/gi,
+    "\n"
+  )
+
+  /*
+   * Also remove a simple previous assignment if one exists.
+   *
+   * This allows previously generated HTML containing:
+   *
+   * window.OPENAI_API_KEY = "...";
+   *
+   * to be replaced.
+   */
+  finalHtml = finalHtml.replace(
+    /window\.OPENAI_API_KEY\s*=\s*(['"`])[\s\S]*?\1\s*;?/gi,
+    ""
+  )
+
+  if (!apiKey) {
+    console.warn(
+      "[PAGE] OPENAI_API_KEY is missing from environment"
+    )
+
+    return finalHtml
+  }
+
+  /*
+   * JSON.stringify safely escapes the API key.
+   */
+  const safeApiKey =
+    JSON.stringify(apiKey)
+
+  const injection = `
+<!-- OPENAI_API_KEY_INJECTION_START -->
+<script>
+  window.OPENAI_API_KEY = ${safeApiKey};
+</script>
+<!-- OPENAI_API_KEY_INJECTION_END -->
+`.trim()
+
+  /*
+   * Prefer injecting inside <head>.
+   */
+  if (/<head[^>]*>/i.test(finalHtml)) {
+    return finalHtml.replace(
+      /<head[^>]*>/i,
+      `$&\n${injection}`
+    )
+  }
+
+  /*
+   * If there is no <head>, inject before the
+   * first script.
+   */
+  if (/<script/i.test(finalHtml)) {
+    return finalHtml.replace(
+      /<script/i,
+      `${injection}\n<script`
+    )
+  }
+
+  /*
+   * Last fallback.
+   */
+  return `${injection}\n${finalHtml}`
+}
+
+
+/*
+ * ================================================================
  * BUILD HTML FOR BABEL WEBSITE
  * ================================================================
  */
@@ -261,39 +363,54 @@ function buildBabelHtml(
   let finalHtml = html
 
   /*
-   * Remove previous injection
+   * ------------------------------------------------------------
+   * Remove previous data injection
+   * ------------------------------------------------------------
    */
+
   finalHtml = finalHtml.replace(
     /\s*<!-- WEBSITE_DATA_INJECTION_START -->[\s\S]*?<!-- WEBSITE_DATA_INJECTION_END -->\s*/gi,
     "\n"
   )
 
   /*
+   * ------------------------------------------------------------
    * Normalize data.js
+   * ------------------------------------------------------------
    */
+
   const normalizedData =
     normalizeWebsiteData(rawData)
 
   /*
+   * ------------------------------------------------------------
    * Data script
+   * ------------------------------------------------------------
    */
+
   const dataScript = `
 <!-- WEBSITE_DATA_INJECTION_START -->
 <script>
-window.__SITE_DATA__ = ${normalizedData};
+  window.__SITE_DATA__ = ${normalizedData};
 </script>
 <!-- WEBSITE_DATA_INJECTION_END -->
 `.trim()
 
   /*
+   * ------------------------------------------------------------
    * Babel script
+   * ------------------------------------------------------------
    */
+
   const babelScriptRegex =
     /<script[^>]*type=["']text\/babel["'][^>]*>/i
 
   /*
-   * Inject data immediately before Babel.
+   * ------------------------------------------------------------
+   * Inject data immediately before Babel
+   * ------------------------------------------------------------
    */
+
   finalHtml = finalHtml.replace(
     babelScriptRegex,
     `${dataScript}
@@ -302,9 +419,11 @@ $&`
   )
 
   /*
-   * Make the data available
-   * inside the Babel script.
+   * ------------------------------------------------------------
+   * Make data available inside Babel
+   * ------------------------------------------------------------
    */
+
   finalHtml = finalHtml.replace(
     babelScriptRegex,
     `$&
@@ -315,8 +434,11 @@ const data = window.__SITE_DATA__;
   )
 
   /*
+   * ------------------------------------------------------------
    * Form handler
+   * ------------------------------------------------------------
    */
+
   const formHandlerScript = `
 <script>
 (function () {
@@ -333,7 +455,8 @@ const data = window.__SITE_DATA__;
   }
 
   function setupForm() {
-    const form = document.querySelector("form")
+    const form =
+      document.querySelector("form")
 
     if (!form) {
       return
@@ -351,7 +474,8 @@ const data = window.__SITE_DATA__;
       "submit",
       function (event) {
 
-        const values = getFormData(form)
+        const values =
+          getFormData(form)
 
         window.parent.postMessage(
           {
@@ -361,7 +485,6 @@ const data = window.__SITE_DATA__;
           },
           "*"
         )
-
       },
       true
     )
@@ -378,17 +501,31 @@ const data = window.__SITE_DATA__;
     setupForm()
   }
 
-  setTimeout(setupForm, 100)
-  setTimeout(setupForm, 500)
-  setTimeout(setupForm, 1000)
+  setTimeout(
+    setupForm,
+    100
+  )
+
+  setTimeout(
+    setupForm,
+    500
+  )
+
+  setTimeout(
+    setupForm,
+    1000
+  )
 
 })()
 </script>
 `.trim()
 
   /*
+   * ------------------------------------------------------------
    * Error handler
+   * ------------------------------------------------------------
    */
+
   const errorHandlerScript = `
 <script>
 (function () {
@@ -396,6 +533,7 @@ const data = window.__SITE_DATA__;
   window.addEventListener(
     "error",
     function (event) {
+
       console.error(
         "[WEBSITE ERROR]",
         event.message,
@@ -413,6 +551,7 @@ const data = window.__SITE_DATA__;
   window.addEventListener(
     "unhandledrejection",
     function (event) {
+
       console.error(
         "[WEBSITE PROMISE ERROR]",
         event.reason
@@ -425,28 +564,58 @@ const data = window.__SITE_DATA__;
 `.trim()
 
   /*
+   * ------------------------------------------------------------
    * Inject error handler
+   * ------------------------------------------------------------
    */
-  if (finalHtml.includes("<head>")) {
+
+  if (/<head[^>]*>/i.test(finalHtml)) {
     finalHtml = finalHtml.replace(
-      "<head>",
-      `<head>
+      /<head[^>]*>/i,
+      `$&
+
 ${errorHandlerScript}`
     )
+  } else {
+    finalHtml =
+      `${errorHandlerScript}\n${finalHtml}`
   }
 
   /*
+   * ------------------------------------------------------------
    * Inject form handler
+   * ------------------------------------------------------------
    */
-  if (finalHtml.includes("</body>")) {
+
+  if (
+    /<\/body>/i.test(finalHtml)
+  ) {
     finalHtml = finalHtml.replace(
-      "</body>",
+      /<\/body>/i,
       `${formHandlerScript}
+
 </body>`
     )
   } else {
-    finalHtml += `\n${formHandlerScript}`
+    finalHtml +=
+      `\n${formHandlerScript}`
   }
+
+  /*
+   * ------------------------------------------------------------
+   * Inject OpenAI key
+   * ------------------------------------------------------------
+   *
+   * This happens AFTER all HTML processing so the final HTML
+   * passed to the iframe contains:
+   *
+   * window.OPENAI_API_KEY
+   *
+   * ------------------------------------------------------------
+   */
+
+  finalHtml =
+    injectOpenAIKey(finalHtml)
 
   return finalHtml
 }
@@ -465,14 +634,20 @@ export default async function UserWebsitePage({
 
   try {
     /*
+     * ------------------------------------------------------------
      * Get website
+     * ------------------------------------------------------------
      */
+
     const content =
       await getWebsiteContent(username)
 
     /*
+     * ------------------------------------------------------------
      * No website
+     * ------------------------------------------------------------
      */
+
     if (
       !content ||
       !content.html
@@ -481,8 +656,11 @@ export default async function UserWebsitePage({
     }
 
     /*
+     * ------------------------------------------------------------
      * Track visit
+     * ------------------------------------------------------------
      */
+
     const headersList =
       await headers()
 
@@ -508,41 +686,54 @@ export default async function UserWebsitePage({
       clientIp
     )
 
-    const html = content.html
+    /*
+     * ------------------------------------------------------------
+     * Original HTML
+     * ------------------------------------------------------------
+     */
+
+    const html =
+      content.html
 
     /*
      * ============================================================
      * STATIC HTML WEBSITE
      * ============================================================
      *
-     * If there is NO Babel script:
+     * No Babel.
      *
-     * DO NOT:
-     * - inject data.js
-     * - inject React variables
-     * - send through iframe handler
-     * - modify links
+     * We still inject OPENAI_API_KEY because you want the rendered
+     * HTML to be able to use:
      *
-     * Just render the HTML.
+     * window.OPENAI_API_KEY
+     *
+     * ============================================================
      */
+
+
+
     if (!hasBabelScript(html)) {
-      return (
-        <div
-          dangerouslySetInnerHTML={{
-            __html: html,
-          }}
-        />
-      )
-    }
+  const finalHtml =
+    injectOpenAIKey(html)
+
+  return (
+    <IframeWithLinkHandler
+      content={finalHtml}
+      username={username}
+    />
+  )
+}
+     
 
     /*
      * ============================================================
      * BABEL / REACT WEBSITE
      * ============================================================
      *
-     * Only Babel websites go through
-     * the iframe processing pipeline.
+     * Goes through the existing iframe processing pipeline.
+     * ============================================================
      */
+
     const finalHtml =
       buildBabelHtml(
         html,
@@ -581,7 +772,7 @@ export async function generateMetadata({
 
   return {
     title: `${username}'s Website`,
-    description: `Website for ${username}`,
+    description:
+      `Website for ${username}`,
   }
 }
-
