@@ -1,4 +1,9 @@
 import OpenAI from "openai";
+import {
+  getWebsiteContent,
+  getSubscription,
+  getTemplateById,
+} from "@/lib/website-actions";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,34 +13,11 @@ const openai = new OpenAI({
    ENVIRONMENT
 ============================================================ */
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_OWNER = process.env.GITHUB_OWNER;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
-
-const GITHUB_API = "https://api.github.com";
-
-/* ============================================================
-   VALIDATE ENVIRONMENT
-============================================================ */
-
 function validateEnvironment() {
   const missing: string[] = [];
 
   if (!process.env.OPENAI_API_KEY) {
     missing.push("OPENAI_API_KEY");
-  }
-
-  if (!GITHUB_TOKEN) {
-    missing.push("GITHUB_TOKEN");
-  }
-
-  if (!GITHUB_OWNER) {
-    missing.push("GITHUB_OWNER");
-  }
-
-  if (!GITHUB_REPO) {
-    missing.push("GITHUB_REPO");
   }
 
   if (missing.length > 0) {
@@ -46,323 +28,339 @@ function validateEnvironment() {
 }
 
 /* ============================================================
-   GITHUB REQUEST
+   TUTORIAL KNOWLEDGE BASE (static – replace with DB later)
 ============================================================ */
 
-async function githubRequest(
-  url: string,
-  options: RequestInit = {}
-) {
-  if (!GITHUB_TOKEN) {
-    throw new Error("GITHUB_TOKEN is not configured.");
-  }
+const TUTORIALS = [
+  {
+    id: "getting-started",
+    title: "Getting Started with 7wingz",
+    summary: "Create your first website from a template and publish it live.",
+    content: `
+# Getting Started
 
-  const response = await fetch(url, {
-    ...options,
+1. **Sign up** – create your account.
+2. **Choose a template** – pick a design that fits your brand.
+3. **Customise** – edit the HTML, CSS, and content with our online editor.
+4. **Publish** – click "Publish" and your site goes live instantly.
+5. **Share** – get your unique URL and share it with the world.
+    `,
+    tags: ["beginner", "templates", "publishing"],
+  },
+  {
+    id: "ai-generation",
+    title: "Using AI to Generate Websites",
+    summary: "Describe what you need and let the AI build a site for you.",
+    content: `
+# AI Website Generation
 
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${GITHUB_TOKEN}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...options.headers,
-    },
+1. Open the **AI Generator** from the dashboard.
+2. Describe your website (e.g., "a portfolio for a photographer").
+3. Optionally provide any existing code to improve upon.
+4. Click **Generate** – the AI will produce a complete HTML page.
+5. Review and edit the result, then publish.
+    `,
+    tags: ["ai", "generation", "advanced"],
+  },
+  {
+    id: "analytics",
+    title: "Tracking Visitor Analytics",
+    summary: "Understand your audience with built‑in visitor statistics.",
+    content: `
+# Visitor Analytics
 
-    cache: "no-store",
-  });
+- **Live visitors** – see who is on your site right now.
+- **Daily visits** – chart of visits over time.
+- **Total visits** – overall popularity.
+- All data is automatically collected – no setup required.
+    `,
+    tags: ["analytics", "stats"],
+  },
+  {
+    id: "subscription",
+    title: "Understanding Your Subscription",
+    summary: "Free vs Premium – credits, limits, and benefits.",
+    content: `
+# Subscription Plans
 
-  if (!response.ok) {
-    const text = await response.text();
+- **Free** – 5 AI generations per day, 1 website, basic templates.
+- **Premium** – unlimited AI, 10 websites, all templates, email credits, Google Ads credits.
+- **Upgrade** – go to your account settings to upgrade.
 
-    throw new Error(
-      `GitHub API ${response.status}: ${text}`
-    );
-  }
+Your current usage is shown on the dashboard.
+    `,
+    tags: ["billing", "premium"],
+  },
+];
 
-  return response.json();
-}
+const PLATFORM_FEATURES = [
+  {
+    name: "AI Website Generator",
+    description:
+      "Generate complete HTML websites from a text description using OpenAI. Perfect for rapid prototyping and idea testing.",
+  },
+  {
+    name: "Template Library",
+    description:
+      "Start with professionally designed templates for portfolios, business, e‑commerce, and more. Customise every pixel.",
+  },
+  {
+    name: "Live Website Editor",
+    description:
+      "Edit HTML, CSS, and content directly in your browser. See changes instantly with real‑time preview.",
+  },
+  {
+    name: "Visitor Analytics",
+    description:
+      "Track page views, unique visitors, and active sessions. Understand your audience behaviour.",
+  },
+  {
+    name: "Email Integration",
+    description:
+      "Receive emails from your website through Resend integration. Manage enquiries directly from your dashboard.",
+  },
+  {
+    name: "Image Upload & Management",
+    description:
+      "Upload images to Vercel Blob and use them anywhere in your site. Integrates with Unsplash for free stock photos.",
+  },
+  {
+    name: "Subscription & Billing",
+    description:
+      "Manage your plan, view usage, and upgrade to Premium for extra features and credits.",
+  },
+];
 
 /* ============================================================
-   LIST DIRECTORY
+   TOOL FUNCTIONS
 ============================================================ */
 
-async function listDirectory(
-  directory: string = ""
-) {
-  if (!GITHUB_OWNER || !GITHUB_REPO) {
-    throw new Error(
-      "GITHUB_OWNER or GITHUB_REPO is not configured."
-    );
+// 1. Get user's website content
+async function getUserWebsite(username: string) {
+  if (!username) throw new Error("Username is required.");
+  const result = await getWebsiteContent(username);
+  if (!result) {
+    return { error: "No website found for this username." };
   }
-
-  const cleanDirectory = directory
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-
-  const encodedPath = cleanDirectory
-    .split("/")
-    .filter(Boolean)
-    .map(encodeURIComponent)
-    .join("/");
-
-  let url =
-    `${GITHUB_API}/repos/` +
-    `${encodeURIComponent(GITHUB_OWNER)}/` +
-    `${encodeURIComponent(GITHUB_REPO)}/contents`;
-
-  if (encodedPath) {
-    url += `/${encodedPath}`;
-  }
-
-  url += `?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
-
-  console.log(
-    "GitHub list directory:",
-    cleanDirectory || "/"
-  );
-
-  const data = await githubRequest(url);
-
-  if (!Array.isArray(data)) {
-    return {
-      path: cleanDirectory,
-      type: data.type,
-      name: data.name,
-    };
-  }
-
-  const ignoredDirectories = new Set([
-    "node_modules",
-    ".next",
-    ".git",
-    "dist",
-    "build",
-    ".netlify",
-    "coverage",
-  ]);
-
-  return data
-    .filter((item: any) => {
-      if (
-        item.type === "dir" &&
-        ignoredDirectories.has(item.name)
-      ) {
-        return false;
-      }
-
-      return true;
-    })
-    .map((item: any) => ({
-      name: item.name,
-      path: item.path,
-      type: item.type,
-      size: item.size,
-    }));
+  return result;
 }
 
-/* ============================================================
-   READ FILE
-============================================================ */
-
-async function readFile(filePath: string) {
-  if (!GITHUB_OWNER || !GITHUB_REPO) {
-    throw new Error(
-      "GITHUB_OWNER or GITHUB_REPO is not configured."
-    );
+// 2. Get user subscription info
+async function getUserSubscription(userId: string) {
+  if (!userId) throw new Error("User ID is required.");
+  const sub = await getSubscription(userId);
+  if (!sub) {
+    return { error: "No subscription record found for this user." };
   }
+  return sub;
+}
 
-  const cleanPath = filePath
-    .replace(/^\/+/, "")
-    .trim();
-
-  if (!cleanPath) {
-    throw new Error("File path is required.");
-  }
-
-  const encodedPath = cleanPath
-    .split("/")
-    .filter(Boolean)
-    .map(encodeURIComponent)
-    .join("/");
-
-  const url =
-    `${GITHUB_API}/repos/` +
-    `${encodeURIComponent(GITHUB_OWNER)}/` +
-    `${encodeURIComponent(GITHUB_REPO)}/contents/` +
-    `${encodedPath}` +
-    `?ref=${encodeURIComponent(GITHUB_BRANCH)}`;
-
-  console.log(
-    "GitHub read file:",
-    cleanPath
-  );
-
-  const data = await githubRequest(url);
-
-  if (data.type !== "file") {
-    throw new Error(
-      `${cleanPath} is not a file.`
-    );
-  }
-
-  if (data.encoding !== "base64") {
-    throw new Error(
-      `Unsupported encoding for ${cleanPath}.`
-    );
-  }
-
-  const content = Buffer.from(
-    String(data.content).replace(/\n/g, ""),
-    "base64"
-  ).toString("utf8");
-
+// 3. Get user AI usage for today (mock – replace with real implementation)
+async function getUserUsage(userId: string) {
+  // In a real implementation, import your usage-tracking function
+  // and return actual data.
   return {
-    path: cleanPath,
-    size: data.size,
-    sha: data.sha,
-    content,
+    used: 3,
+    limit: 5,
+    isPremium: false,
+    message: "Today's AI usage: 3 out of 5 generations used.",
   };
 }
 
-/* ============================================================
-   SEARCH CODE
-============================================================ */
-
-async function searchCode(query: string) {
-  if (!GITHUB_OWNER || !GITHUB_REPO) {
-    throw new Error(
-      "GITHUB_OWNER or GITHUB_REPO is not configured."
-    );
+// 4. Get template details (fix: parse templateId to number)
+async function getTemplateDetails(templateId: string) {
+  if (!templateId) throw new Error("Template ID is required.");
+  const id = Number(templateId);
+  if (isNaN(id)) throw new Error("Template ID must be a number.");
+  const template = await getTemplateById(id);
+  if (!template || !template.success) {
+    return { error: template?.error || "Template not found." };
   }
+  return template;
+}
 
-  const cleanQuery = query?.trim();
+// 5. List all tutorials
+async function listTutorials() {
+  return TUTORIALS.map(({ id, title, summary, tags }) => ({
+    id,
+    title,
+    summary,
+    tags,
+  }));
+}
 
-  if (!cleanQuery) {
-    throw new Error(
-      "Search query is required."
-    );
+// 6. Get full tutorial content by ID
+async function getTutorialContent(tutorialId: string) {
+  const tutorial = TUTORIALS.find((t) => t.id === tutorialId);
+  if (!tutorial) {
+    return { error: "Tutorial not found." };
   }
+  return tutorial;
+}
 
-  const searchQuery =
-    `${cleanQuery} repo:${GITHUB_OWNER}/${GITHUB_REPO}`;
-
-  const params = new URLSearchParams();
-
-  params.set("q", searchQuery);
-  params.set("per_page", "15");
-
-  const url =
-    `${GITHUB_API}/search/code?${params.toString()}`;
-
-  console.log(
-    "GitHub search:",
-    cleanQuery
+// 7. Search tutorials by keyword
+async function searchTutorials(query: string) {
+  if (!query) return { results: [] };
+  const lowerQuery = query.toLowerCase();
+  const results = TUTORIALS.filter(
+    (t) =>
+      t.title.toLowerCase().includes(lowerQuery) ||
+      t.content.toLowerCase().includes(lowerQuery) ||
+      t.tags.some((tag) => tag.includes(lowerQuery))
   );
-
-  const data = await githubRequest(url);
-
   return {
-    query: cleanQuery,
-
-    total:
-      typeof data.total_count === "number"
-        ? data.total_count
-        : 0,
-
-    results: Array.isArray(data.items)
-      ? data.items.map((item: any) => ({
-          name: item.name,
-          path: item.path,
-          sha: item.sha,
-          url: item.html_url,
-        }))
-      : [],
+    query,
+    count: results.length,
+    results: results.map(({ id, title, summary }) => ({ id, title, summary })),
   };
 }
 
+// 8. List platform features
+async function listPlatformFeatures() {
+  return PLATFORM_FEATURES;
+}
+
 /* ============================================================
-   OPENAI TOOLS
+   OPENAI TOOLS DEFINITION
 ============================================================ */
 
 const tools = [
   {
     type: "function" as const,
-
     function: {
-      name: "search_code",
-
+      name: "get_user_website",
       description:
-        "Search the GitHub repository for code, symbols, functions, imports, API routes, components, filenames, or text. Use focused searches to locate relevant code.",
-
+        "Retrieve the current website content and data for a given username.",
       parameters: {
         type: "object",
-
+        properties: {
+          username: {
+            type: "string",
+            description: "The username of the website owner.",
+          },
+        },
+        required: ["username"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_user_subscription",
+      description:
+        "Get subscription details, including plan, expiry, and remaining credits for a user.",
+      parameters: {
+        type: "object",
+        properties: {
+          userId: {
+            type: "string",
+            description: "The unique user ID.",
+          },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_user_usage",
+      description:
+        "Return the AI generation usage for today, including used count and daily limit.",
+      parameters: {
+        type: "object",
+        properties: {
+          userId: {
+            type: "string",
+            description: "The unique user ID.",
+          },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_template_details",
+      description:
+        "Fetch details of a specific template by its ID (name, description, preview image).",
+      parameters: {
+        type: "object",
+        properties: {
+          templateId: {
+            type: "string",
+            description: "The template ID (numeric).",
+          },
+        },
+        required: ["templateId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_tutorials",
+      description:
+        "List all available tutorials with their titles, summaries, and tags.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_tutorial_content",
+      description:
+        "Retrieve the full content of a specific tutorial by its ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          tutorialId: {
+            type: "string",
+            description: "The tutorial ID.",
+          },
+        },
+        required: ["tutorialId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_tutorials",
+      description:
+        "Search tutorials by title, content, or tags. Useful when the user asks about a specific topic.",
+      parameters: {
+        type: "object",
         properties: {
           query: {
             type: "string",
-
-            description:
-              "Focused search term such as handleAIGenerate, /api/ai/generate, OpenAI, netlify, background, PremiumRequiredModal, or a filename.",
+            description: "Search term or phrase.",
           },
         },
-
         required: ["query"],
-
         additionalProperties: false,
       },
     },
   },
-
   {
     type: "function" as const,
-
     function: {
-      name: "read_file",
-
+      name: "list_platform_features",
       description:
-        "Read a source file from the GitHub repository. Only read files that are relevant to the current investigation.",
-
+        "List all key features of the 7wingz platform with brief descriptions.",
       parameters: {
         type: "object",
-
-        properties: {
-          path: {
-            type: "string",
-
-            description:
-              "Repository-relative path such as app/api/ai/generate/route.ts or components/CodeEditor.tsx.",
-          },
-        },
-
-        required: ["path"],
-
-        additionalProperties: false,
-      },
-    },
-  },
-
-  {
-    type: "function" as const,
-
-    function: {
-      name: "list_directory",
-
-      description:
-        "List files and directories in a repository directory. Use this when repository structure needs to be discovered.",
-
-      parameters: {
-        type: "object",
-
-        properties: {
-          directory: {
-            type: "string",
-
-            description:
-              "Repository-relative directory. Use an empty string for the repository root.",
-          },
-        },
-
-        required: [],
-
+        properties: {},
         additionalProperties: false,
       },
     },
@@ -370,257 +368,88 @@ const tools = [
 ];
 
 /* ============================================================
-   SYSTEM PROMPT
+   SYSTEM PROMPT (Customer Success Agent)
 ============================================================ */
 
 const SYSTEM_PROMPT = `
-You are the private 7wingz Developer Agent.
+You are the 7wingz Customer Success Agent.
 
-You are assisting the developer with understanding and debugging
-their own software repository.
-
-============================================================
-READ ONLY
-============================================================
-
-You are STRICTLY READ-ONLY.
-
-You may:
-
-- search repository code
-- list repository directories
-- read repository files
-- trace application flows
-- identify bugs
-- identify architectural problems
-- explain errors
-- suggest code changes
-- provide replacement code
-- provide diffs
-
-You MUST NOT:
-
-- modify files
-- create files
-- delete files
-- rename files
-- commit
-- push
-- create pull requests
-- execute shell commands
-- install packages
-- deploy
-- change GitHub repository contents
-
-Never claim that you changed anything.
+Your role is to help users get the most out of the 7wingz platform.
+You are friendly, clear, and supportive.
 
 ============================================================
-INVESTIGATION RULES
+CAPABILITIES
 ============================================================
 
-Use tools only when they are necessary.
+You have access to the following tools:
 
-DO NOT read the entire repository.
-
-Start with focused searches.
-
-Then read only the relevant files.
-
-Once you have enough evidence, STOP calling tools and answer.
-
-Do not repeatedly search the same query.
-
-Do not repeatedly read the same file unless absolutely necessary.
-
-Do not continue investigating merely because another tool call is possible.
-
-Your goal is to reach a useful answer quickly.
+- get_user_website – view a user's website content and data.
+- get_user_subscription – check subscription plan, expiry, and credits.
+- get_user_usage – see today's AI usage.
+- get_template_details – get template info.
+- list_tutorials – show all available tutorials.
+- get_tutorial_content – read a specific tutorial step‑by‑step.
+- search_tutorials – find tutorials on a topic.
+- list_platform_features – describe all platform features.
 
 ============================================================
-DEBUGGING METHOD
+BEHAVIOUR
 ============================================================
 
-For a bug, trace the actual execution path.
-
-For example:
-
-Frontend
-↓
-React component
-↓
-event handler
-↓
-fetch()
-↓
-API route
-↓
-server logic
-↓
-external service
-↓
-response
-↓
-frontend response handling
-
-Look for:
-
-- wrong API routes
-- missing routes
-- incorrect imports
-- request body mismatches
-- response format mismatches
-- authentication problems
-- environment variables
-- server/client boundaries
-- Netlify functions
-- Netlify background functions
-- OpenAI calls
-- database calls
-- runtime errors
-- TypeScript problems
-- deployment configuration
-- redirects
-- rewrites
-- incorrect assumptions
-
-Do not assume the developer's suspected cause is correct.
-
-Verify it from the repository.
+- Always be helpful, concise, and encouraging.
+- When a user asks about a feature, first check if a tutorial exists.
+- If the user asks for help with their own website, use get_user_website to understand their current setup.
+- If the user asks about limits or credits, use get_user_subscription and get_user_usage.
+- Always provide actionable steps.
+- If you don't have enough information, ask clarifying questions.
 
 ============================================================
-IMPORTANT 7WINGZ DEBUGGING EXAMPLE
+RULES
 ============================================================
 
-If the developer asks:
-
-"Why is AI generation from CodeEditor not working?"
-
-Trace:
-
-CodeEditor
-→ handleAIGenerate
-→ /api/ai/generate
-→ route implementation
-→ OpenAI call
-→ Netlify configuration/functions if relevant
-→ API response
-→ CodeEditor response handling
-
-Check both sides of the request.
-
-For example:
-
-Frontend sends:
-
-{
-  currentCode,
-  prompt
-}
-
-Then verify that the API route actually expects those fields.
-
-Also verify that the API returns the structure the frontend expects.
-
-For example:
-
-{
-  success: true,
-  html: "..."
-}
-
-If Netlify background functions are suspected, search the repository
-for:
-
-- background
-- netlify
-- functions
-- /.netlify/
-- scheduled functions
-- background functions
-- redirects
-- netlify.toml
-
-But do not assume they are involved until repository evidence shows it.
+- You are READ‑ONLY. You never modify any data.
+- You never reveal API keys or other secrets.
+- You may suggest code changes, but you cannot implement them.
+- You must eventually answer the user's question – don't keep investigating forever.
 
 ============================================================
 ANSWER FORMAT
 ============================================================
 
-For debugging questions, structure the final response as:
+When providing guidance, structure your response as:
 
-1. ROOT CAUSE
-2. EVIDENCE
-3. EXACT FILES INVOLVED
-4. WHAT IS HAPPENING
-5. FIX
-6. OPTIONAL IMPROVEMENT
+1. **Overview** – what the user wants to achieve.
+2. **Steps** – numbered instructions.
+3. **Resources** – link to relevant tutorials or features.
+4. **Next steps** – what the user can do next.
 
-Clearly distinguish:
-
-CONFIRMED
-LIKELY
-POSSIBLE
-NOT VERIFIED
-
-Never invent repository details.
-
-============================================================
-SECURITY
-============================================================
-
-Never expose:
-
-- API keys
-- GitHub tokens
-- database passwords
-- Clerk secrets
-- environment variable secret values
-
-You can mention that an environment variable is required,
-but never reveal its value.
-
-============================================================
-IMPORTANT
-============================================================
-
-You MUST eventually answer the developer.
-
-Never get stuck investigating forever.
-
-If the available evidence is sufficient, answer immediately.
+Be warm and approachable, like a friendly support representative.
 `;
 
 /* ============================================================
    TOOL EXECUTION
 ============================================================ */
 
-async function executeTool(
-  name: string,
-  args: any
-) {
+async function executeTool(name: string, args: any) {
   switch (name) {
-    case "search_code": {
-      return await searchCode(
-        String(args?.query || "")
-      );
-    }
-
-    case "read_file": {
-      return await readFile(
-        String(args?.path || "")
-      );
-    }
-
-    case "list_directory": {
-      return await listDirectory(
-        String(args?.directory || "")
-      );
-    }
-
+    case "get_user_website":
+      return await getUserWebsite(String(args?.username || ""));
+    case "get_user_subscription":
+      return await getUserSubscription(String(args?.userId || ""));
+    case "get_user_usage":
+      return await getUserUsage(String(args?.userId || ""));
+    case "get_template_details":
+      return await getTemplateDetails(String(args?.templateId || ""));
+    case "list_tutorials":
+      return await listTutorials();
+    case "get_tutorial_content":
+      return await getTutorialContent(String(args?.tutorialId || ""));
+    case "search_tutorials":
+      return await searchTutorials(String(args?.query || ""));
+    case "list_platform_features":
+      return await listPlatformFeatures();
     default:
-      throw new Error(
-        `Unknown tool: ${name}`
-      );
+      throw new Error(`Unknown tool: ${name}`);
   }
 }
 
@@ -628,466 +457,204 @@ async function executeTool(
    LIMIT LARGE TOOL RESPONSES
 ============================================================ */
 
-function limitToolResult(
-  result: any
-) {
+function limitToolResult(result: any) {
   const MAX_CHARS = 50000;
-
-  const serialized =
-    JSON.stringify(result);
-
-  if (
-    serialized.length <= MAX_CHARS
-  ) {
+  const serialized = JSON.stringify(result);
+  if (serialized.length <= MAX_CHARS) {
     return serialized;
   }
-
   return JSON.stringify({
     truncated: true,
-
     message:
-      "The tool response was too large. Use focused searches or read specific files.",
-
-    data:
-      serialized.slice(
-        0,
-        MAX_CHARS
-      ),
+      "The tool response was too large. Please use more specific queries.",
+    data: serialized.slice(0, MAX_CHARS),
   });
 }
 
 /* ============================================================
-   POST /api/dev-agent
+   POST /api/dev-agent (Customer Success Agent)
 ============================================================ */
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
     validateEnvironment();
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const userMessage =
-      typeof body?.message === "string"
-        ? body.message.trim()
-        : "";
+    const userMessage = typeof body?.message === "string" ? body.message.trim() : "";
+    const username = typeof body?.username === "string" ? body.username.trim() : undefined;
+    const userId = typeof body?.userId === "string" ? body.userId.trim() : undefined;
 
     if (!userMessage) {
       return Response.json(
-        {
-          success: false,
-          error: "Message is required.",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Message is required." },
+        { status: 400 }
       );
     }
 
-    console.log(
-      "\n=================================================="
-    );
+    console.log("\n==================================================");
+    console.log("7wingz Customer Success Agent");
+    console.log("User request:", userMessage);
+    if (username) console.log("Username:", username);
+    if (userId) console.log("User ID:", userId);
+    console.log("==================================================\n");
 
-    console.log(
-      "7wingz Developer Agent"
-    );
-
-    console.log(
-      "Repository:",
-      `${GITHUB_OWNER}/${GITHUB_REPO}`
-    );
-
-    console.log(
-      "Branch:",
-      GITHUB_BRANCH
-    );
-
-    console.log(
-      "Developer request:",
-      userMessage
-    );
-
-    console.log(
-      "==================================================\n"
-    );
-
-    /* ========================================================
-       MESSAGE HISTORY
-    ======================================================== */
-
+    // Build initial messages
     const messages: any[] = [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
-
-      {
-        role: "user",
-        content: userMessage,
-      },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userMessage },
     ];
 
-    /* ========================================================
-       INVESTIGATION LIMIT
-    ======================================================== */
+    if (username || userId) {
+      const context = `The user${username ? ` has username "${username}"` : ""}${username && userId ? " and" : ""}${userId ? ` user ID "${userId}"` : ""}. Use this info when calling tools.`;
+      messages.splice(1, 0, { role: "system", content: context });
+    }
 
     const MAX_ITERATIONS = 8;
+    const toolCallHistory = new Map<string, number>();
 
-    /*
-      Prevent the model from repeating exactly the same
-      tool call over and over.
-    */
+    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      console.log(`\n===== INVESTIGATION ${iteration + 1}/${MAX_ITERATIONS} =====`);
 
-    const toolCallHistory = new Map<
-      string,
-      number
-    >();
+      // Use a valid model name
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // changed from "gpt-5-mini"
+        messages,
+        tools,
+        tool_choice: "auto",
+      });
 
-    /* ========================================================
-       AGENT LOOP
-    ======================================================== */
-
-    for (
-      let iteration = 0;
-      iteration < MAX_ITERATIONS;
-      iteration++
-    ) {
-      console.log(
-        `\n===== INVESTIGATION ${iteration + 1}/${MAX_ITERATIONS} =====`
-      );
-
-      const response =
-        await openai.chat.completions.create({
-          model: "gpt-5-mini",
-
-          messages,
-
-          tools,
-
-          tool_choice: "auto",
-        });
-
-      const assistantMessage =
-        response.choices?.[0]?.message;
-
+      const assistantMessage = response.choices?.[0]?.message;
       if (!assistantMessage) {
-        throw new Error(
-          "OpenAI returned no assistant message."
-        );
+        throw new Error("OpenAI returned no assistant message.");
       }
 
-      console.log(
-        "Assistant:",
-        assistantMessage.content ||
-          "(tool request)"
-      );
+      console.log("Assistant:", assistantMessage.content || "(tool request)");
 
-      /* ======================================================
-         CHECK TOOL CALLS
-      ====================================================== */
-
-      const toolCalls =
-        assistantMessage.tool_calls;
-
-      /*
-        No tool calls means the model has finished.
-      */
-
-      if (
-        !toolCalls ||
-        toolCalls.length === 0
-      ) {
+      const toolCalls = assistantMessage.tool_calls;
+      if (!toolCalls || toolCalls.length === 0) {
         return Response.json({
           success: true,
-
-          answer:
-            assistantMessage.content ||
-            "No analysis was returned.",
+          answer: assistantMessage.content || "No analysis was returned.",
         });
       }
 
-      /*
-        Store the assistant message before
-        sending tool results.
-      */
+      messages.push(assistantMessage);
 
-      messages.push(
-        assistantMessage
-      );
-
-      /* ======================================================
-         EXECUTE TOOLS
-      ====================================================== */
-
-      for (
-        const toolCall of toolCalls
-      ) {
-        /*
-          IMPORTANT:
-
-          tool_calls is a union type.
-
-          Only function tool calls contain
-          toolCall.function.
-        */
-
-        if (
-          toolCall.type !== "function"
-        ) {
-          console.warn(
-            "Unsupported tool call:",
-            toolCall.type
-          );
-
+      for (const toolCall of toolCalls) {
+        if (toolCall.type !== "function") {
+          console.warn("Unsupported tool call:", toolCall.type);
           continue;
         }
 
-        const toolName =
-          toolCall.function.name;
-
-        const rawArguments =
-          toolCall.function.arguments ||
-          "{}";
-
+        const toolName = toolCall.function.name;
+        const rawArguments = toolCall.function.arguments || "{}";
         let args: any = {};
-
         try {
-          args =
-            JSON.parse(
-              rawArguments
-            );
+          args = JSON.parse(rawArguments);
         } catch (error) {
-          console.error(
-            "Could not parse tool arguments:",
-            rawArguments
-          );
-
+          console.error("Could not parse tool arguments:", rawArguments);
           messages.push({
             role: "tool",
-
-            tool_call_id:
-              toolCall.id,
-
+            tool_call_id: toolCall.id,
             content: JSON.stringify({
-              error:
-                "Invalid JSON arguments supplied for this tool.",
+              error: "Invalid JSON arguments supplied for this tool.",
             }),
           });
-
           continue;
         }
 
-        /* ====================================================
-           REPEATED CALL DETECTION
-        ==================================================== */
+        // Repeated call detection
+        const signature = `${toolName}:${JSON.stringify(args)}`;
+        const previousCount = toolCallHistory.get(signature) || 0;
+        const currentCount = previousCount + 1;
+        toolCallHistory.set(signature, currentCount);
 
-        const signature =
-          `${toolName}:${JSON.stringify(args)}`;
+        console.log("Tool:", toolName);
+        console.log("Arguments:", args);
 
-        const previousCount =
-          toolCallHistory.get(
-            signature
-          ) || 0;
-
-        const currentCount =
-          previousCount + 1;
-
-        toolCallHistory.set(
-          signature,
-          currentCount
-        );
-
-        console.log(
-          "Tool:",
-          toolName
-        );
-
-        console.log(
-          "Arguments:",
-          args
-        );
-
-        /*
-          If the same exact call happens 3 times,
-          tell the model to stop repeating it.
-        */
-
-        if (
-          currentCount >= 3
-        ) {
-          console.warn(
-            "Repeated tool call detected:",
-            signature
-          );
-
+        if (currentCount >= 3) {
+          console.warn("Repeated tool call detected:", signature);
           messages.push({
             role: "tool",
-
-            tool_call_id:
-              toolCall.id,
-
+            tool_call_id: toolCall.id,
             content: JSON.stringify({
               error:
-                "This exact tool call has already been attempted multiple times. Do not repeat it. Use the evidence already collected and provide the final answer.",
+                "This exact tool call has been attempted multiple times. Do not repeat it. Use the evidence already collected and provide the final answer.",
             }),
           });
-
           continue;
         }
-
-        /* ====================================================
-           RUN TOOL
-        ==================================================== */
 
         try {
-          const result =
-            await executeTool(
-              toolName,
-              args
-            );
-
-          const safeResult =
-            limitToolResult(
-              result
-            );
-
+          const result = await executeTool(toolName, args);
+          const safeResult = limitToolResult(result);
           messages.push({
             role: "tool",
-
-            tool_call_id:
-              toolCall.id,
-
-            content:
-              safeResult,
+            tool_call_id: toolCall.id,
+            content: safeResult,
           });
-
-          console.log(
-            "Tool completed:",
-            toolName
-          );
+          console.log("Tool completed:", toolName);
         } catch (error: any) {
-          console.error(
-            `Tool failed (${toolName}):`,
-            error
-          );
-
+          console.error(`Tool failed (${toolName}):`, error);
           messages.push({
             role: "tool",
-
-            tool_call_id:
-              toolCall.id,
-
-            content:
-              JSON.stringify({
-                error:
-                  error?.message ||
-                  "Tool execution failed.",
-              }),
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              error: error?.message || "Tool execution failed.",
+            }),
           });
         }
       }
     }
 
-    /* ========================================================
-       FINAL ANSWER PASS
-    ======================================================== */
-
-    console.log(
-      "\n===== INVESTIGATION LIMIT REACHED ====="
-    );
-
-    console.log(
-      "Requesting final answer without tools..."
-    );
-
-    /*
-      We deliberately DO NOT provide:
-      
-      tool_choice: "none"
-
-      because OpenAI rejects tool_choice when tools
-      are not included.
-
-      This final request simply has no tools.
-    */
+    // Final answer pass (no tools)
+    console.log("\n===== INVESTIGATION LIMIT REACHED =====");
+    console.log("Requesting final answer without tools...");
 
     messages.push({
       role: "user",
-
       content: `
 The investigation limit has been reached.
 
 STOP investigating.
-
 Do not request additional tools.
+Answer the user's original question NOW using the information already collected.
 
-Answer the developer's original question NOW using
-the repository evidence already collected.
+Be specific, practical, and helpful.
+If you identified a tutorial or feature, reference it clearly.
+If you need more info that you don't have, suggest what the user should do next.
 
-Be specific and practical.
-
-Separate your conclusions into:
-
-CONFIRMED
-LIKELY
-POSSIBLE
-NOT VERIFIED
-
-If you identified a fix, give the exact file and
-the exact change that should be made.
-
-Do not claim that you changed any files.
+Do not claim that you changed anything.
 `,
     });
 
-    const finalResponse =
-      await openai.chat.completions.create({
-        model: "gpt-5-mini",
+    const finalResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // changed from "gpt-5-mini"
+      messages,
+    });
 
-        messages,
-      });
+    const finalMessage = finalResponse.choices?.[0]?.message;
+    const finalAnswer = finalMessage?.content?.trim();
 
-    const finalMessage =
-      finalResponse.choices?.[0]?.message;
-
-    const finalAnswer =
-      finalMessage?.content?.trim();
-
-    console.log(
-      "Final answer generated:",
-      Boolean(finalAnswer)
-    );
+    console.log("Final answer generated:", Boolean(finalAnswer));
 
     return Response.json({
       success: true,
-
       answer:
         finalAnswer ||
         "The agent completed its investigation but could not produce a final analysis.",
     });
-
   } catch (error: any) {
-    console.error(
-      "\n===== 7WINGZ DEVELOPER AGENT ERROR ====="
-    );
-
-    console.error(
-      error
-    );
+    console.error("\n===== 7WINGZ CUSTOMER SUCCESS AGENT ERROR =====");
+    console.error(error);
 
     return Response.json(
       {
         success: false,
-
-        error:
-          error?.message ||
-          "Developer agent failed.",
+        error: error?.message || "Customer success agent failed.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
