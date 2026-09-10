@@ -302,7 +302,16 @@ function extractDataFields(dataString: string): string {
 
 function buildDataScript(dataString: string) {
   const trimmed = (dataString || '').trim()
-  if (!trimmed) return 'const data = {};'
+
+  // Always expose the data object on window so the generated HTML
+  // works with `const data = {...}`, `let data = {...}`, or
+  // `var data = {...}`.
+  //
+  // `const data` / `let data` are NOT properties of window, so
+  // code that reads `window.data` cannot see them directly.
+  // Normalizing the generated declaration to `window.data = {...}`
+  // makes all three input forms behave consistently in the iframe.
+  if (!trimmed) return 'window.data = {};'
 
   const declaration = findDataDeclaration(trimmed)
 
@@ -313,11 +322,16 @@ function buildDataScript(dataString: string) {
     )
 
     if (closingBrace !== -1) {
-      return trimmed.slice(declaration.start).trim()
+      const objectText = trimmed.slice(
+        declaration.openingBrace,
+        closingBrace + 1,
+      )
+
+      return `window.data = ${objectText};`
     }
   }
 
-  return `const data = {\n${trimmed}\n};`
+  return `window.data = {\n${trimmed}\n};`
 }
 
 function injectDataIntoHtml(html: string, data: string) {
@@ -1167,6 +1181,8 @@ export default function EditorContent({
          </div>
        )
   }
+  console.log("FIELDS:", fields)
+console.log("FIELDS LENGTH:", fields.length)
 
   // 🟢 NORMAL MODE – full editor
   return (
@@ -1425,7 +1441,7 @@ export default function EditorContent({
               </p>
             </div>
           </div>
-
+     
           {/* Simple form fields */}
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-5 py-5">
             {fields.length > 0 ? (
