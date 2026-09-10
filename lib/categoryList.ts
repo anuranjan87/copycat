@@ -1,4 +1,14 @@
-import { LayoutTemplate, Rocket, BriefcaseBusiness, UserRound, PenLine, Bot, Palette,GraduationCap , ChevronDown, } from "lucide-react"; export interface TemplateMeta { id: string; localImage: string; title: string; description: string; mood: string; category: string; } export const CATEGORIES = [ { name: "Landing Page", icon: LayoutTemplate, }, { name: "Entrepreneurs & Startups", icon: Rocket, }, { name: "Professional Services", icon: BriefcaseBusiness, }, { name: "Job Search", icon: GraduationCap, }, { name: "Blog & Content", icon: PenLine, }, { name: "AI Agent", icon: Bot, }, { name: "UI Components", icon: Palette, hasSubcategories: true, }, ]; export const UI_COMPONENT_CATEGORIES = [ "Colors", "Gradients", "Buttons", "Cards", "Forms", "Navigation", "Typography", "Animations", ];
+import {
+  LayoutTemplate,
+  Rocket,
+  BriefcaseBusiness,
+  UserRound,
+  PenLine,
+  Bot,
+  Palette,
+  GraduationCap,
+  ShoppingBag,
+} from "lucide-react";
 
 export interface TemplateMeta {
   id: string;
@@ -7,11 +17,27 @@ export interface TemplateMeta {
   description: string;
   mood: string;
   category: string;
-  // New properties (all optional)
-  moveX?: number;   // horizontal shift (positive = right)
-  moveY?: number;   // vertical shift (positive = down)
-  zoom?: number;    // scale factor (1 = normal)
+  moveX?: number;
+  moveY?: number;
+  zoom?: number;
 }
+
+/**
+ * Builds the category list.
+ * The first tab is the user's first name (or "For You" if unknown).
+ * The Ecommerce tab uses the ShoppingBag icon.
+ */
+export const getCategories = (userFirstName?: string) => [
+  { name: userFirstName?.trim() || "For You", icon: UserRound },
+  { name: "Landing Page", icon: LayoutTemplate },
+  { name: "Entrepreneurs & Startups", icon: Rocket },
+  { name: "Professional Services", icon: BriefcaseBusiness },
+  { name: "Job Search", icon: GraduationCap },
+  { name: "Blog & Content", icon: PenLine },
+  { name: "AI Agent", icon: Bot },
+  { name: "UI Components", icon: Palette, hasSubcategories: true },
+  { name: "Ecommerce", icon: ShoppingBag },
+];
 
 export const templatesMeta: TemplateMeta[] = [
   {
@@ -301,6 +327,17 @@ export const templatesMeta: TemplateMeta[] = [
     description: "Simple, focused landing page designed to turn visitors into customers.",
     mood: "Landing page",
     category: "Professional Services",
+    moveX: 0,
+    moveY: -2,
+    zoom: 1,
+  },
+   {
+    id: "20",
+    localImage: "/37.png",
+    title: "Simple Launch",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Ecommerce",
     moveX: 0,
     moveY: -2,
     zoom: 1,
