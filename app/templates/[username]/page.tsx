@@ -38,6 +38,7 @@ import CategoryPills from "@/components/CategoryPills";
 import Buttons from "@/components/ui_components/buttons";
 import Colors from "@/components/ui_components/colors";
 import Gradients from "@/components/ui_components/gradients";
+import UserAgent from "@/components/ui_components/user-agent";
 
 import {
   Dialog,
@@ -272,7 +273,6 @@ export default function Page({ params }: PageProps) {
   const filteredTemplates = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const safeTemplates = templatesMeta ?? [];
-    const isForYouTab = activeCategory === forYouTabName;
 
     return safeTemplates.filter((template) => {
       const matchesSearch =
@@ -282,13 +282,11 @@ export default function Page({ params }: PageProps) {
         template.mood.toLowerCase().includes(query);
 
       const matchesCategory =
-        activeCategory === "All" ||
-        isForYouTab ||
-        template.category === activeCategory;
+        activeCategory === "All" || template.category === activeCategory;
 
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, activeCategory, forYouTabName]);
+  }, [searchQuery, activeCategory]);
 
   // ------------------------------------------------------------
   // Email modal
@@ -622,6 +620,9 @@ export default function Page({ params }: PageProps) {
                 {activeUIComponent === "Gradients" && <Gradients />}
               </div>
             </div>
+          ) : activeCategory === forYouTabName ? (
+            /* First-name tab → render the user agent component */
+            <UserAgent />
           ) : filteredTemplates.length === 0 ? (
             <Card className="mx-auto my-8 max-w-md border-muted/60 bg-muted/10 py-20 text-center">
               <CardContent className="space-y-3">

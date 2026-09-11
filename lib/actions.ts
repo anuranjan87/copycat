@@ -50,7 +50,7 @@ export async function storeCharacter(name: string, user: string) {
     await sql.query(`
       CREATE TABLE IF NOT EXISTS ${enquiryTableName} (
         id SERIAL PRIMARY KEY,
-        entry VARCHAR(300) NOT NULL,
+        entry TEXT NOT NULL,
         visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
