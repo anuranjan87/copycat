@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { neon } from "@neondatabase/serverless";
+import { ensureUserSubscription } from "@/lib/website-actions";
 
 const sql = neon(process.env.POSTGRES_URL!);
 
@@ -11,6 +12,9 @@ export default async function AfterSignInPage() {
   if (!userId) {
     redirect("/sign-in");
   }
+
+  // Create the first subscription row as a free user.
+  await ensureUserSubscription(userId);
 
   // Find the username associated with this Clerk user
   const result = await sql`

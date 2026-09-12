@@ -49,9 +49,16 @@ export async function GET() {
         email_credits INTEGER NOT NULL DEFAULT 0,
         google_ads_credits INTEGER NOT NULL DEFAULT 0,
 
+        convo_id VARCHAR(300),
+
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `;
+
+    await sql`
+      ALTER TABLE subscriptions
+      ADD COLUMN IF NOT EXISTS convo_id VARCHAR(300)
     `;
 
     // -----------------------------------------

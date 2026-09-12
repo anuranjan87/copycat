@@ -1,12 +1,7 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { useState } from "react";
-
-type DevAgentPageProps = {
-  params: {
-    username: string;
-  };
-};
 
 type ApiResponse = {
   response?: string;
@@ -14,9 +9,8 @@ type ApiResponse = {
   error?: string;
 };
 
-export default function DevAgentPage({
-  params,
-}: DevAgentPageProps) {
+export default function DevAgentPage() {
+  const params = useParams<{ username?: string }>();
   const [message, setMessage] = useState("");
   const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +29,6 @@ export default function DevAgentPage({
 
     try {
       const response = await fetch("/api/dev-agent", {
-        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -134,6 +127,18 @@ export default function DevAgentPage({
             <span className="text-xs text-white/30">
               Press Ctrl + Enter to analyze
             </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setMessage(
+                  "What is my account status? Give me the exact action steps for my plan, expiry, and AI usage.",
+                )
+              }
+              className="mt-3 rounded-lg border border-white/15 px-3 py-2 text-xs text-white/70 transition hover:border-white/30 hover:text-white"
+            >
+              Check account status
+            </button>
 
             <button
               type="button"

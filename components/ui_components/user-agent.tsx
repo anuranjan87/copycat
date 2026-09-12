@@ -1,5 +1,5 @@
 "use client";
-
+import { ChevronRight} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, Plus, Send } from "lucide-react";
@@ -23,6 +23,12 @@ const examples = [
   "Google search page",
   "Reddit homepage",
   "Apple product check-out",
+   "Convert Visitors",
+  "Unlock Premium",
+  "Grow Traffic",
+  "Find Opportunities",
+  "Build My Website ✨",
+  "View Analytics",
 ];
 
 export default function UserAgent({ username }: UserAgentProps) {
@@ -118,7 +124,7 @@ export default function UserAgent({ username }: UserAgentProps) {
 
   return (
     <div className="min-h-[650px] w-full bg-transparent text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
-      <div className="mx-auto flex min-h-[650px] w-full max-w-3xl flex-col px-4 pb-36 pt-8 sm:px-6">
+      <div className="mx-auto flex min-h-[650px] w-full max-w-3xl flex-col px-4 pb-3 pt-8 sm:px-6">
         <div className="mb-8 flex items-center justify-between">
           <button
             type="button"
@@ -137,7 +143,7 @@ export default function UserAgent({ username }: UserAgentProps) {
 
         {chatHistory.length === 0 && (
           <WelcomeMessage
-            setInput={setMessage}
+            setInput={setMessage}   
             inputRef={inputRef}
           />
         )}
@@ -187,7 +193,54 @@ export default function UserAgent({ username }: UserAgentProps) {
         )}
       </div>
 
-     
+      <div className="w-full px-4 pb-4 pt-8 sm:px-6">
+        <div className="mx-auto w-full max-w-2xl">
+          <div className="flex h-[52px] items-center gap-0 rounded-2xl border border-zinc-200/80 bg-white px-0 shadow-sm transition-shadow focus-within:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="relative flex h-full shrink-0 items-center border-r border-zinc-100 dark:border-zinc-800">
+              <select
+                defaultValue="gpt-4o-mini"
+                disabled={loading}
+                aria-label="Select model"
+                className="h-full w-[130px] cursor-pointer appearance-none bg-transparent pl-5 pr-8 text-sm font-medium text-zinc-800 outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200"
+              >
+                <option value="gpt-4o-mini">
+                  GPT-4o mini
+                </option>
+              </select>
+
+              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-400" />
+            </div>
+
+            <input
+              ref={inputRef}
+              type="text"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={loading}
+              placeholder="Ask a question..."
+              className="min-w-0 flex-1 bg-transparent px-4 text-sm text-zinc-800 outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            />
+
+            <button
+              type="button"
+              onClick={askAgent}
+              disabled={loading || !message.trim()}
+              aria-label="Send message"
+              className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center text-zinc-300 transition-colors hover:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              <Send
+                className="h-4 w-4 -rotate-12"
+                strokeWidth={1.5}
+              />
+            </button>
+          </div>
+
+          <p className="mt-3 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
+            AI-generated code analysis may contain mistakes.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -200,6 +253,19 @@ function WelcomeMessage({
   inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const { user } = useUser();
+  const [examplePage, setExamplePage] = useState(0);
+
+const examplesPerPage = 5;
+const totalPages = Math.ceil(examples.length / examplesPerPage);
+
+const visibleExamples = examples.slice(
+  examplePage * examplesPerPage,
+  examplePage * examplesPerPage + examplesPerPage,
+);
+
+const showNextExamples = () => {
+  setExamplePage((currentPage) => (currentPage + 1) % totalPages);
+};
 
   return (
     <Card className="mx-auto max-w-screen-sm sm:mb-14 sm:w-full">
@@ -232,21 +298,34 @@ function WelcomeMessage({
           className="giphy-embed mx-auto mb-5"
         />
 
-        <div className="mb-6 flex flex-wrap justify-center gap-2">
-          {examples.map((example, index) => (
-            <Button
-              key={index}
-              variant="outline"
-              onClick={() => {
-                setInput(example);
-                inputRef.current?.focus();
-              }}
-              className="text-xs text-foreground hover:text-primary lg:text-sm"
-            >
-              {example}
-            </Button>
-          ))}
-        </div>
+       <div className="mb-6 -mt-9">
+  <div className="mb-2 flex items-center justify-end">
+    <button
+      type="button"
+      onClick={showNextExamples}
+      aria-label="Show more suggestions"
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-white"
+    >
+      <ChevronRight className="h-2 w-2" />
+    </button>
+  </div>
+
+  <div className="flex flex-wrap justify-center gap-2">
+    {visibleExamples.map((example) => (
+      <Button
+        key={example}
+        variant="outline"
+        onClick={() => {
+          setInput(example);
+          inputRef.current?.focus();
+        }}
+        className="text-xs text-foreground hover:text-primary lg:text-sm"
+      >
+        {example}
+      </Button>
+    ))}
+  </div>
+</div>
 
         <p className="mt-2 px-3 text-xs">
           Hey creators! At Tailwind Genie, we embrace a free-spirited,

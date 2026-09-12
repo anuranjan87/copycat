@@ -1,14 +1,19 @@
 import OpenAI from "openai";
 import { auth } from "@clerk/nextjs/server";
+import { neon } from "@neondatabase/serverless";
 
 import {
+  createOpenAIConversation,
   getWebsiteContent,
   getEnquiries,
+  ensureUserSubscription,
   usernameChecker,
   getVisitCount,
   getVisitChartData,
   getActiveVisitorsCount,
 } from "@/lib/website-actions";
+
+const sql = neon(process.env.POSTGRES_URL!);
 
 // ============================================================
 // 1. CONFIGURATION
@@ -67,6 +72,21 @@ type UnsplashPhoto = {
 type UnsplashResponse = {
   total?: number;
   results?: UnsplashPhoto[];
+};
+
+type ConversationItem = {
+  type?: string;
+  role?: string;
+  content?:
+    | string
+    | Array<{
+        type?: string;
+        text?: string;
+      }>;
+};
+
+type ConversationItemsResponse = {
+  data?: ConversationItem[];
 };
 
 // ============================================================
@@ -735,8 +755,18 @@ export async function POST(request: Request) {
     });
 
     // --------------------------------------------------------
-    // E. CREATE CONVERSATION
+    // E. LOAD CONVERSATION HISTORY
     // --------------------------------------------------------
+
+    const convoId = await getOrCreateConversation(userId);
+    const conversationHistory =
+      await getConversationMessages(convoId);
+
+    await addConversationMessage(
+      convoId,
+      "user",
+      userMessage,
+    );
 
     const messages: any[] = [
       {
@@ -746,6 +776,7 @@ export async function POST(request: Request) {
           websiteAvailable,
         ),
       },
+      ...conversationHistory,
       {
         role: "user",
         content: userMessage,
@@ -808,6 +839,12 @@ ${website.data}
         reviewResponse.output_text?.trim() ||
         "I could not generate a website review.";
 
+      await addConversationMessage(
+        convoId,
+        "assistant",
+        review,
+      );
+
       return Response.json({
         success: true,
         username: websiteUsername,
@@ -861,6 +898,12 @@ ${website.data}
           websiteUsername,
           answerLength: answer.length,
         });
+
+        await addConversationMessage(
+          convoId,
+          "assistant",
+          answer,
+        );
 
         return Response.json({
           success: true,
@@ -993,6 +1036,115 @@ ${website.data}
       {
         status,
       },
+    );
+  }
+}
+
+async function getOrCreateConversation(userId: string) {
+  await ensureUserSubscription(userId);
+
+  const existing = await sql`
+    SELECT convo_id
+    FROM subscriptions
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `;
+
+  if (existing[0]?.convo_id) {
+    return existing[0].convo_id as string;
+  }
+
+  const convoId = await createOpenAIConversation(userId);
+
+  const updated = await sql`
+    UPDATE subscriptions
+    SET convo_id = ${convoId}, updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = ${userId}
+      AND convo_id IS NULL
+    RETURNING convo_id
+  `;
+
+  if (updated[0]?.convo_id) {
+    return updated[0].convo_id as string;
+  }
+
+  const concurrent = await sql`
+    SELECT convo_id
+    FROM subscriptions
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `;
+
+  return (concurrent[0]?.convo_id as string) || convoId;
+}
+
+async function getConversationMessages(convoId: string) {
+  const response = await fetch(
+    `https://api.openai.com/v1/conversations/${encodeURIComponent(convoId)}/items?limit=100&order=asc`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenAI conversation history failed: ${response.status}`,
+    );
+  }
+
+  const data =
+    (await response.json()) as ConversationItemsResponse;
+
+  return (data.data || [])
+    .filter(
+      (item) =>
+        (item.role === "user" || item.role === "assistant") &&
+        Boolean(item.content),
+    )
+    .map((item) => ({
+      role: item.role as "user" | "assistant",
+      content:
+        typeof item.content === "string"
+          ? item.content
+          : item.content
+              ?.map((part) => part.text || "")
+              .join("") || "",
+    }))
+    .filter((item) => item.content);
+}
+
+async function addConversationMessage(
+  convoId: string,
+  role: "user" | "assistant",
+  content: string,
+) {
+  const response = await fetch(
+    `https://api.openai.com/v1/conversations/${encodeURIComponent(convoId)}/items`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            type: "message",
+            role,
+            content,
+          },
+        ],
+      }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenAI conversation update failed: ${response.status}`,
     );
   }
 }

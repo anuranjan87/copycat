@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-import {
-  SignIn,
-  useUser,
-} from "@clerk/nextjs";
+import { SignIn, useUser } from "@clerk/nextjs";
 
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 
-import { usernameChecker } from "@/lib/website-actions";
+import {
+  usernameChecker,
+  ensureUserSubscription,
+} from "@/lib/website-actions";
 
 import { CharacterForm } from "@/components/character-form";
 
@@ -26,7 +25,6 @@ export function SignInModal({
   open,
   onClose,
 }: SignInModalProps) {
-
   const router = useRouter();
 
   const {
@@ -44,36 +42,47 @@ export function SignInModal({
     useState(false);
 
   useEffect(() => {
-
-    // modal closed
     if (!open) return;
 
-    // clerk not ready
     if (!isLoaded) return;
 
-    // not signed in yet
     if (!user) return;
 
-    // prevent double runs
     if (hasChecked) return;
 
-    const checkUsername = async () => {
+    let cancelled = false;
 
+    const initializeUser = async () => {
       setIsChecking(true);
 
       try {
+        /*
+         * Creates a free subscription row if the user
+         * does not already have one.
+         *
+         * Existing premium subscriptions remain unchanged.
+         */
+        await ensureUserSubscription(user.id);
 
-        const username =
-          await usernameChecker(user.id);
+        if (cancelled) return;
 
-        // EXISTING USER
+        /*
+         * Check whether the user already has a username.
+         */
+        const username = await usernameChecker(
+          user.id
+        );
+
+        if (cancelled) return;
+
+        /*
+         * EXISTING USER
+         */
         if (
           username &&
           username !== "demo"
         ) {
-
           setShowCharacterForm(false);
-
           setHasChecked(true);
 
           onClose();
@@ -85,96 +94,75 @@ export function SignInModal({
           return;
         }
 
-        // NEW USER
+        /*
+         * NEW USER
+         */
         setShowCharacterForm(true);
-
+        setHasChecked(true);
       } catch (error) {
-
-        console.error(error);
-
+        console.error(
+          "Failed to initialize user:",
+          error
+        );
       } finally {
-
-        setIsChecking(false);
-
+        if (!cancelled) {
+          setIsChecking(false);
+        }
       }
     };
 
-    checkUsername();
+    initializeUser();
 
+    return () => {
+      cancelled = true;
+    };
   }, [
-    user,
-    isLoaded,
     open,
+    isLoaded,
+    user,
     hasChecked,
     router,
     onClose,
   ]);
 
-  // reset modal state
   useEffect(() => {
-
     if (!open) {
-
       setIsChecking(false);
-
       setShowCharacterForm(false);
-
       setHasChecked(false);
-
     }
-
   }, [open]);
 
   return (
-
     <Dialog
       open={open}
-      onOpenChange={onClose}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
     >
-
       <DialogContent className="overflow-hidden border-none bg-transparent p-0 shadow-none sm:max-w-md">
-
-        {/* LOADING */}
-
         {isChecking && (
-
           <div className="flex h-[320px] items-center justify-center rounded-3xl border border-white/10 bg-black text-white backdrop-blur-xl">
-
             <div className="flex flex-col items-center gap-4">
-
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
 
               <p className="text-sm tracking-wide text-white/70">
                 Setting up your account...
               </p>
-
             </div>
-
           </div>
-
         )}
 
-        {/* CHARACTER FORM */}
+        {!isChecking && showCharacterForm && (
+          <CharacterForm />
+        )}
 
-        {!isChecking &&
-          showCharacterForm && (
-            <CharacterForm />
-          )}
-
-        {/* SIGN IN */}
-
-        {!isChecking &&
-          !showCharacterForm && (
-
-            <SignIn
-              routing="virtual"
-            />
-
-          )}
-
+        {!isChecking && !showCharacterForm && (
+          <SignIn routing="virtual" />
+        )}
       </DialogContent>
-
     </Dialog>
-
   );
 }

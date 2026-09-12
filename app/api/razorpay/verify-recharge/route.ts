@@ -541,9 +541,16 @@ export async function POST(request: NextRequest) {
         google_ads_credits INTEGER
           NOT NULL DEFAULT 0,
 
+        convo_id VARCHAR(300),
+
         updated_at TIMESTAMP
           DEFAULT CURRENT_TIMESTAMP
       )
+    `;
+
+    await sql`
+      ALTER TABLE subscriptions
+      ADD COLUMN IF NOT EXISTS convo_id VARCHAR(300)
     `;
 
     // =====================================================

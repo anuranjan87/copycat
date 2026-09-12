@@ -20,7 +20,7 @@ import {
   Shield,
   Clock,
 } from 'lucide-react'
-import { updateWebsiteContent, generateCodeWithAI, getTemplateById } from '@/lib/website-actions'
+import { updateWebsiteContent, generateCodeWithAI, getTemplateById, saveWebsiteDraft } from '@/lib/website-actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
@@ -783,17 +783,25 @@ ${cleanHtml}`
     })
   }
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     captureScrollPosition()
+
+    const result = await saveWebsiteDraft(username, draftHtml, draftData, draftData)
+
+    if (!result.success) {
+      toast.error(result.error || 'Failed to save website draft.')
+      return
+    }
+
     setSavedHtml(draftHtml)
     setSavedData(draftData)
     setLastSaved(new Date())
     toast.success('Changes saved', {
-      description: 'Your draft has been updated.',
+      description: 'Your draft is available in Saved Items.',
       position: 'top-center',
       duration: 2000,
     })
-  }, [draftHtml, draftData, captureScrollPosition])
+  }, [username, draftHtml, draftData, captureScrollPosition])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1169,6 +1177,14 @@ ${cleanHtml}`
           </a>
 
           <div className="h-6 w-px bg-slate-700/20" />
+
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 rounded-md border border-slate-700/40 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </button>
 
           <button
             onClick={handlePublish}

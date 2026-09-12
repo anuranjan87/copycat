@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import {
   generateCodeWithAI,
   getTemplateById,
+  saveWebsiteDraft,
   updateWebsiteContent,
 } from '@/lib/website-actions'
 import PremiumRequiredModal from '@/components/ui_components/PremiumRequiredModal'
@@ -920,17 +921,24 @@ export default function EditorContent({
     setDraftData((current) => updateSimpleField(current, path, value))
   }, [])
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    const result = await saveWebsiteDraft(username, draftHtml, draftData, draftData)
+
+    if (!result.success) {
+      toast.error(result.error || 'Failed to save website draft.')
+      return
+    }
+
     setSavedHtml(draftHtml)
     setSavedData(draftData)
     setLastSaved(new Date())
 
     toast.success('Changes saved', {
-      description: 'Your website draft has been updated.',
+      description: 'Your draft is available in Saved Items.',
       position: 'top-center',
       duration: 2000,
     })
-  }, [draftHtml, draftData])
+  }, [username, draftHtml, draftData])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1556,15 +1564,13 @@ console.log("FIELDS LENGTH:", fields.length)
                 <Download className="h-4 w-4" />
               </button>
 
-              {hasUnsavedChanges && (
-                <button
-                  onClick={handleSave}
-                  className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  Save
-                </button>
-              )}
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Save
+              </button>
             </div>
           </div>
         </section>

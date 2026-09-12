@@ -5,6 +5,7 @@ import { put } from "@vercel/blob";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 
 const sql = neon(process.env.POSTGRES_URL!);
 
@@ -37,6 +38,48 @@ export interface SubscriptionData {
   aiCredits: number;
   emailCredits: number;
   googleAdsCredits: number;
+}
+
+export async function createOpenAIConversation(
+  userId: string,
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY.");
+  }
+
+  const response = await fetch(
+    "https://api.openai.com/v1/conversations",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        metadata: {
+          user_id: userId,
+          topic: "7winks-user-agent",
+        },
+      }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenAI conversation creation failed: ${response.status}`,
+    );
+  }
+
+  const data = (await response.json()) as { id?: string };
+
+  if (!data.id) {
+    throw new Error("OpenAI returned no conversation ID.");
+  }
+
+  return data.id;
 }
 
 // ==================================================
@@ -220,6 +263,10 @@ export async function getWebsiteContent(
       return null;
     }
 
+    await ensureWebsiteActionColumn(username);
+
+    await ensureWebsiteActionColumn(username);
+
     const result = await sql.query(
       `
       SELECT
@@ -227,6 +274,7 @@ export async function getWebsiteContent(
         code_script,
         code_data
       FROM ${tableName}
+      WHERE action = 'published'
       ORDER BY created_at DESC
       LIMIT 1
       `
@@ -319,6 +367,8 @@ export async function updateWebsiteContent(
   try {
     const tableName = `${username.toLowerCase()}_website`;
 
+    await ensureWebsiteActionColumn(username);
+
     console.log("📋 Table:", tableName);
 
     console.log("📦 Website content being saved:");
@@ -329,9 +379,9 @@ export async function updateWebsiteContent(
     await sql.query(
       `
       INSERT INTO ${tableName}
-        (code, code_script, code_data)
+        (code, code_script, code_data, action)
       VALUES
-        ($1, $2, $3)
+        ($1, $2, $3, 'published')
       `,
       [html, script, data]
     );
@@ -1019,6 +1069,7 @@ export async function getLatestPublishedSiteWithNullData(
           code_script,
           code_data
         FROM ${tableName}
+        WHERE action = 'published'
         ORDER BY created_at DESC
         LIMIT 1
         `
@@ -1217,6 +1268,8 @@ export async function ensureSubscriptionTable() {
         NOT NULL
         DEFAULT 0,
 
+      convo_id VARCHAR(300),
+
       created_at TIMESTAMP
         DEFAULT CURRENT_TIMESTAMP,
 
@@ -1230,6 +1283,11 @@ export async function ensureSubscriptionTable() {
     CREATE UNIQUE INDEX IF NOT EXISTS
     subscriptions_user_id_unique
     ON subscriptions(user_id)
+  `;
+
+  await sql`
+    ALTER TABLE subscriptions
+    ADD COLUMN IF NOT EXISTS convo_id VARCHAR(300)
   `;
 }
 
@@ -1385,5 +1443,273 @@ export async function getSubscription(
 
       googleAdsCredits: 0,
     };
+  }
+}
+
+// ==================================================
+// ENSURE USER SUBSCRIPTION
+// ==================================================
+
+export async function ensureUserSubscription(
+  userId: string
+): Promise<SubscriptionData> {
+  try {
+    await ensureSubscriptionTable();
+
+    const result = await sql`
+      INSERT INTO subscriptions (
+        user_id,
+        username,
+        status,
+        started_at,
+        expires_at,
+        ai_credits,
+        email_credits,
+        google_ads_credits,
+        convo_id
+      )
+      VALUES (
+        ${userId},
+        NULL,
+        'free',
+        NULL,
+        NULL,
+        0,
+        0,
+        0,
+        NULL
+      )
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING
+        user_id,
+        username,
+        status,
+        started_at,
+        expires_at,
+        ai_credits,
+        email_credits,
+        google_ads_credits,
+        convo_id
+    `;
+
+    let subscription = result[0];
+
+    if (!subscription.convo_id) {
+      try {
+        const convoId = await createOpenAIConversation(userId);
+
+        const updated = await sql`
+          UPDATE subscriptions
+          SET convo_id = ${convoId}, updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ${userId}
+            AND convo_id IS NULL
+          RETURNING
+            user_id,
+            username,
+            status,
+            started_at,
+            expires_at,
+            ai_credits,
+            email_credits,
+            google_ads_credits,
+            convo_id
+        `;
+
+        if (updated.length > 0) {
+          subscription = updated[0];
+        }
+      } catch (error) {
+        console.error(
+          "Error creating OpenAI conversation:",
+          error,
+        );
+      }
+    }
+
+    const status: SubscriptionStatus =
+      subscription.status === "premium"
+        ? "premium"
+        : "free";
+
+    const expiresAt = subscription.expires_at
+      ? new Date(subscription.expires_at)
+      : null;
+
+    const isPremium =
+      status === "premium" &&
+      (
+        expiresAt === null ||
+        expiresAt.getTime() > Date.now()
+      );
+
+    return {
+      isPremium,
+      status,
+      username: subscription.username ?? null,
+      startedAt: subscription.started_at ?? null,
+      expiresAt: subscription.expires_at ?? null,
+      aiCredits: Number(
+        subscription.ai_credits ?? 0
+      ),
+      emailCredits: Number(
+        subscription.email_credits ?? 0
+      ),
+      googleAdsCredits: Number(
+        subscription.google_ads_credits ?? 0
+      ),
+    };
+  } catch (error) {
+    console.error(
+      "Error ensuring user subscription:",
+      error
+    );
+
+    /*
+     * Fail closed.
+     * If the database fails, the user is treated
+     * as free instead of premium.
+     */
+    return {
+      isPremium: false,
+      status: "free",
+      username: null,
+      startedAt: null,
+      expiresAt: null,
+      aiCredits: 0,
+      emailCredits: 0,
+      googleAdsCredits: 0,
+    };
+  }
+}
+
+export async function ensureWebsiteActionColumn(username: string) {
+  const tableName = `${username.toLowerCase().replace(/[^a-z0-9_]/g, "")}_website`;
+
+  await sql.query(`
+    ALTER TABLE ${tableName}
+    ADD COLUMN IF NOT EXISTS action VARCHAR(20)
+  `);
+
+  await sql.query(`
+    UPDATE ${tableName}
+    SET action = 'published'
+    WHERE action IS NULL
+  `);
+
+  await sql.query(`
+    ALTER TABLE ${tableName}
+    ALTER COLUMN action SET DEFAULT 'published'
+  `);
+}
+
+async function assertOwnedWebsite(username: string) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    throw new Error("You must be signed in.");
+  }
+
+  const rows = await sql`
+    SELECT id
+    FROM alias
+    WHERE user_id = ${userId}
+      AND LOWER(name) = LOWER(${username})
+    LIMIT 1
+  `;
+
+  if (rows.length === 0) {
+    throw new Error("You do not own this website.");
+  }
+}
+
+export async function saveWebsiteDraft(
+  username: string,
+  html: string,
+  script: string,
+  data: string,
+) {
+  try {
+    await assertOwnedWebsite(username);
+    const tableName = `${username.toLowerCase().replace(/[^a-z0-9_]/g, "")}_website`;
+
+    await ensureWebsiteActionColumn(username);
+
+    const result = await sql.query(
+      `
+      INSERT INTO ${tableName}
+        (code, code_script, code_data, action)
+      VALUES
+        ($1, $2, $3, 'saved')
+      RETURNING id, created_at
+      `,
+      [html, script, data],
+    );
+
+    return { success: true, savedItem: result[0] };
+  } catch (error) {
+    console.error("Failed to save website draft:", error);
+    return { success: false, error: "Failed to save website draft." };
+  }
+}
+
+export async function getSavedWebsiteItems(username: string) {
+  try {
+    await assertOwnedWebsite(username);
+    const tableName = `${username.toLowerCase().replace(/[^a-z0-9_]/g, "")}_website`;
+
+    await ensureWebsiteActionColumn(username);
+
+    const rows = await sql.query(`
+      SELECT id, code, code_script, code_data, created_at
+      FROM ${tableName}
+      WHERE action = 'saved'
+      ORDER BY created_at DESC
+    `);
+
+    return {
+      success: true,
+      items: rows.map((row) => ({
+        id: row.id,
+        html: row.code || "",
+        script: row.code_script || "",
+        data: row.code_data || "",
+        createdAt: row.created_at,
+      })),
+    };
+  } catch (error) {
+    console.error("Failed to load saved website items:", error);
+    return { success: false, items: [], error: "Failed to load saved items." };
+  }
+}
+
+export async function getSavedWebsiteItem(username: string, id: number) {
+  try {
+    await assertOwnedWebsite(username);
+    const tableName = `${username.toLowerCase().replace(/[^a-z0-9_]/g, "")}_website`;
+
+    await ensureWebsiteActionColumn(username);
+
+    const rows = await sql.query(
+      `
+      SELECT id, code, code_script, code_data, created_at
+      FROM ${tableName}
+      WHERE id = $1 AND action = 'saved'
+      LIMIT 1
+      `,
+      [id],
+    );
+
+    if (!rows[0]) return null;
+
+    return {
+      html: rows[0].code || "",
+      script: rows[0].code_script || "",
+      data: rows[0].code_data || "",
+    };
+  } catch (error) {
+    console.error("Failed to load saved website item:", error);
+    return null;
   }
 }

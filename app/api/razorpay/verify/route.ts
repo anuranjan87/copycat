@@ -39,6 +39,8 @@ async function ensureSubscriptionTable() {
       email_credits INTEGER NOT NULL DEFAULT 0,
       google_ads_credits INTEGER NOT NULL DEFAULT 0,
 
+      convo_id VARCHAR(300),
+
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -53,6 +55,11 @@ async function ensureSubscriptionTable() {
     CREATE UNIQUE INDEX IF NOT EXISTS
     subscriptions_user_id_unique
     ON subscriptions(user_id)
+  `;
+
+  await sql`
+    ALTER TABLE subscriptions
+    ADD COLUMN IF NOT EXISTS convo_id VARCHAR(300)
   `;
 }
 

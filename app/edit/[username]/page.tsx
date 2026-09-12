@@ -1,4 +1,7 @@
-import { getLatestPublishedSiteWithNullData } from "@/lib/website-actions";
+import {
+  getLatestPublishedSiteWithNullData,
+  getSavedWebsiteItem,
+} from "@/lib/website-actions";
 import { notFound } from "next/navigation";
 import { CodeEditor } from "@/components/code-editor";
 
@@ -6,13 +9,21 @@ interface PageProps {
   params: Promise<{
     username: string;
   }>;
+  searchParams: Promise<{
+    savedId?: string;
+  }>;
 }
 
-export default async function EditPage({ params }: PageProps) {
+export default async function EditPage({ params, searchParams }: PageProps) {
   const { username } = await params;
+  const { savedId } = await searchParams;
 
   try {
-    const content =
+    const savedContent = savedId
+      ? await getSavedWebsiteItem(username, Number(savedId))
+      : null;
+
+    const content = savedContent ??
       (await getLatestPublishedSiteWithNullData(username)) ?? {
         html: "",
         script: "",

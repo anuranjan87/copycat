@@ -239,6 +239,17 @@ export default function Nav({
             >
               Marketing
             </Link>
+
+            <span className="text-white/30">
+              |
+            </span>
+
+            <Link
+              href={`/saved/${username}`}
+              className="transition hover:opacity-70"
+            >
+              Saved Items
+            </Link>
           </div>
 
           {/* ========================================================
@@ -1194,6 +1205,25 @@ export default function Nav({
                   "
                 >
                   Marketing
+                </Link>
+
+                <Link
+                  href={`/saved/${username}`}
+                  onClick={closeMenu}
+                  className="
+                    block
+                    rounded-xl
+                    px-3
+                    py-3.5
+                    text-[17px]
+                    font-medium
+                    tracking-tight
+                    text-white
+                    transition
+                    hover:bg-white/5
+                  "
+                >
+                  Saved Items
                 </Link>
               </div>
             </div>

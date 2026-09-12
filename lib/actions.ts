@@ -31,8 +31,25 @@ export async function storeCharacter(name: string, user: string) {
         code TEXT,
         code_script TEXT,
         code_data TEXT,
+        action VARCHAR(20) NOT NULL DEFAULT 'published',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await sql.query(`
+      ALTER TABLE ${websiteTableName}
+      ADD COLUMN IF NOT EXISTS action VARCHAR(20)
+    `);
+
+    await sql.query(`
+      UPDATE ${websiteTableName}
+      SET action = 'published'
+      WHERE action IS NULL
+    `);
+
+    await sql.query(`
+      ALTER TABLE ${websiteTableName}
+      ALTER COLUMN action SET DEFAULT 'published'
     `);
 
     // Create visits table
