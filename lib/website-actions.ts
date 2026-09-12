@@ -1456,6 +1456,12 @@ export async function ensureUserSubscription(
   try {
     await ensureSubscriptionTable();
 
+    const username = await usernameChecker(userId);
+
+    if (!username) {
+      throw new Error("No website username is linked to this user.");
+    }
+
     const result = await sql`
       INSERT INTO subscriptions (
         user_id,
@@ -1470,7 +1476,7 @@ export async function ensureUserSubscription(
       )
       VALUES (
         ${userId},
-        NULL,
+        ${username},
         'free',
         NULL,
         NULL,
@@ -1481,6 +1487,10 @@ export async function ensureUserSubscription(
       )
       ON CONFLICT (user_id)
       DO UPDATE SET
+        username = COALESCE(
+          subscriptions.username,
+          EXCLUDED.username
+        ),
         updated_at = CURRENT_TIMESTAMP
       RETURNING
         user_id,

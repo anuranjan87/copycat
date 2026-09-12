@@ -17,6 +17,16 @@ type UserAgentProps = {
   username: string;
 };
 
+function sanitizeAgentHtml(value: string) {
+  return value
+    .replace(/^```(?:html)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\s(on\w+)\s*=\s*(["']).*?\2/gi, "")
+    .trim();
+}
+
 const examples = [
   "Sign out button",
   "Netflix landing page clone",
@@ -29,6 +39,13 @@ const examples = [
   "Find Opportunities",
   "Build My Website ✨",
   "View Analytics",
+];
+
+const googleAdsExamples = [
+  "Check my Google Ads campaigns",
+  "Which campaigns should I improve first?",
+  "Suggest a low-budget search campaign",
+  "Give me creative Google Ads ideas",
 ];
 
 export default function UserAgent({ username }: UserAgentProps) {
@@ -56,6 +73,10 @@ export default function UserAgent({ username }: UserAgentProps) {
         role: "user",
         content: trimmedMessage,
       },
+      {
+        role: "assistant",
+        content: "",
+      },
     ]);
 
     setMessage("");
@@ -75,31 +96,99 @@ export default function UserAgent({ username }: UserAgentProps) {
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data?.error || "Developer agent failed");
       }
 
-      setChatHistory((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: data?.answer || "No response received.",
-        },
-      ]);
+      if (!response.body) {
+        throw new Error("The agent returned no response stream.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const updateAssistant = (text: string) => {
+        setChatHistory((previous) => {
+          const next = [...previous];
+          const lastIndex = next.length - 1;
+          const lastMessage = next[lastIndex];
+
+          if (lastMessage?.role === "assistant") {
+            next[lastIndex] = {
+              ...lastMessage,
+              content: lastMessage.content + text,
+            };
+          }
+
+          return next;
+        });
+      };
+
+      const processEvent = (rawEvent: string) => {
+        const lines = rawEvent.split("\n");
+        const eventName =
+          lines.find((line) => line.startsWith("event:"))?.slice(6).trim() ||
+          "message";
+        const dataLine = lines.find((line) => line.startsWith("data:"));
+
+        if (!dataLine) return;
+
+        const data = JSON.parse(dataLine.slice(5).trim());
+
+        if (eventName === "delta") {
+          updateAssistant(data.text || "");
+        }
+
+        if (eventName === "error") {
+          throw new Error(data.error || "The agent failed while streaming.");
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), {
+          stream: !done,
+        });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const event of events) {
+          if (event.trim()) processEvent(event);
+        }
+
+        if (done) break;
+      }
+
+      if (buffer.trim()) processEvent(buffer);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
 
-      setChatHistory((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: `Error: ${errorMessage}`,
-          isError: true,
-        },
-      ]);
+      setChatHistory((previous) => {
+        const next = [...previous];
+        const lastIndex = next.length - 1;
+
+        if (next[lastIndex]?.role === "assistant") {
+          next[lastIndex] = {
+            role: "assistant",
+            content: `Error: ${errorMessage}`,
+            isError: true,
+          };
+          return next;
+        }
+
+        return [
+          ...next,
+          {
+            role: "assistant",
+            content: `Error: ${errorMessage}`,
+            isError: true,
+          },
+        ];
+      });
     } finally {
       setLoading(false);
     }
@@ -173,7 +262,16 @@ export default function UserAgent({ username }: UserAgentProps) {
                         : "max-w-full whitespace-pre-wrap break-words py-2 text-sm leading-7 text-zinc-700 dark:text-zinc-300"
                     }
                   >
-                    {msg.content}
+                    {msg.isError ? (
+                      msg.content
+                    ) : (
+                      <div
+                        className="agent-html max-w-full overflow-hidden text-sm leading-6 text-zinc-700 dark:text-zinc-300 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-3 [&_p]:leading-7 [&_strong]:font-semibold [&_ul]:mb-4 [&_ul]:space-y-1"
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeAgentHtml(msg.content),
+                        }}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -254,18 +352,31 @@ function WelcomeMessage({
 }) {
   const { user } = useUser();
   const [examplePage, setExamplePage] = useState(0);
+  const [welcomeTab, setWelcomeTab] = useState<"website" | "google-ads">(
+    "website",
+  );
 
-const examplesPerPage = 5;
-const totalPages = Math.ceil(examples.length / examplesPerPage);
+  const activeExamples =
+    welcomeTab === "google-ads" ? googleAdsExamples : examples;
+  const examplesPerPage = 5;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(activeExamples.length / examplesPerPage),
+  );
 
-const visibleExamples = examples.slice(
-  examplePage * examplesPerPage,
-  examplePage * examplesPerPage + examplesPerPage,
-);
+  const visibleExamples = activeExamples.slice(
+    examplePage * examplesPerPage,
+    examplePage * examplesPerPage + examplesPerPage,
+  );
 
-const showNextExamples = () => {
-  setExamplePage((currentPage) => (currentPage + 1) % totalPages);
-};
+  const showNextExamples = () => {
+    setExamplePage((currentPage) => (currentPage + 1) % totalPages);
+  };
+
+  const changeWelcomeTab = (tab: "website" | "google-ads") => {
+    setWelcomeTab(tab);
+    setExamplePage(0);
+  };
 
   return (
     <Card className="mx-auto max-w-screen-sm sm:mb-14 sm:w-full">
@@ -299,6 +410,37 @@ const showNextExamples = () => {
         />
 
        <div className="mb-6 -mt-9">
+  <div className="mb-4 flex justify-center gap-2">
+    <button
+      type="button"
+      onClick={() => changeWelcomeTab("website")}
+      className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+        welcomeTab === "website"
+          ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+          : "border border-zinc-200 text-zinc-500 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:text-white"
+      }`}
+    >
+      Website ideas
+    </button>
+    <button
+      type="button"
+      onClick={() => changeWelcomeTab("google-ads")}
+      className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+        welcomeTab === "google-ads"
+          ? "bg-blue-600 text-white"
+          : "border border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+      }`}
+    >
+      Google Ads
+    </button>
+  </div>
+
+  {welcomeTab === "google-ads" && (
+    <p className="mb-3 text-center text-xs text-blue-600 dark:text-blue-300">
+      Explore campaign health, high-intent searches, and practical growth experiments.
+    </p>
+  )}
+
   <div className="mb-2 flex items-center justify-end">
     <button
       type="button"

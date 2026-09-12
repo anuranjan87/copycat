@@ -11,6 +11,7 @@ export default async function AfterSignInPage() {
   // User is not authenticated
   if (!userId) {
     redirect("/sign-in");
+    
   }
 
   // Create the first subscription row as a free user.
