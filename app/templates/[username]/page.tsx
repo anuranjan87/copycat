@@ -621,9 +621,7 @@ export default function Page({ params }: PageProps) {
               </div>
             </div>
           ) : activeCategory === forYouTabName ? (
-            /* First-name tab → render the user agent component */
-            <UserAgent />
-          ) : filteredTemplates.length === 0 ? (
+<UserAgent username={username} />          ) : filteredTemplates.length === 0 ? (
             <Card className="mx-auto my-8 max-w-md border-muted/60 bg-muted/10 py-20 text-center">
               <CardContent className="space-y-3">
                 <LayoutGrid className="mx-auto h-10 w-10 text-muted-foreground opacity-50" />

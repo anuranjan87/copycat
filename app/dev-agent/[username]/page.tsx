@@ -2,18 +2,31 @@
 
 import { useState } from "react";
 
-export default function DevAgentPage() {
-  const [message, setMessage] =
-    useState("");
+type DevAgentPageProps = {
+  params: {
+    username: string;
+  };
+};
 
-  const [answer, setAnswer] =
-    useState("");
+type ApiResponse = {
+  response?: string;
+  answer?: string;
+  error?: string;
+};
 
-  const [loading, setLoading] =
-    useState(false);
+export default function DevAgentPage({
+  params,
+}: DevAgentPageProps) {
+  const [message, setMessage] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const username = params?.username?.trim() || "";
 
   const askAgent = async () => {
-    if (!message.trim()) {
+    const trimmedMessage = message.trim();
+
+    if (!trimmedMessage || loading) {
       return;
     }
 
@@ -21,45 +34,47 @@ export default function DevAgentPage() {
     setAnswer("");
 
     try {
-      const response = await fetch(
-        "/api/dev-agent",
-        {
-          method: "POST",
+      const response = await fetch("/api/dev-agent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: trimmedMessage,
+          username,
+        }),
+      });
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+      const data: ApiResponse = await response.json();
 
-          body: JSON.stringify({
-            message,
-          }),
-        }
-      );
-
-      const data =
-        await response.json();
+      console.log("Dev agent API response:", data);
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            "Developer agent failed"
+          data.error || "The developer agent request failed.",
         );
       }
 
-      setAnswer(
-        data?.answer || ""
-      );
+      const agentResponse =
+        data.response?.trim() ||
+        data.answer?.trim() ||
+        "";
 
-    } catch (error: any) {
+      if (!agentResponse) {
+        throw new Error(
+          "The API returned successfully, but no response was received.",
+        );
+      }
 
-      setAnswer(
-        `Error: ${
-          error?.message ||
-          "Unknown error"
-        }`
-      );
+      setAnswer(agentResponse);
+      setMessage("");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred.";
 
+      setAnswer(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -67,127 +82,86 @@ export default function DevAgentPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-
-      <div className="mx-auto max-w-5xl p-8">
-
-        <div className="mb-8">
-
-          <h1 className="text-3xl font-semibold">
+      <div className="mx-auto w-full max-w-5xl px-5 py-8 sm:px-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-semibold tracking-tight">
             7wingz Developer Agent
           </h1>
 
           <p className="mt-2 text-sm text-white/50">
-            Read-only GitHub code analysis.
+            Read-only 7wingz website analytics agent.
           </p>
 
-        </div>
+          {username ? (
+            <p className="mt-3 text-xs text-white/40">
+              Website:{" "}
+              <span className="text-white/70">{username}</span>
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-red-400">
+              Username is missing from the page URL.
+            </p>
+          )}
+        </header>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+          <label
+            htmlFor="agent-message"
+            className="mb-2 block text-sm font-medium text-white/80"
+          >
+            Ask the developer agent
+          </label>
 
           <textarea
+            id="agent-message"
             value={message}
-            onChange={(event) =>
-              setMessage(
-                event.target.value
-              )
-            }
+            onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-
               if (
                 event.key === "Enter" &&
-                (event.ctrlKey ||
-                  event.metaKey)
+                (event.ctrlKey || event.metaKey)
               ) {
                 event.preventDefault();
-
                 askAgent();
               }
-
             }}
-            placeholder="Ask about your codebase..."
-            className="
-              min-h-[140px]
-              w-full
-              resize-y
-              rounded-lg
-              border
-              border-white/10
-              bg-black
-              p-4
-              text-sm
-              text-white
-              outline-none
-              placeholder:text-white/30
-            "
+            disabled={loading}
+            placeholder="Ask about visitor traffic, active visitors, or inbox enquiries..."
+            className="min-h-[150px] w-full resize-y rounded-xl border border-white/10 bg-black px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-white/30 focus:border-red-500/70 focus:ring-2 focus:ring-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
           />
 
-          <div className="mt-3 flex items-center justify-between">
-
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-white/30">
-              Ctrl + Enter to analyze
+              Press Ctrl + Enter to analyze
             </span>
 
             <button
+              type="button"
               onClick={askAgent}
-              disabled={
-                loading ||
-                !message.trim()
-              }
-              className="
-                rounded-lg
-                bg-red-600
-                px-5
-                py-2.5
-                text-sm
-                font-medium
-                transition
-                hover:bg-red-500
-                disabled:cursor-not-allowed
-                disabled:opacity-40
-              "
+              disabled={loading || !message.trim()}
+              className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400/60 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {loading
-                ? "Analyzing..."
-                : "Analyze Code"}
+              {loading ? "Analyzing..." : "Analyze"}
             </button>
-
           </div>
-
-        </div>
+        </section>
 
         {answer && (
-
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03]">
-
+          <section className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
             <div className="border-b border-white/10 px-5 py-3">
-
-              <span className="text-xs font-medium uppercase tracking-wider text-white/40">
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-white/40">
                 Analysis
               </span>
-
             </div>
 
-            <div className="p-6">
-
-              <pre className="
-                whitespace-pre-wrap
-                break-words
-                font-sans
-                text-sm
-                leading-7
-                text-white/80
-              ">
+            <div className="p-5 sm:p-6">
+              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-white/80">
                 {answer}
               </pre>
-
             </div>
-
-          </div>
-
+          </section>
         )}
-
       </div>
-
     </main>
   );
 }

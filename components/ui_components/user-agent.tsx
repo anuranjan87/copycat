@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +13,10 @@ type Message = {
   isError?: boolean;
 };
 
+type UserAgentProps = {
+  username: string;
+};
+
 const examples = [
   "Sign out button",
   "Netflix landing page clone",
@@ -22,7 +25,7 @@ const examples = [
   "Apple product check-out",
 ];
 
-export default function UserAgent() {
+export default function UserAgent({ username }: UserAgentProps) {
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,7 +33,6 @@ export default function UserAgent() {
   const inputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to the latest message.
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -53,6 +55,8 @@ export default function UserAgent() {
     setMessage("");
     setLoading(true);
 
+    console.log("[UserAgent] Sending website username:", username);
+
     try {
       const response = await fetch("/api/dev-agent", {
         method: "POST",
@@ -61,6 +65,7 @@ export default function UserAgent() {
         },
         body: JSON.stringify({
           message: trimmedMessage,
+          username,
         }),
       });
 
@@ -113,9 +118,7 @@ export default function UserAgent() {
 
   return (
     <div className="min-h-[650px] w-full bg-transparent text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Main chat workspace */}
       <div className="mx-auto flex min-h-[650px] w-full max-w-3xl flex-col px-4 pb-36 pt-8 sm:px-6">
-        {/* Top controls */}
         <div className="mb-8 flex items-center justify-between">
           <button
             type="button"
@@ -128,10 +131,10 @@ export default function UserAgent() {
           </button>
 
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
-7winks read only agent          </span>
+            7winks read only agent
+          </span>
         </div>
 
-        {/* Welcome card */}
         {chatHistory.length === 0 && (
           <WelcomeMessage
             setInput={setMessage}
@@ -139,7 +142,6 @@ export default function UserAgent() {
           />
         )}
 
-        {/* Chat messages */}
         {chatHistory.length > 0 && (
           <div className="flex-1 space-y-7 text-sm leading-7">
             {chatHistory.map((msg, index) => (
@@ -171,7 +173,6 @@ export default function UserAgent() {
               </div>
             ))}
 
-            {/* Loading indicator */}
             {loading && (
               <div className="flex justify-start">
                 <div className="flex items-center gap-2 py-2 text-xs text-zinc-400 dark:text-zinc-500">
@@ -186,12 +187,9 @@ export default function UserAgent() {
         )}
       </div>
 
-      {/* Bottom input area — non-sticky */}
       <div className="w-full px-4 pb-4 pt-8 sm:px-6">
         <div className="mx-auto w-full max-w-2xl">
-          {/* Input box */}
           <div className="flex h-[52px] items-center gap-0 rounded-2xl border border-zinc-200/80 bg-white px-0 shadow-sm transition-shadow focus-within:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
-            {/* Model selector */}
             <div className="relative flex h-full shrink-0 items-center border-r border-zinc-100 dark:border-zinc-800">
               <select
                 defaultValue="gpt-4o-mini"
@@ -207,7 +205,6 @@ export default function UserAgent() {
               <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-400" />
             </div>
 
-            {/* Message input */}
             <input
               ref={inputRef}
               type="text"
@@ -219,7 +216,6 @@ export default function UserAgent() {
               className="min-w-0 flex-1 bg-transparent px-4 text-sm text-zinc-800 outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             />
 
-            {/* Send button */}
             <button
               type="button"
               onClick={askAgent}
@@ -243,8 +239,6 @@ export default function UserAgent() {
   );
 }
 
-/* Welcome component */
-
 function WelcomeMessage({
   setInput,
   inputRef,
@@ -257,12 +251,12 @@ function WelcomeMessage({
   return (
     <Card className="mx-auto max-w-screen-sm sm:mb-14 sm:w-full">
       <CardHeader>
-        <CardTitle className="mx-auto"></CardTitle>
+        <CardTitle className="mx-auto" />
       </CardHeader>
 
       <Image
         src="https://49iw5aq3b5e3nyxk.public.blob.vercel-storage.com/New%20Project%20(7)-WLAAPpQxzUsRqvKyfpfiKc8Wb0D6yw.png"
-        alt="New-Project"
+        alt="New Project"
         width={250}
         height={250}
         className="mx-auto mb-1 transition-opacity duration-300 hover:opacity-80"
@@ -281,7 +275,7 @@ function WelcomeMessage({
           src="/jas.gif"
           width={160}
           height={160}
-          alt="jis"
+          alt="Jis animation"
           className="giphy-embed mx-auto mb-5"
         />
 
@@ -301,14 +295,12 @@ function WelcomeMessage({
           ))}
         </div>
 
-        <div>
-          <p className="mt-2 px-3 text-xs">
-            Hey creators! At Tailwind Genie, we embrace a free-spirited,
-            anti-establishment vibe. We offer unlimited design
-            generation—totally free. An assistant front-end developer buddy
-            who constantly brings fresh ideas.
-          </p>
-        </div>
+        <p className="mt-2 px-3 text-xs">
+          Hey creators! At Tailwind Genie, we embrace a free-spirited,
+          anti-establishment vibe. We offer unlimited design
+          generation—totally free. An assistant front-end developer buddy
+          who constantly brings fresh ideas.
+        </p>
       </CardContent>
     </Card>
   );

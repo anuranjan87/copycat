@@ -1,350 +1,166 @@
 import OpenAI from "openai";
+import { auth } from "@clerk/nextjs/server";
+
 import {
   getWebsiteContent,
-  getSubscription,
-  getTemplateById,
+  getEnquiries,
+  usernameChecker,
+  getVisitCount,
+  getVisitChartData,
+  getActiveVisitorsCount,
 } from "@/lib/website-actions";
+
+// ============================================================
+// 1. CONFIGURATION
+// ============================================================
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ============================================================
-   ENVIRONMENT
-============================================================ */
+const MODEL = "gpt-4o-mini";
+const MAX_TOOL_ROUNDS = 4;
+
+const UNSPLASH_API_URL =
+  "https://api.unsplash.com/search/photos";
+
+// ============================================================
+// 2. TYPES
+// ============================================================
+
+type ToolArgs = Record<string, unknown>;
+
+type AgentRequestBody = {
+  message?: unknown;
+};
+
+type WebsiteContent = {
+  html: string;
+  script: string;
+  data: string;
+};
+
+type UnsplashPhoto = {
+  id?: string;
+  width?: number;
+  height?: number;
+  urls?: {
+    regular?: string;
+    small?: string;
+    full?: string;
+  };
+  alt_description?: string | null;
+  description?: string | null;
+  user?: {
+    name?: string;
+    username?: string;
+    links?: {
+      html?: string;
+    };
+  };
+  links?: {
+    html?: string;
+    download_location?: string;
+  };
+};
+
+type UnsplashResponse = {
+  total?: number;
+  results?: UnsplashPhoto[];
+};
+
+// ============================================================
+// 3. ENVIRONMENT VALIDATION
+// ============================================================
 
 function validateEnvironment() {
-  const missing: string[] = [];
-
   if (!process.env.OPENAI_API_KEY) {
-    missing.push("OPENAI_API_KEY");
+    throw new Error("Missing OPENAI_API_KEY.");
   }
 
-  if (missing.length > 0) {
+  if (!process.env.UNSPLASH_ACCESS_KEY) {
+    throw new Error("Missing UNSPLASH_ACCESS_KEY.");
+  }
+}
+
+// ============================================================
+// 4. VALIDATION HELPERS
+// ============================================================
+
+function requireString(
+  value: unknown,
+  field: string,
+): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${field} is required.`);
+  }
+
+  return value.trim();
+}
+
+function normalizeUsername(username: string): string {
+  return username
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+// ============================================================
+// 5. AUTHENTICATED WEBSITE USERNAME
+// ============================================================
+
+/**
+ * Gets the website username linked to the currently
+ * authenticated Clerk account.
+ *
+ * The username is never accepted from the request body.
+ */
+async function getAuthenticatedWebsiteUsername(): Promise<string> {
+  const { userId } = await auth();
+
+  if (!userId) {
+    throw new Error("You must be signed in.");
+  }
+
+  const linkedUsername = await usernameChecker(userId);
+
+  if (
+    typeof linkedUsername !== "string" ||
+    !linkedUsername.trim()
+  ) {
     throw new Error(
-      `Missing environment variables: ${missing.join(", ")}`
+      "No website username is linked to your Clerk account.",
     );
   }
-}
 
-/* ============================================================
-   TUTORIAL KNOWLEDGE BASE (static – replace with DB later)
-============================================================ */
+  const websiteUsername = normalizeUsername(linkedUsername);
 
-const TUTORIALS = [
-  {
-    id: "getting-started",
-    title: "Getting Started with 7wingz",
-    summary: "Create your first website from a template and publish it live.",
-    content: `
-# Getting Started
-
-1. **Sign up** – create your account.
-2. **Choose a template** – pick a design that fits your brand.
-3. **Customise** – edit the HTML, CSS, and content with our online editor.
-4. **Publish** – click "Publish" and your site goes live instantly.
-5. **Share** – get your unique URL and share it with the world.
-    `,
-    tags: ["beginner", "templates", "publishing"],
-  },
-  {
-    id: "ai-generation",
-    title: "Using AI to Generate Websites",
-    summary: "Describe what you need and let the AI build a site for you.",
-    content: `
-# AI Website Generation
-
-1. Open the **AI Generator** from the dashboard.
-2. Describe your website (e.g., "a portfolio for a photographer").
-3. Optionally provide any existing code to improve upon.
-4. Click **Generate** – the AI will produce a complete HTML page.
-5. Review and edit the result, then publish.
-    `,
-    tags: ["ai", "generation", "advanced"],
-  },
-  {
-    id: "analytics",
-    title: "Tracking Visitor Analytics",
-    summary: "Understand your audience with built‑in visitor statistics.",
-    content: `
-# Visitor Analytics
-
-- **Live visitors** – see who is on your site right now.
-- **Daily visits** – chart of visits over time.
-- **Total visits** – overall popularity.
-- All data is automatically collected – no setup required.
-    `,
-    tags: ["analytics", "stats"],
-  },
-  {
-    id: "subscription",
-    title: "Understanding Your Subscription",
-    summary: "Free vs Premium – credits, limits, and benefits.",
-    content: `
-# Subscription Plans
-
-- **Free** – 5 AI generations per day, 1 website, basic templates.
-- **Premium** – unlimited AI, 10 websites, all templates, email credits, Google Ads credits.
-- **Upgrade** – go to your account settings to upgrade.
-
-Your current usage is shown on the dashboard.
-    `,
-    tags: ["billing", "premium"],
-  },
-];
-
-const PLATFORM_FEATURES = [
-  {
-    name: "AI Website Generator",
-    description:
-      "Generate complete HTML websites from a text description using OpenAI. Perfect for rapid prototyping and idea testing.",
-  },
-  {
-    name: "Template Library",
-    description:
-      "Start with professionally designed templates for portfolios, business, e‑commerce, and more. Customise every pixel.",
-  },
-  {
-    name: "Live Website Editor",
-    description:
-      "Edit HTML, CSS, and content directly in your browser. See changes instantly with real‑time preview.",
-  },
-  {
-    name: "Visitor Analytics",
-    description:
-      "Track page views, unique visitors, and active sessions. Understand your audience behaviour.",
-  },
-  {
-    name: "Email Integration",
-    description:
-      "Receive emails from your website through Resend integration. Manage enquiries directly from your dashboard.",
-  },
-  {
-    name: "Image Upload & Management",
-    description:
-      "Upload images to Vercel Blob and use them anywhere in your site. Integrates with Unsplash for free stock photos.",
-  },
-  {
-    name: "Subscription & Billing",
-    description:
-      "Manage your plan, view usage, and upgrade to Premium for extra features and credits.",
-  },
-];
-
-/* ============================================================
-   TOOL FUNCTIONS
-============================================================ */
-
-// 1. Get user's website content
-async function getUserWebsite(username: string) {
-  if (!username) throw new Error("Username is required.");
-  const result = await getWebsiteContent(username);
-  if (!result) {
-    return { error: "No website found for this username." };
+  if (!websiteUsername) {
+    throw new Error(
+      "The website username linked to your account is invalid.",
+    );
   }
-  return result;
+
+  return websiteUsername;
 }
 
-// 2. Get user subscription info
-async function getUserSubscription(userId: string) {
-  if (!userId) throw new Error("User ID is required.");
-  const sub = await getSubscription(userId);
-  if (!sub) {
-    return { error: "No subscription record found for this user." };
-  }
-  return sub;
-}
-
-// 3. Get user AI usage for today (mock – replace with real implementation)
-async function getUserUsage(userId: string) {
-  // In a real implementation, import your usage-tracking function
-  // and return actual data.
-  return {
-    used: 3,
-    limit: 5,
-    isPremium: false,
-    message: "Today's AI usage: 3 out of 5 generations used.",
-  };
-}
-
-// 4. Get template details (fix: parse templateId to number)
-async function getTemplateDetails(templateId: string) {
-  if (!templateId) throw new Error("Template ID is required.");
-  const id = Number(templateId);
-  if (isNaN(id)) throw new Error("Template ID must be a number.");
-  const template = await getTemplateById(id);
-  if (!template || !template.success) {
-    return { error: template?.error || "Template not found." };
-  }
-  return template;
-}
-
-// 5. List all tutorials
-async function listTutorials() {
-  return TUTORIALS.map(({ id, title, summary, tags }) => ({
-    id,
-    title,
-    summary,
-    tags,
-  }));
-}
-
-// 6. Get full tutorial content by ID
-async function getTutorialContent(tutorialId: string) {
-  const tutorial = TUTORIALS.find((t) => t.id === tutorialId);
-  if (!tutorial) {
-    return { error: "Tutorial not found." };
-  }
-  return tutorial;
-}
-
-// 7. Search tutorials by keyword
-async function searchTutorials(query: string) {
-  if (!query) return { results: [] };
-  const lowerQuery = query.toLowerCase();
-  const results = TUTORIALS.filter(
-    (t) =>
-      t.title.toLowerCase().includes(lowerQuery) ||
-      t.content.toLowerCase().includes(lowerQuery) ||
-      t.tags.some((tag) => tag.includes(lowerQuery))
-  );
-  return {
-    query,
-    count: results.length,
-    results: results.map(({ id, title, summary }) => ({ id, title, summary })),
-  };
-}
-
-// 8. List platform features
-async function listPlatformFeatures() {
-  return PLATFORM_FEATURES;
-}
-
-/* ============================================================
-   OPENAI TOOLS DEFINITION
-============================================================ */
+// ============================================================
+// 6. TOOL DEFINITIONS
+// ============================================================
 
 const tools = [
   {
     type: "function" as const,
     function: {
-      name: "get_user_website",
+      name: "search_unsplash_images",
       description:
-        "Retrieve the current website content and data for a given username.",
-      parameters: {
-        type: "object",
-        properties: {
-          username: {
-            type: "string",
-            description: "The username of the website owner.",
-          },
-        },
-        required: ["username"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_user_subscription",
-      description:
-        "Get subscription details, including plan, expiry, and remaining credits for a user.",
-      parameters: {
-        type: "object",
-        properties: {
-          userId: {
-            type: "string",
-            description: "The unique user ID.",
-          },
-        },
-        required: ["userId"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_user_usage",
-      description:
-        "Return the AI generation usage for today, including used count and daily limit.",
-      parameters: {
-        type: "object",
-        properties: {
-          userId: {
-            type: "string",
-            description: "The unique user ID.",
-          },
-        },
-        required: ["userId"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_template_details",
-      description:
-        "Fetch details of a specific template by its ID (name, description, preview image).",
-      parameters: {
-        type: "object",
-        properties: {
-          templateId: {
-            type: "string",
-            description: "The template ID (numeric).",
-          },
-        },
-        required: ["templateId"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "list_tutorials",
-      description:
-        "List all available tutorials with their titles, summaries, and tags.",
-      parameters: {
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_tutorial_content",
-      description:
-        "Retrieve the full content of a specific tutorial by its ID.",
-      parameters: {
-        type: "object",
-        properties: {
-          tutorialId: {
-            type: "string",
-            description: "The tutorial ID.",
-          },
-        },
-        required: ["tutorialId"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "search_tutorials",
-      description:
-        "Search tutorials by title, content, or tags. Useful when the user asks about a specific topic.",
+        "Search Unsplash for photos and return real image URLs. Use this only when the user requests website images.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Search term or phrase.",
+            description: "What type of image to search for.",
           },
         },
         required: ["query"],
@@ -355,306 +171,828 @@ const tools = [
   {
     type: "function" as const,
     function: {
-      name: "list_platform_features",
+      name: "get_user_enquiries",
       description:
-        "List all key features of the 7wingz platform with brief descriptions.",
+        "Retrieve enquiries submitted through the authenticated user's website. Use this when the user asks about messages, enquiries, contact form submissions, leads, or audience messages. The server automatically selects the authenticated user's website.",
       parameters: {
         type: "object",
         properties: {},
+        required: [],
         additionalProperties: false,
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_visit_count",
+      description:
+        "Get the total number of recorded visits for the authenticated user's website. Use this when the user asks for visitor count, total visitors, website traffic, or visit count.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_visit_chart_data",
+      description:
+        "Get daily visit data for the authenticated user's website. Use this when the user asks about traffic trends, daily visits, monthly traffic, or visitor statistics over time.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_active_visitors_count",
+      description:
+        "Get the estimated number of unique active visitors to the authenticated user's website during the last five minutes.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+  type: "function" as const,
+  function: {
+    name: "get_7winks_tutorial",
+    description:
+      "Retrieve official 7winks documentation and tutorial content. Use this whenever the user asks how to use 7winks, how to configure a feature, how an agent works, how to create a website, how to use analytics, how to submit enquiries, or any other 7winks tutorial-related question.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description:
+            "The 7winks feature, workflow, or tutorial topic the user wants help with.",
+        },
+      },
+      required: ["topic"],
+      additionalProperties: false,
+    },
+  },
+},
 ];
+// ============================================================
+// 7. SYSTEM PROMPT
+// ============================================================
 
-/* ============================================================
-   SYSTEM PROMPT (Customer Success Agent)
-============================================================ */
+function createSystemPrompt(
+  websiteUsername: string,
+  websiteAvailable: boolean,
+) {
+  return `
+You are the 7winks User Agent.
 
-const SYSTEM_PROMPT = `
-You are the 7wingz Customer Success Agent.
+The authenticated user's website username is:
+${websiteUsername}
 
-Your role is to help users get the most out of the 7wingz platform.
-You are friendly, clear, and supportive.
+This username was resolved securely from the authenticated Clerk
+user ID on the server. It is not the Clerk username.
 
-============================================================
-CAPABILITIES
-============================================================
+Website availability:
+${
+  websiteAvailable
+    ? "The user's website data was successfully loaded."
+    : "No website data was found."
+}
 
-You have access to the following tools:
+Your responsibilities:
 
-- get_user_website – view a user's website content and data.
-- get_user_subscription – check subscription plan, expiry, and credits.
-- get_user_usage – see today's AI usage.
-- get_template_details – get template info.
-- list_tutorials – show all available tutorials.
-- get_tutorial_content – read a specific tutorial step‑by‑step.
-- search_tutorials – find tutorials on a topic.
-- list_platform_features – describe all platform features.
+1. Answer the user's request clearly.
+2. When the user asks about their website, use the supplied website data.
+3. Give constructive comments about the website's design,
+   content, usability, responsiveness, accessibility, SEO,
+   performance, and calls to action when relevant.
+4. Do not claim that you visited or tested the live website.
+5. Base website comments only on the supplied website code.
+6. If website data is unavailable, explain that no website
+   content was found for the authenticated user's website.
+7. Do not retrieve or use a Clerk username.
+8. Do not ask the user for a username.
+9. Do not invent visitor information, analytics, website
+   content, enquiry records, or image URLs.
+10. Use the Unsplash tool only when the user requests images
+    or image URLs.
+11. Be concise, practical, and helpful.
 
-============================================================
-BEHAVIOUR
-============================================================
+ENQUIRY TOOL:
 
-- Always be helpful, concise, and encouraging.
-- When a user asks about a feature, first check if a tutorial exists.
-- If the user asks for help with their own website, use get_user_website to understand their current setup.
-- If the user asks about limits or credits, use get_user_subscription and get_user_usage.
-- Always provide actionable steps.
-- If you don't have enough information, ask clarifying questions.
+- When the user asks about enquiries, messages, contact form
+  submissions, or leads, call get_user_enquiries.
+- The tool automatically uses the authenticated user's website.
+- Never request a different username.
+- Answer using only the enquiry records returned by the tool.
+- Do not invent enquiry records.
+- Do not claim an enquiry exists unless it was returned by the tool.
 
-============================================================
-RULES
-============================================================
+ANALYTICS TOOLS:
 
-- You are READ‑ONLY. You never modify any data.
-- You never reveal API keys or other secrets.
-- You may suggest code changes, but you cannot implement them.
-- You must eventually answer the user's question – don't keep investigating forever.
+- When the user asks for total visitors, visitor count,
+  website traffic, or total visits, call get_visit_count.
+- When the user asks about traffic trends, daily visits,
+  monthly visits, or traffic over time, call get_visit_chart_data.
+- When the user asks how many visitors are currently active,
+  call get_active_visitors_count.
+- Active visitors represent an estimate based on distinct IP
+  addresses during the last five minutes.
+- Never invent analytics values.
+- Never ask the user for a username.
+- The server automatically uses the authenticated user's website.
 
-============================================================
-ANSWER FORMAT
-============================================================
+WEBSITE REVIEW:
 
-When providing guidance, structure your response as:
+If the user asks for a website review, provide:
 
-1. **Overview** – what the user wants to achieve.
-2. **Steps** – numbered instructions.
-3. **Resources** – link to relevant tutorials or features.
-4. **Next steps** – what the user can do next.
-
-Be warm and approachable, like a friendly support representative.
+- Overall impression
+- Strengths
+- Problems or risks
+- Recommended improvements
+- A short final comment about the site
 `;
-
-/* ============================================================
-   TOOL EXECUTION
-============================================================ */
-
-async function executeTool(name: string, args: any) {
-  switch (name) {
-    case "get_user_website":
-      return await getUserWebsite(String(args?.username || ""));
-    case "get_user_subscription":
-      return await getUserSubscription(String(args?.userId || ""));
-    case "get_user_usage":
-      return await getUserUsage(String(args?.userId || ""));
-    case "get_template_details":
-      return await getTemplateDetails(String(args?.templateId || ""));
-    case "list_tutorials":
-      return await listTutorials();
-    case "get_tutorial_content":
-      return await getTutorialContent(String(args?.tutorialId || ""));
-    case "search_tutorials":
-      return await searchTutorials(String(args?.query || ""));
-    case "list_platform_features":
-      return await listPlatformFeatures();
-    default:
-      throw new Error(`Unknown tool: ${name}`);
-  }
 }
 
-/* ============================================================
-   LIMIT LARGE TOOL RESPONSES
-============================================================ */
+// ============================================================
+// 8. WEBSITE REVIEW PROMPT
+// ============================================================
 
-function limitToolResult(result: any) {
-  const MAX_CHARS = 50000;
-  const serialized = JSON.stringify(result);
-  if (serialized.length <= MAX_CHARS) {
-    return serialized;
+function createWebsiteReviewPrompt(
+  username: string,
+  website: WebsiteContent,
+): string {
+  return `
+Review the website belonging to "${username}".
+
+The website content is provided below.
+
+Analyse only what can be determined from the supplied HTML,
+JavaScript, and data.
+
+Provide a helpful comment covering:
+
+1. Overall impression
+2. Website purpose and target audience
+3. Visual design and layout
+4. User experience and navigation
+5. Mobile responsiveness
+6. Content clarity
+7. Accessibility
+8. Performance concerns
+9. SEO opportunities
+10. Calls to action and conversion opportunities
+11. Strengths
+12. Most important improvements
+
+Rules:
+
+- Do not claim to have opened or tested the live website.
+- Do not invent missing sections or features.
+- Clearly state when something cannot be determined from the code.
+- Mention actual sections, text, components, or patterns when available.
+- Be constructive and specific.
+- Return a polished review suitable for showing directly to the user.
+- Use headings and bullet points.
+- Do not use code fences.
+
+HTML:
+${website.html}
+
+SCRIPT:
+${website.script}
+
+DATA:
+${website.data}
+`;
+}
+
+// ============================================================
+// 9. WEBSITE FETCHING
+// ============================================================
+
+async function fetchUserWebsite(
+  websiteUsername: string,
+): Promise<WebsiteContent | null> {
+  const safeUsername = normalizeUsername(websiteUsername);
+
+  if (!safeUsername) {
+    return null;
   }
-  return JSON.stringify({
-    truncated: true,
-    message:
-      "The tool response was too large. Please use more specific queries.",
-    data: serialized.slice(0, MAX_CHARS),
+
+  return getWebsiteContent(safeUsername);
+}
+
+// ============================================================
+// 10. UNSPLASH IMPLEMENTATION
+// ============================================================
+
+async function searchUnsplashImages(query: string) {
+  const search = requireString(query, "Image search query");
+
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+
+  if (!accessKey) {
+    throw new Error("Missing UNSPLASH_ACCESS_KEY.");
+  }
+
+  const url = new URL(UNSPLASH_API_URL);
+
+  url.searchParams.set("query", search);
+  url.searchParams.set("per_page", "6");
+  url.searchParams.set("orientation", "landscape");
+  url.searchParams.set("content_filter", "high");
+
+  console.log("[Unsplash] Searching for:", search);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Client-ID ${accessKey}`,
+      "Accept-Version": "v1",
+    },
+    cache: "no-store",
   });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+
+    throw new Error(
+      `Unsplash API error ${response.status}${
+        details ? `: ${details.slice(0, 300)}` : ""
+      }`,
+    );
+  }
+
+  const data = (await response.json()) as UnsplashResponse;
+
+  const results = Array.isArray(data.results)
+    ? data.results.map((photo) => ({
+        id: photo.id ?? "",
+        imageUrl:
+          photo.urls?.regular ||
+          photo.urls?.small ||
+          "",
+        imageUrlSmall: photo.urls?.small || "",
+        imageUrlFull: photo.urls?.full || "",
+        altDescription:
+          photo.alt_description ||
+          photo.description ||
+          search,
+        width: photo.width ?? null,
+        height: photo.height ?? null,
+        photographer:
+          photo.user?.name || "Unknown photographer",
+        photographerUsername:
+          photo.user?.username || "",
+        photographerUrl:
+          photo.user?.links?.html || "",
+        unsplashUrl:
+          photo.links?.html || "",
+        downloadLocation:
+          photo.links?.download_location || "",
+      }))
+    : [];
+
+  console.log("[Unsplash] Results found:", results.length);
+
+  return {
+    query: search,
+    total: data.total ?? 0,
+    results,
+  };
 }
 
-/* ============================================================
-   POST /api/dev-agent (Customer Success Agent)
-============================================================ */
+// ============================================================
+// 11. ENQUIRY IMPLEMENTATION
+// ============================================================
 
-export async function POST(request: Request) {
-  try {
-    validateEnvironment();
+async function getUserEnquiries(
+  websiteUsername: string,
+) {
+  const enquiries = await getEnquiries(websiteUsername);
 
-    const body = await request.json();
+  return {
+    total: enquiries.length,
+    enquiries: enquiries.map((enquiry: any) => ({
+      id: enquiry.id,
+      name: enquiry.name ?? null,
+      email:
+        enquiry.email ??
+        enquiry.Email ??
+        null,
+      created_at: enquiry.created_at,
+      message:
+        enquiry.message ??
+        enquiry.Message ??
+        null,
+      fields: enquiry,
+    })),
+  };
+}
 
-    const userMessage = typeof body?.message === "string" ? body.message.trim() : "";
-    const username = typeof body?.username === "string" ? body.username.trim() : undefined;
-    const userId = typeof body?.userId === "string" ? body.userId.trim() : undefined;
+// ============================================================
+// 12. TOOL EXECUTOR
+// ============================================================
 
-    if (!userMessage) {
-      return Response.json(
-        { success: false, error: "Message is required." },
-        { status: 400 }
+async function executeTool(
+  name: string,
+  args: ToolArgs,
+  websiteUsername: string,
+  requestUrl: string,
+) {
+  console.log("[Tool] Executing:", {
+    name,
+    websiteUsername,
+    args,
+  });
+
+  switch (name) {
+    case "search_unsplash_images": {
+      const query = requireString(args.query, "query");
+
+      return searchUnsplashImages(query);
+    }
+
+    case "get_user_enquiries": {
+      return getUserEnquiries(websiteUsername);
+    }
+
+     case "get_visit_count": {
+      const totalVisits = await getVisitCount(
+        websiteUsername,
+      );
+
+      return {
+        username: websiteUsername,
+        totalVisits,
+      };
+    }
+
+    case "get_visit_chart_data": {
+      const dailyVisits = await getVisitChartData(
+        websiteUsername,
+      );
+
+      return {
+        username: websiteUsername,
+        dailyVisits,
+      };
+    }
+
+    case "get_active_visitors_count": {
+      const windowMinutes = 5;
+
+      const activeVisitors =
+        await getActiveVisitorsCount(
+          websiteUsername,
+          windowMinutes,
+        );
+
+      return {
+        username: websiteUsername,
+        activeVisitors,
+        windowMinutes,
+        note:
+          "This is an estimate based on distinct IP addresses with visits during the selected time window.",
+      };
+    }
+
+      case "get_7winks_tutorial": {
+      const topic = requireString(
+        args.topic,
+        "topic",
+      );
+
+      return get7winksTutorial(
+        topic,
+        requestUrl,
       );
     }
 
-    console.log("\n==================================================");
-    console.log("7wingz Customer Success Agent");
-    console.log("User request:", userMessage);
-    if (username) console.log("Username:", username);
-    if (userId) console.log("User ID:", userId);
-    console.log("==================================================\n");
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+   
+  }
 
-    // Build initial messages
-    const messages: any[] = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userMessage },
-    ];
 
-    if (username || userId) {
-      const context = `The user${username ? ` has username "${username}"` : ""}${username && userId ? " and" : ""}${userId ? ` user ID "${userId}"` : ""}. Use this info when calling tools.`;
-      messages.splice(1, 0, { role: "system", content: context });
-    }
+  async function get7winksTutorial(
+  topic: string,
+  requestUrl: string,
+) {
+  const searchTopic = requireString(
+    topic,
+    "Tutorial topic",
+  );
 
-    const MAX_ITERATIONS = 8;
-    const toolCallHistory = new Map<string, number>();
+  const requestOrigin = new URL(requestUrl).origin;
 
-    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      console.log(`\n===== INVESTIGATION ${iteration + 1}/${MAX_ITERATIONS} =====`);
+  const pagePaths = [
+    {
+      title: "7winks Documentation",
+      path: "/doc",
+    },
+    {
+      title: "7winks Tutorial",
+      path: "/tutorial",
+    },
+  ];
 
-      // Use a valid model name
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // changed from "gpt-5-mini"
-        messages,
-        tools,
-        tool_choice: "auto",
+  const pages = await Promise.all(
+    pagePaths.map(async (page) => {
+      const pageUrl = new URL(
+        page.path,
+        requestOrigin,
+      ).toString();
+
+      const response = await fetch(pageUrl, {
+        method: "GET",
+        headers: {
+          Accept: "text/html",
+        },
+        cache: "no-store",
       });
 
-      const assistantMessage = response.choices?.[0]?.message;
-      if (!assistantMessage) {
-        throw new Error("OpenAI returned no assistant message.");
+      if (!response.ok) {
+        throw new Error(
+          `Unable to load ${page.title}: ${response.status}`,
+        );
       }
 
-      console.log("Assistant:", assistantMessage.content || "(tool request)");
+      const html = await response.text();
 
-      const toolCalls = assistantMessage.tool_calls;
-      if (!toolCalls || toolCalls.length === 0) {
+      return {
+        title: page.title,
+        path: page.path,
+        url: pageUrl,
+        html,
+      };
+    }),
+  );
+
+  return {
+    topic: searchTopic,
+    sources: pages,
+    instruction:
+      "Use only the official 7winks documentation and tutorial content returned here. If the topic is not covered, clearly explain that it was not found in the available documentation.",
+  };
+}
+
+// ============================================================
+// 13. API ROUTE
+// ============================================================
+
+export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
+
+  console.log("[Agent] Request started:", requestId);
+
+  try {
+    validateEnvironment();
+
+    // --------------------------------------------------------
+    // A. AUTHENTICATION
+    // --------------------------------------------------------
+
+    const { userId } = await auth();
+
+    console.log("[Agent] Authentication status:", {
+      requestId,
+      authenticated: Boolean(userId),
+    });
+
+    if (!userId) {
+      return Response.json(
+        {
+          success: false,
+          error: "You must be signed in.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
+
+    // --------------------------------------------------------
+    // B. RESOLVE WEBSITE USERNAME FROM CLERK USER ID
+    // --------------------------------------------------------
+
+    const websiteUsername =
+      await getAuthenticatedWebsiteUsername();
+
+    console.log("[Agent] Verified website username:", {
+      requestId,
+      websiteUsername,
+    });
+
+    // --------------------------------------------------------
+    // C. READ REQUEST BODY
+    // --------------------------------------------------------
+
+    const body = (await request.json()) as AgentRequestBody;
+
+    const userMessage =
+      typeof body.message === "string"
+        ? body.message.trim()
+        : "";
+
+    if (!userMessage) {
+      return Response.json(
+        {
+          success: false,
+          error: "Message is required.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    // --------------------------------------------------------
+    // D. FETCH WEBSITE DATA
+    // --------------------------------------------------------
+
+    const website =
+      await fetchUserWebsite(websiteUsername);
+
+    const websiteAvailable = Boolean(website);
+
+    console.log("[Agent] Website lookup:", {
+      requestId,
+      websiteUsername,
+      websiteAvailable,
+    });
+
+    // --------------------------------------------------------
+    // E. CREATE CONVERSATION
+    // --------------------------------------------------------
+
+    const messages: any[] = [
+      {
+        role: "system",
+        content: createSystemPrompt(
+          websiteUsername,
+          websiteAvailable,
+        ),
+      },
+      {
+        role: "user",
+        content: userMessage,
+      },
+    ];
+
+    if (website) {
+      messages.push({
+        role: "system",
+        content: `
+The authenticated user's website data is:
+
+HTML:
+${website.html}
+
+SCRIPT:
+${website.script}
+
+DATA:
+${website.data}
+`,
+      });
+    }
+
+    // --------------------------------------------------------
+    // F. WEBSITE REVIEW SHORTCUT
+    // --------------------------------------------------------
+
+    const reviewRequestPattern =
+      /\b(review|analyse|analyze|comment|feedback|audit|impression|what do you think)\b/i;
+
+    const websiteRequestPattern =
+      /\b(website|site|webpage|page|homepage|landing page)\b/i;
+
+    const isWebsiteReviewRequest =
+      reviewRequestPattern.test(userMessage) &&
+      websiteRequestPattern.test(userMessage);
+
+    if (isWebsiteReviewRequest) {
+      if (!website) {
         return Response.json({
           success: true,
-          answer: assistantMessage.content || "No analysis was returned.",
+          username: websiteUsername,
+          answer:
+            "I could not find website data for your authenticated website.",
+          websiteReview: null,
+        });
+      }
+
+      const reviewResponse =
+        await openai.responses.create({
+          model: MODEL,
+          input: createWebsiteReviewPrompt(
+            websiteUsername,
+            website,
+          ),
+        });
+
+      const review =
+        reviewResponse.output_text?.trim() ||
+        "I could not generate a website review.";
+
+      return Response.json({
+        success: true,
+        username: websiteUsername,
+        answer: review,
+        websiteReview: review,
+      });
+    }
+
+    // --------------------------------------------------------
+    // G. TOOL-CALLING LOOP
+    // --------------------------------------------------------
+
+    for (
+      let round = 0;
+      round < MAX_TOOL_ROUNDS;
+      round++
+    ) {
+      console.log("[Agent] Tool round:", {
+        requestId,
+        round: round + 1,
+      });
+
+      const response =
+        await openai.chat.completions.create({
+          model: MODEL,
+          messages,
+          tools,
+          tool_choice: "auto",
+        });
+
+      const assistantMessage =
+        response.choices?.[0]?.message;
+
+      if (!assistantMessage) {
+        throw new Error(
+          "OpenAI returned no assistant message.",
+        );
+      }
+
+      // ------------------------------------------------------
+      // H. FINAL RESPONSE
+      // ------------------------------------------------------
+
+      if (!assistantMessage.tool_calls?.length) {
+        const answer =
+          assistantMessage.content?.trim() ||
+          "I could not produce an answer.";
+
+        console.log("[Agent] Final answer generated:", {
+          requestId,
+          websiteUsername,
+          answerLength: answer.length,
+        });
+
+        return Response.json({
+          success: true,
+          answer,
+          username: websiteUsername,
+          websiteAvailable,
         });
       }
 
       messages.push(assistantMessage);
 
-      for (const toolCall of toolCalls) {
+      // ------------------------------------------------------
+      // I. EXECUTE TOOL CALLS
+      // ------------------------------------------------------
+
+      for (const toolCall of assistantMessage.tool_calls) {
         if (toolCall.type !== "function") {
-          console.warn("Unsupported tool call:", toolCall.type);
           continue;
         }
 
         const toolName = toolCall.function.name;
-        const rawArguments = toolCall.function.arguments || "{}";
-        let args: any = {};
+
+        let args: ToolArgs = {};
+
         try {
-          args = JSON.parse(rawArguments);
-        } catch (error) {
-          console.error("Could not parse tool arguments:", rawArguments);
+          args = JSON.parse(
+            toolCall.function.arguments || "{}",
+          ) as ToolArgs;
+        } catch {
+          console.error("[Tool] Invalid arguments:", {
+            requestId,
+            toolName,
+            rawArguments:
+              toolCall.function.arguments,
+          });
+
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
             content: JSON.stringify({
-              error: "Invalid JSON arguments supplied for this tool.",
+              error: "Invalid tool arguments.",
             }),
           });
-          continue;
-        }
 
-        // Repeated call detection
-        const signature = `${toolName}:${JSON.stringify(args)}`;
-        const previousCount = toolCallHistory.get(signature) || 0;
-        const currentCount = previousCount + 1;
-        toolCallHistory.set(signature, currentCount);
-
-        console.log("Tool:", toolName);
-        console.log("Arguments:", args);
-
-        if (currentCount >= 3) {
-          console.warn("Repeated tool call detected:", signature);
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify({
-              error:
-                "This exact tool call has been attempted multiple times. Do not repeat it. Use the evidence already collected and provide the final answer.",
-            }),
-          });
           continue;
         }
 
         try {
-          const result = await executeTool(toolName, args);
-          const safeResult = limitToolResult(result);
+          const result = await executeTool(
+            toolName,
+            args,
+            websiteUsername,
+             request.url,
+          );
+
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
-            content: safeResult,
+            content: JSON.stringify(result),
           });
-          console.log("Tool completed:", toolName);
-        } catch (error: any) {
-          console.error(`Tool failed (${toolName}):`, error);
+
+          console.log("[Tool] Completed:", {
+            requestId,
+            toolName,
+          });
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Tool execution failed.";
+
+          console.error("[Tool] Failed:", {
+            requestId,
+            toolName,
+            error: errorMessage,
+          });
+
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
             content: JSON.stringify({
-              error: error?.message || "Tool execution failed.",
+              error: errorMessage,
             }),
           });
         }
       }
     }
 
-    // Final answer pass (no tools)
-    console.log("\n===== INVESTIGATION LIMIT REACHED =====");
-    console.log("Requesting final answer without tools...");
+    // --------------------------------------------------------
+    // J. TOOL LIMIT REACHED
+    // --------------------------------------------------------
 
-    messages.push({
-      role: "user",
-      content: `
-The investigation limit has been reached.
-
-STOP investigating.
-Do not request additional tools.
-Answer the user's original question NOW using the information already collected.
-
-Be specific, practical, and helpful.
-If you identified a tutorial or feature, reference it clearly.
-If you need more info that you don't have, suggest what the user should do next.
-
-Do not claim that you changed anything.
-`,
+    console.warn("[Agent] Tool-calling limit reached:", {
+      requestId,
+      maxToolRounds: MAX_TOOL_ROUNDS,
     });
-
-    const finalResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // changed from "gpt-5-mini"
-      messages,
-    });
-
-    const finalMessage = finalResponse.choices?.[0]?.message;
-    const finalAnswer = finalMessage?.content?.trim();
-
-    console.log("Final answer generated:", Boolean(finalAnswer));
 
     return Response.json({
       success: true,
+      username: websiteUsername,
+      websiteAvailable,
       answer:
-        finalAnswer ||
-        "The agent completed its investigation but could not produce a final analysis.",
+        "The agent reached its tool-calling limit. Please try a more specific question.",
     });
-  } catch (error: any) {
-    console.error("\n===== 7WINGZ CUSTOMER SUCCESS AGENT ERROR =====");
-    console.error(error);
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "The agent failed.";
+
+    console.error("[Agent] Request failed:", {
+      requestId,
+      error: errorMessage,
+    });
+
+    const status =
+      errorMessage === "You must be signed in."
+        ? 401
+        : errorMessage.includes(
+              "No website username is linked",
+            )
+          ? 403
+          : 500;
 
     return Response.json(
       {
         success: false,
-        error: error?.message || "Customer success agent failed.",
+        error: errorMessage,
       },
-      { status: 500 }
+      {
+        status,
+      },
     );
   }
 }
