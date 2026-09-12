@@ -187,54 +187,7 @@ export default function UserAgent({ username }: UserAgentProps) {
         )}
       </div>
 
-      <div className="w-full px-4 pb-4 pt-8 sm:px-6">
-        <div className="mx-auto w-full max-w-2xl">
-          <div className="flex h-[52px] items-center gap-0 rounded-2xl border border-zinc-200/80 bg-white px-0 shadow-sm transition-shadow focus-within:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="relative flex h-full shrink-0 items-center border-r border-zinc-100 dark:border-zinc-800">
-              <select
-                defaultValue="gpt-4o-mini"
-                disabled={loading}
-                aria-label="Select model"
-                className="h-full w-[130px] cursor-pointer appearance-none bg-transparent pl-5 pr-8 text-sm font-medium text-zinc-800 outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200"
-              >
-                <option value="gpt-4o-mini">
-                  GPT-4o mini
-                </option>
-              </select>
-
-              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-400" />
-            </div>
-
-            <input
-              ref={inputRef}
-              type="text"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-              placeholder="Ask a question..."
-              className="min-w-0 flex-1 bg-transparent px-4 text-sm text-zinc-800 outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-            />
-
-            <button
-              type="button"
-              onClick={askAgent}
-              disabled={loading || !message.trim()}
-              aria-label="Send message"
-              className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center text-zinc-300 transition-colors hover:text-zinc-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-600 dark:hover:text-zinc-300"
-            >
-              <Send
-                className="h-4 w-4 -rotate-12"
-                strokeWidth={1.5}
-              />
-            </button>
-          </div>
-
-          <p className="mt-3 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
-            AI-generated code analysis may contain mistakes.
-          </p>
-        </div>
-      </div>
+     
     </div>
   );
 }
