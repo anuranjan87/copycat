@@ -1,7 +1,6 @@
 "use client";
 import { ChevronRight} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { ChevronDown, Plus, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -379,20 +378,23 @@ function WelcomeMessage({
   };
 
   return (
-    <Card className="mx-auto max-w-screen-sm sm:mb-14 sm:w-full">
-      <CardHeader>
+    <Card
+      className="relative before:bg-white/90 mx-auto max-w-screen-sm overflow-hidden border-0 sm:mb-14 sm:w-full"
+      style={{
+        aspectRatio: "958 / 911",
+        backgroundImage:
+          'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design.png")',
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundSize: "cover",
+         borderRadius: "30px",
+      }}
+    >
+      <CardHeader className="relative z-10">
         <CardTitle className="mx-auto" />
       </CardHeader>
 
-      <Image
-        src="https://49iw5aq3b5e3nyxk.public.blob.vercel-storage.com/New%20Project%20(7)-WLAAPpQxzUsRqvKyfpfiKc8Wb0D6yw.png"
-        alt="New Project"
-        width={250}
-        height={250}
-        className="mx-auto mb-1 transition-opacity duration-300 hover:opacity-80"
-      />
-
-      <CardContent className="flex flex-col">
+      <CardContent className="relative mt-3 z-10 flex flex-col bg-white/10 dark:bg-zinc-950/10">
         <h1 className="mx-auto mb-2 text-center font-mono text-[1.1rem] font-bold">
           Welcome, {user?.firstName || "Guest"}! to the Tailwind Genie
         </h1>
@@ -401,16 +403,8 @@ function WelcomeMessage({
           Create elegant and sophisticated components in just a few prompts
         </p>
 
-        <Image
-          src="/jas.gif"
-          width={160}
-          height={160}
-          alt="Jis animation"
-          className="giphy-embed mx-auto mb-5"
-        />
-
-       <div className="mb-6 -mt-9">
-  <div className="mb-4 flex justify-center gap-2">
+      <div className="mt-[13rem] mb-1">
+  <div className="-mb-3 flex justify-center gap-2">
     <button
       type="button"
       onClick={() => changeWelcomeTab("website")}

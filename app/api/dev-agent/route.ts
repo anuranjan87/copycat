@@ -361,6 +361,33 @@ const tools = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "research_domain_names",
+      description:
+        "Research available six-letter .com domain names for a concept. Use GoDaddy suggestions and live availability checks, then return candidates below the requested annual USD price. This is read-only and never purchases a domain.",
+      parameters: {
+        type: "object",
+        properties: {
+          concept: {
+            type: "string",
+            description: "The idea, brand, product, or keywords to inspire names.",
+          },
+          maxPriceUsd: {
+            type: "number",
+            description: "Maximum first-year price in USD.",
+          },
+          limit: {
+            type: "integer",
+            description: "Maximum number of matching names to return, from 1 to 25.",
+          },
+        },
+        required: ["concept", "maxPriceUsd"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 // ============================================================
 // 7. SYSTEM PROMPT
@@ -395,6 +422,11 @@ ${
 }
 
 CORE BEHAVIOR:
+
+- When the user asks for domain ideas, available six-letter .com names,
+  or names under a price, call research_domain_names. Treat its matches
+  as live research results, never claim they are exhaustive, and never
+  imply that the agent purchased or reserved a domain.
 
 - Every final user-facing answer MUST be returned as a complete HTML
   fragment styled with Tailwind utility classes. Never return Markdown,
@@ -772,6 +804,126 @@ async function getGoogleAdsCampaigns(userId: string) {
 // 12. TOOL EXECUTOR
 // ============================================================
 
+async function researchDomainNames(
+  concept: string,
+  maxPriceUsd: number,
+  limit = 10,
+) {
+  const pat = process.env.GODADDY_PAT;
+
+  if (!pat) {
+    throw new Error("GODADDY_PAT is not configured.");
+  }
+
+  if (!Number.isFinite(maxPriceUsd) || maxPriceUsd <= 0) {
+    throw new Error("maxPriceUsd must be greater than zero.");
+  }
+
+  const resultLimit = Math.min(25, Math.max(1, Math.floor(limit)));
+  const headers = {
+    Authorization: `Bearer ${pat}`,
+    Accept: "application/json",
+  };
+  const baseUrl = "https://api.godaddy.com";
+  const suggestionsUrl = new URL(`${baseUrl}/v3/domains/suggestions`);
+
+  suggestionsUrl.searchParams.set("query", concept.trim());
+  suggestionsUrl.searchParams.set("tlds", "com");
+  suggestionsUrl.searchParams.set("pageSize", "50");
+  suggestionsUrl.searchParams.set("lengthMin", "6");
+  suggestionsUrl.searchParams.set("lengthMax", "6");
+
+  const suggestionsResponse = await fetch(suggestionsUrl, {
+    headers,
+    cache: "no-store",
+  });
+
+  const suggestionsText = await suggestionsResponse.text();
+  const suggestionsData = suggestionsText
+    ? JSON.parse(suggestionsText)
+    : [];
+
+  if (!suggestionsResponse.ok) {
+    throw new Error(
+      `GoDaddy suggestions failed (${suggestionsResponse.status}).`,
+    );
+  }
+
+  const suggestions = Array.isArray(suggestionsData)
+    ? suggestionsData
+    : suggestionsData?.domains || suggestionsData?.suggestions || [];
+
+  const candidates = Array.from(
+    new Set(
+      suggestions
+        .map((item: unknown) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const value = item as Record<string, unknown>;
+            return value.domain || value.name;
+          }
+          return null;
+        })
+        .filter(
+          (value): value is string =>
+            typeof value === "string" &&
+            /^[a-z]{6}\.com$/i.test(value),
+        )
+        .map((value) => value.toLowerCase()),
+    ),
+  );
+
+  const checked = await Promise.all(
+    candidates.map(async (domain) => {
+      try {
+        const response = await fetch(
+          `${baseUrl}/v3/domains/check-availability?domain=${encodeURIComponent(domain)}`,
+          { headers, cache: "no-store" },
+        );
+        const data = await response.json();
+        const cents = Number(data?.prices?.[0]?.price?.value);
+        const priceUsd = Number.isFinite(cents) ? cents / 100 : null;
+
+        return {
+          domain,
+          available: data?.available === true,
+          priceUsd,
+          renewalPriceUsd: Number.isFinite(
+            Number(data?.prices?.[0]?.renewalPrice?.value),
+          )
+            ? Number(data.prices[0].renewalPrice.value) / 100
+            : null,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const matches = checked
+    .filter(
+      (item): item is NonNullable<typeof item> =>
+        Boolean(
+          item?.available &&
+            item.priceUsd !== null &&
+            item.priceUsd <= maxPriceUsd,
+        ),
+    )
+    .sort((left, right) => (left.priceUsd || 0) - (right.priceUsd || 0))
+    .slice(0, resultLimit);
+
+  return {
+    concept,
+    tld: ".com",
+    length: 6,
+    maxPriceUsd,
+    matches,
+    candidatesChecked: candidates.length,
+    note:
+      "Results are a live, GoDaddy-ranked suggestion shortlist, not an exhaustive scan of every possible six-letter .com name.",
+  };
+}
+
 async function executeTool(
   name: string,
   args: ToolArgs,
@@ -838,6 +990,14 @@ async function executeTool(
 
     case "get_google_ads_campaigns": {
       return getGoogleAdsCampaigns(userId);
+    }
+
+    case "research_domain_names": {
+      const concept = requireString(args.concept, "concept");
+      const maxPriceUsd = Number(args.maxPriceUsd);
+      const limit = args.limit === undefined ? 10 : Number(args.limit);
+
+      return researchDomainNames(concept, maxPriceUsd, limit);
     }
 
       case "get_7winks_tutorial": {

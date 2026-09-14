@@ -121,6 +121,7 @@ export default function Page({ params }: PageProps) {
 
   const [activeCategory, setActiveCategory] = useState<string>("Landing Page");
   const [activeUIComponent, setActiveUIComponent] = useState("Colors");
+  const isUsernameTabActive = activeCategory === forYouTabName;
 
   // ------------------------------------------------------------
   // Persist and restore the last selected category
@@ -434,7 +435,20 @@ export default function Page({ params }: PageProps) {
   // ============================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 text-foreground font-sans">
+    <div
+      className="min-h-screen bg-gradient-to-b from-background to-muted/20 text-foreground font-sans"
+      style={
+        isUsernameTabActive
+          ? {
+              backgroundImage: `linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)), url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/ChatGPT%20Image%20Sep%2013%2C%202026%2C%2008_23_17%20PM.png")`,
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              backgroundSize: "cover",
+              backgroundAttachment: "scroll",
+            }
+          : undefined
+      }
+    >
       {/* Blank Editor transition */}
       {isOpeningBlankEditor && (
         <div className="fixed inset-0 z-[9999] pointer-events-none overflow-hidden">
