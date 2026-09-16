@@ -12,6 +12,7 @@ import {
   getVisitChartData,
   getActiveVisitorsCount,
 } from "@/lib/website-actions";
+import { agentTools } from "@/app/api/agents/tools";
 
 const sql = neon(process.env.POSTGRES_URL!);
 
@@ -251,7 +252,13 @@ async function getAuthenticatedWebsiteUsername(): Promise<string> {
 // 6. TOOL DEFINITIONS
 // ============================================================
 
-const tools = [
+const tools = agentTools.map((tool) => ({
+  type: "function" as const,
+  function: tool.function,
+}));
+
+/*
+const legacyTools = [
   {
     type: "function" as const,
     function: {
@@ -361,34 +368,8 @@ const tools = [
       },
     },
   },
-  {
-    type: "function" as const,
-    function: {
-      name: "research_domain_names",
-      description:
-        "Research available six-letter .com domain names for a concept. Use GoDaddy suggestions and live availability checks, then return candidates below the requested annual USD price. This is read-only and never purchases a domain.",
-      parameters: {
-        type: "object",
-        properties: {
-          concept: {
-            type: "string",
-            description: "The idea, brand, product, or keywords to inspire names.",
-          },
-          maxPriceUsd: {
-            type: "number",
-            description: "Maximum first-year price in USD.",
-          },
-          limit: {
-            type: "integer",
-            description: "Maximum number of matching names to return, from 1 to 25.",
-          },
-        },
-        required: ["concept", "maxPriceUsd"],
-        additionalProperties: false,
-      },
-    },
-  },
 ];
+*/
 // ============================================================
 // 7. SYSTEM PROMPT
 // ============================================================
@@ -423,29 +404,45 @@ ${
 
 CORE BEHAVIOR:
 
-- When the user asks for domain ideas, available six-letter .com names,
-  or names under a price, call research_domain_names. Treat its matches
-  as live research results, never claim they are exhaustive, and never
-  imply that the agent purchased or reserved a domain.
-
 - Every final user-facing answer MUST be returned as a complete HTML
   fragment styled with Tailwind utility classes. Never return Markdown,
   plain text, JSON, code fences, or a full document with html/head/body.
-- Use the attached Google Ads recommendation layout as the visual and
-  editorial model for every topic: a clear lead headline, a short signal,
-  flowing editorial sections, useful recommendations, and a closing thought.
-- Use semantic HTML such as section, header, h1, h2, h3, p, ul, ol,
-  li, article, and span. Use responsive Tailwind classes such as
-  max-w-5xl, flex, gap, border, bg, text, px, py, sm:, md:, and lg:.
-  Keep class names valid and readable.
-- Make the answer feel like an editorial magazine spread, not a dashboard
-  and not a text dump. Use a strong display headline, a quiet eyebrow,
-  wide readable measure, generous whitespace, thin rules, pull quotes,
-  numbered sections, short captions, and restrained accent colors.
-- Do NOT use card grids, nested cards, floating panels, pill-heavy UI,
-  dashboard tiles, or boxed content for every paragraph. Prefer full-width
-  sections, open layouts, editorial columns, dividers, and typographic
-  hierarchy. Use a border or background only when it adds real structure.
+- This formatting rule is strict and has priority over any previous
+  conversation style. Do not imitate HTML examples from the conversation
+  if they contain cards, buttons, panels, or decorative UI.
+- Treat the response as a plain-English article rendered as HTML, not as a
+  designed interface or marketing landing page. The words and their order
+  should do most of the work. Start with one clear h1, then write natural
+  paragraphs and only use h2/h3 headings or lists when the subject genuinely
+  needs them.
+  should do most of the work. Use one clear h1 followed by natural
+  paragraphs. Add h2, h3, or a list only when the subject genuinely needs it.
+- Use simple semantic HTML such as section, h1, h2, h3, p, ul, ol, li,
+  article, strong, and em. Keep Tailwind classes limited to readable width,
+- Default output shape: one unstyled wrapper containing an h1 and a few p
+  elements. An optional h2 or simple ul/ol is allowed when useful. Do not
+  use article, nested section wrappers, or multiple layout containers just
+  to make the answer look designed.
+- Before returning the HTML, silently check every element: if it is a
+  button, CTA, card, panel, border, shadow, rounded container, gradient,
+  badge, pill, or decorative background, remove it.
+  spacing, typography, and color, for example max-w-3xl, mx-auto, px-6,
+  py-8, text-lg, leading-7, and text-zinc-700.
+- The visual result must feel calm, literary, and easy to read: generous
+  whitespace, a narrow reading measure, normal paragraph flow, and modest
+  typographic hierarchy. It should resemble a thoughtful written answer on
+  a clean page, not a product UI.
+- Never use cards, card grids, panels, tiles, floating boxes, badges, pills,
+  chips, callout boxes, shadows, gradients, decorative borders, or colored
+  backgrounds around content. Do not wrap each section or paragraph in a
+  bordered or rounded container. Avoid flex/grid layouts unless they are
+  essential to explain the content.
+- Never add buttons, links styled as buttons, signup prompts, CTA blocks,
+  forms, menus, tabs, or other interface controls unless the user explicitly
+  asks for that control. End with a useful conclusion or next step written
+  as prose, not a button.
+- Do not use pull quotes, eyebrow labels, captions, fake statistics, or
+  decorative section numbering unless the user explicitly requests them.
 - Keep the visual system responsive: stack columns on small screens,
   use sm:, md:, and lg: breakpoints, keep text readable, prevent overflow,
   and make long recommendations wrap naturally on mobile.
@@ -572,11 +569,16 @@ Provide a helpful comment covering:
 Rules:
 
 - Return only a complete Tailwind CSS HTML fragment, never Markdown.
-- Structure the review like a polished editorial mini-report with a lead
-  heading, signal section, open recommendation sections, and a final thought.
-- Avoid card grids and boxed panels. Use typography, whitespace, rules,
-  numbered sections, and pull quotes to create rhythm instead.
-- Use semantic HTML and responsive Tailwind utility classes.
+- Structure the review like a clear written critique with a lead heading,
+  natural paragraphs, useful headings, and a final thought.
+- Make it read like plain English on a clean page. Use whitespace,
+  readable typography, and ordinary paragraph flow for rhythm.
+- Do not use cards, panels, tiles, boxes, shadows, gradients, decorative
+  borders, pills, badges, pull quotes, or colored section backgrounds.
+- Do not add buttons, CTA blocks, forms, menus, tabs, or links styled as
+  buttons. The final recommendation must be prose or a simple list.
+- Use semantic HTML and only restrained Tailwind utility classes for width,
+  spacing, typography, and text color.
 - Do not include html, head, body, script, iframe, form, or event-handler
   attributes. The application renders your fragment inside its own page.
 - Do not claim to have opened or tested the live website.
@@ -804,127 +806,7 @@ async function getGoogleAdsCampaigns(userId: string) {
 // 12. TOOL EXECUTOR
 // ============================================================
 
-async function researchDomainNames(
-  concept: string,
-  maxPriceUsd: number,
-  limit = 10,
-) {
-  const pat = process.env.GODADDY_PAT;
-
-  if (!pat) {
-    throw new Error("GODADDY_PAT is not configured.");
-  }
-
-  if (!Number.isFinite(maxPriceUsd) || maxPriceUsd <= 0) {
-    throw new Error("maxPriceUsd must be greater than zero.");
-  }
-
-  const resultLimit = Math.min(25, Math.max(1, Math.floor(limit)));
-  const headers = {
-    Authorization: `Bearer ${pat}`,
-    Accept: "application/json",
-  };
-  const baseUrl = "https://api.godaddy.com";
-  const suggestionsUrl = new URL(`${baseUrl}/v3/domains/suggestions`);
-
-  suggestionsUrl.searchParams.set("query", concept.trim());
-  suggestionsUrl.searchParams.set("tlds", "com");
-  suggestionsUrl.searchParams.set("pageSize", "50");
-  suggestionsUrl.searchParams.set("lengthMin", "6");
-  suggestionsUrl.searchParams.set("lengthMax", "6");
-
-  const suggestionsResponse = await fetch(suggestionsUrl, {
-    headers,
-    cache: "no-store",
-  });
-
-  const suggestionsText = await suggestionsResponse.text();
-  const suggestionsData = suggestionsText
-    ? JSON.parse(suggestionsText)
-    : [];
-
-  if (!suggestionsResponse.ok) {
-    throw new Error(
-      `GoDaddy suggestions failed (${suggestionsResponse.status}).`,
-    );
-  }
-
-  const suggestions = Array.isArray(suggestionsData)
-    ? suggestionsData
-    : suggestionsData?.domains || suggestionsData?.suggestions || [];
-
-  const candidates = Array.from(
-    new Set(
-      suggestions
-        .map((item: unknown) => {
-          if (typeof item === "string") return item;
-          if (item && typeof item === "object") {
-            const value = item as Record<string, unknown>;
-            return value.domain || value.name;
-          }
-          return null;
-        })
-        .filter(
-          (value): value is string =>
-            typeof value === "string" &&
-            /^[a-z]{6}\.com$/i.test(value),
-        )
-        .map((value) => value.toLowerCase()),
-    ),
-  );
-
-  const checked = await Promise.all(
-    candidates.map(async (domain) => {
-      try {
-        const response = await fetch(
-          `${baseUrl}/v3/domains/check-availability?domain=${encodeURIComponent(domain)}`,
-          { headers, cache: "no-store" },
-        );
-        const data = await response.json();
-        const cents = Number(data?.prices?.[0]?.price?.value);
-        const priceUsd = Number.isFinite(cents) ? cents / 100 : null;
-
-        return {
-          domain,
-          available: data?.available === true,
-          priceUsd,
-          renewalPriceUsd: Number.isFinite(
-            Number(data?.prices?.[0]?.renewalPrice?.value),
-          )
-            ? Number(data.prices[0].renewalPrice.value) / 100
-            : null,
-        };
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  const matches = checked
-    .filter(
-      (item): item is NonNullable<typeof item> =>
-        Boolean(
-          item?.available &&
-            item.priceUsd !== null &&
-            item.priceUsd <= maxPriceUsd,
-        ),
-    )
-    .sort((left, right) => (left.priceUsd || 0) - (right.priceUsd || 0))
-    .slice(0, resultLimit);
-
-  return {
-    concept,
-    tld: ".com",
-    length: 6,
-    maxPriceUsd,
-    matches,
-    candidatesChecked: candidates.length,
-    note:
-      "Results are a live, GoDaddy-ranked suggestion shortlist, not an exhaustive scan of every possible six-letter .com name.",
-  };
-}
-
-async function executeTool(
+export async function executeTool(
   name: string,
   args: ToolArgs,
   websiteUsername: string,
@@ -990,14 +872,6 @@ async function executeTool(
 
     case "get_google_ads_campaigns": {
       return getGoogleAdsCampaigns(userId);
-    }
-
-    case "research_domain_names": {
-      const concept = requireString(args.concept, "concept");
-      const maxPriceUsd = Number(args.maxPriceUsd);
-      const limit = args.limit === undefined ? 10 : Number(args.limit);
-
-      return researchDomainNames(concept, maxPriceUsd, limit);
     }
 
       case "get_7winks_tutorial": {
@@ -1138,7 +1012,6 @@ export async function POST(request: Request) {
       typeof body.message === "string"
         ? body.message.trim()
         : "";
-
     if (!userMessage) {
       return Response.json(
         {
@@ -1254,6 +1127,13 @@ ${website.data}
 
       return createAgentStream(
         [
+          {
+            role: "system",
+            content: createSystemPrompt(
+              websiteUsername,
+              websiteAvailable,
+            ),
+          },
           {
             role: "user",
             content: createWebsiteReviewPrompt(
