@@ -62,7 +62,7 @@ const buttonStyles = [
 </button>`
   },
   {
-    "name": "Background Color Change Button",
+    "name": "Background Color Change Button.",
     "code": `<button class="group relative inline-block px-3.5 py-2 overflow-hidden font-medium text-indigo-600 border-2 border-indigo-600 rounded-lg focus:outline-none text-sm"><span class="absolute top-0 left-0 w-full h-full bg-indigo-600 transform scale-x-0 group-hover:scale-x-100 transition-all duration-300 ease"></span><span class="relative group-hover:text-white">Button Text</span></button>`
   },
   {
