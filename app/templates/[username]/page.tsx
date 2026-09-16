@@ -440,7 +440,7 @@ export default function Page({ params }: PageProps) {
       style={
         isUsernameTabActive
           ? {
-              backgroundImage: `linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)), url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/ChatGPT%20Image%20Sep%2014%2C%202026%2C%2011_38_30%20AM.png")`,
+              backgroundImage: `linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)), url("")`,
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
               backgroundSize: "cover",
