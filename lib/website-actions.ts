@@ -17,6 +17,11 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_API_KEY!,
 });
 
+const websiteStatusCache = new Map<
+  string,
+  { expiresAt: number; value: WebsiteStatus }
+>();
+
 // ==================================================
 // TYPES
 // ==================================================
@@ -25,6 +30,14 @@ export interface WebsiteContent {
   html: string;
   script: string;
   data: string;
+}
+
+export interface WebsiteStatus {
+  published: boolean;
+  hasPublishedSite: boolean;
+  visitorCount: number;
+  enquiryCount: number;
+  lastUpdated: string | null;
 }
 
 export type SubscriptionStatus = "free" | "premium";
@@ -897,6 +910,92 @@ export async function uploadImage(
 // ==================================================
 // ACTIVE VISITORS
 // ==================================================
+
+export async function getWebsitePublicationStatus(
+  username: string,
+): Promise<WebsiteStatus> {
+  const safeUsername = username.replace(/[^a-zA-Z0-9_]/g, "");
+  const cacheKey = `website-status:${safeUsername}`;
+  const now = Date.now();
+  const cached = websiteStatusCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  try {
+    const siteTableName = `${safeUsername}_website`;
+    const siteCheck = await sql.query(
+      `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_name = $1
+      )
+      `,
+      [siteTableName],
+    );
+
+    if (!siteCheck[0]?.exists) {
+      const fallback: WebsiteStatus = {
+        published: false,
+        hasPublishedSite: false,
+        visitorCount: 0,
+        enquiryCount: 0,
+        lastUpdated: null,
+      };
+
+      websiteStatusCache.set(cacheKey, {
+        expiresAt: now + 60_000,
+        value: fallback,
+      });
+
+      return fallback;
+    }
+
+    const content = await getWebsiteContent(username);
+    const hasPublishedSite = Boolean(
+      content &&
+        (
+          (content.html && content.html.trim().length > 0) ||
+          (content.data && content.data.trim().length > 0)
+        )
+    );
+
+    const visitorCount = await getActiveVisitorsCount(username, 60);
+    const enquiries = await getEnquiries(username);
+
+    const result: WebsiteStatus = {
+      published: hasPublishedSite,
+      hasPublishedSite,
+      visitorCount,
+      enquiryCount: enquiries.length,
+      lastUpdated: hasPublishedSite ? new Date().toISOString() : null,
+    };
+
+    websiteStatusCache.set(cacheKey, {
+      expiresAt: now + 60_000,
+      value: result,
+    });
+
+    return result;
+  } catch (error) {
+    console.error("Error fetching website publication status:", error);
+    const fallback: WebsiteStatus = {
+      published: false,
+      hasPublishedSite: false,
+      visitorCount: 0,
+      enquiryCount: 0,
+      lastUpdated: null,
+    };
+
+    websiteStatusCache.set(cacheKey, {
+      expiresAt: now + 30_000,
+      value: fallback,
+    });
+
+    return fallback;
+  }
+}
 
 export async function getActiveVisitorsCount(
   username: string,

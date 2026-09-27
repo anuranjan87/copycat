@@ -12,7 +12,6 @@ import {
   getVisitChartData,
   getActiveVisitorsCount,
 } from "@/lib/website-actions";
-import { agentTools } from "@/app/api/agents/tools";
 
 const sql = neon(process.env.POSTGRES_URL!);
 
@@ -252,13 +251,7 @@ async function getAuthenticatedWebsiteUsername(): Promise<string> {
 // 6. TOOL DEFINITIONS
 // ============================================================
 
-const tools = agentTools.map((tool) => ({
-  type: "function" as const,
-  function: tool.function,
-}));
-
-/*
-const legacyTools = [
+const tools = [
   {
     type: "function" as const,
     function: {
@@ -369,7 +362,6 @@ const legacyTools = [
     },
   },
 ];
-*/
 // ============================================================
 // 7. SYSTEM PROMPT
 // ============================================================
@@ -407,45 +399,16 @@ CORE BEHAVIOR:
 - Every final user-facing answer MUST be returned as a complete HTML
   fragment styled with Tailwind utility classes. Never return Markdown,
   plain text, JSON, code fences, or a full document with html/head/body.
-- This formatting rule is strict and has priority over any previous
-  conversation style. Do not imitate HTML examples from the conversation
-  if they contain cards, buttons, panels, or decorative UI.
-- Treat the response as a plain-English article rendered as HTML, not as a
-  designed interface or marketing landing page. The words and their order
-  should do most of the work. Start with one clear h1, then write natural
-  paragraphs and only use h2/h3 headings or lists when the subject genuinely
-  needs them.
-  should do most of the work. Use one clear h1 followed by natural
-  paragraphs. Add h2, h3, or a list only when the subject genuinely needs it.
-- Use simple semantic HTML such as section, h1, h2, h3, p, ul, ol, li,
-  article, strong, and em. Keep Tailwind classes limited to readable width,
-- Default output shape: one unstyled wrapper containing an h1 and a few p
-  elements. An optional h2 or simple ul/ol is allowed when useful. Do not
-  use article, nested section wrappers, or multiple layout containers just
-  to make the answer look designed.
-- Before returning the HTML, silently check every element: if it is a
-  button, CTA, card, panel, border, shadow, rounded container, gradient,
-  badge, pill, or decorative background, remove it.
-  spacing, typography, and color, for example max-w-3xl, mx-auto, px-6,
-  py-8, text-lg, leading-7, and text-zinc-700.
-- The visual result must feel calm, literary, and easy to read: generous
-  whitespace, a narrow reading measure, normal paragraph flow, and modest
-  typographic hierarchy. It should resemble a thoughtful written answer on
-  a clean page, not a product UI.
-- Never use cards, card grids, panels, tiles, floating boxes, badges, pills,
-  chips, callout boxes, shadows, gradients, decorative borders, or colored
-  backgrounds around content. Do not wrap each section or paragraph in a
-  bordered or rounded container. Avoid flex/grid layouts unless they are
-  essential to explain the content.
-- Never add buttons, links styled as buttons, signup prompts, CTA blocks,
-  forms, menus, tabs, or other interface controls unless the user explicitly
-  asks for that control. End with a useful conclusion or next step written
-  as prose, not a button.
-- Do not use pull quotes, eyebrow labels, captions, fake statistics, or
-  decorative section numbering unless the user explicitly requests them.
-- Keep the visual system responsive: stack columns on small screens,
-  use sm:, md:, and lg: breakpoints, keep text readable, prevent overflow,
-  and make long recommendations wrap naturally on mobile.
+- Use the attached Google Ads recommendation layout as the visual and
+  editorial model for every topic: a clear lead headline, short signal
+  section, useful action cards or sections, and a closing thought.
+- Use semantic HTML such as section, header, h1, h2, h3, p, ul, ol,
+  li, article, and span. Use responsive Tailwind classes such as
+  max-w-5xl, grid, gap, rounded, border, bg, text, px, py, sm:, md:,
+  and lg:. Keep class names valid and readable.
+- Make the answer feel like a designed mini-report, not a text dump.
+  Use a calm light surface, dark readable text, restrained accent
+  colors, generous spacing, and cards only for repeated insights.
 - Answer the actual question first. No warm-up monologue.
 - Write in a smooth, easy-to-scan flow using short paragraphs,
   descriptive headings, and bullets only when they improve clarity.
@@ -569,16 +532,9 @@ Provide a helpful comment covering:
 Rules:
 
 - Return only a complete Tailwind CSS HTML fragment, never Markdown.
-- Structure the review like a clear written critique with a lead heading,
-  natural paragraphs, useful headings, and a final thought.
-- Make it read like plain English on a clean page. Use whitespace,
-  readable typography, and ordinary paragraph flow for rhythm.
-- Do not use cards, panels, tiles, boxes, shadows, gradients, decorative
-  borders, pills, badges, pull quotes, or colored section backgrounds.
-- Do not add buttons, CTA blocks, forms, menus, tabs, or links styled as
-  buttons. The final recommendation must be prose or a simple list.
-- Use semantic HTML and only restrained Tailwind utility classes for width,
-  spacing, typography, and text color.
+- Structure the review like a polished mini-report with a lead heading,
+  a signal section, action cards or sections, and a final thought.
+- Use semantic HTML and responsive Tailwind utility classes.
 - Do not include html, head, body, script, iframe, form, or event-handler
   attributes. The application renders your fragment inside its own page.
 - Do not claim to have opened or tested the live website.
@@ -806,7 +762,7 @@ async function getGoogleAdsCampaigns(userId: string) {
 // 12. TOOL EXECUTOR
 // ============================================================
 
-export async function executeTool(
+async function executeTool(
   name: string,
   args: ToolArgs,
   websiteUsername: string,
@@ -1012,6 +968,7 @@ export async function POST(request: Request) {
       typeof body.message === "string"
         ? body.message.trim()
         : "";
+
     if (!userMessage) {
       return Response.json(
         {
@@ -1127,13 +1084,6 @@ ${website.data}
 
       return createAgentStream(
         [
-          {
-            role: "system",
-            content: createSystemPrompt(
-              websiteUsername,
-              websiteAvailable,
-            ),
-          },
           {
             role: "user",
             content: createWebsiteReviewPrompt(

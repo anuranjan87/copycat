@@ -12,6 +12,8 @@ import {
   type TemplateMeta,
 } from "@/lib/categoryList";
 
+import { getWebsitePublicationStatus } from "@/lib/website-actions";
+
 import { useSubscription } from "@/components/subscription-provider";
 
 import {
@@ -121,6 +123,9 @@ export default function Page({ params }: PageProps) {
 
   const [activeCategory, setActiveCategory] = useState<string>("Landing Page");
   const [activeUIComponent, setActiveUIComponent] = useState("Colors");
+  const [siteStatus, setSiteStatus] = useState<
+    Awaited<ReturnType<typeof getWebsitePublicationStatus>> | null
+  >(null);
   const isUsernameTabActive = activeCategory === forYouTabName;
 
   // ------------------------------------------------------------
@@ -152,6 +157,28 @@ export default function Page({ params }: PageProps) {
       console.error("Failed to restore selected category:", error);
     }
   }, [searchParams, categoryStorageKey, categories]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadStatus = async () => {
+      const status = await getWebsitePublicationStatus(username);
+      if (!ignore) {
+        setSiteStatus(status);
+        try {
+          localStorage.setItem("workspace-site-published", JSON.stringify(status.published));
+        } catch (error) {
+          console.error("Failed to persist publication status:", error);
+        }
+      }
+    };
+
+    loadStatus();
+
+    return () => {
+      ignore = true;
+    };
+  }, [username]);
 
   const handleCategoryChange = (categoryName: string) => {
     setActiveCategory(categoryName);
@@ -635,7 +662,11 @@ export default function Page({ params }: PageProps) {
               </div>
             </div>
           ) : activeCategory === forYouTabName ? (
-<UserAgent username={username} />          ) : filteredTemplates.length === 0 ? (
+            <UserAgent
+              username={username}
+              hasPublishedWebsite={siteStatus?.published ?? false}
+            />
+          ) : filteredTemplates.length === 0 ? (
             <Card className="mx-auto my-8 max-w-md border-muted/60 bg-muted/10 py-20 text-center">
               <CardContent className="space-y-3">
                 <LayoutGrid className="mx-auto h-10 w-10 text-muted-foreground opacity-50" />

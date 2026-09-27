@@ -27,15 +27,70 @@ interface PageProps {
 }
 
 export default function Home({ params }: PageProps) {
-  const { username } = use(params); // ✅ FIXED
+  const { username } = use(params);
 
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [content, setContent] = useState<any>(null);
 
   useEffect(() => {
     const fetchData = async () => {
-      const data = await getWebsiteContent(username);
-      setContent(data);
+      const siteData = (await getWebsiteContent(username)) ?? {
+        html: "",
+        script: "",
+        data: "",
+      };
+
+      let pendingDraft: Record<string, any> | null = null;
+
+      if (typeof window !== "undefined") {
+        const possibleKeys = [
+          `website-draft-${username}`,
+          `website-draft-${username.toLowerCase()}`,
+          `website-draft-${username.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
+        ];
+
+        for (const key of possibleKeys) {
+          const rawDraft = sessionStorage.getItem(key);
+          if (!rawDraft) continue;
+
+          try {
+            pendingDraft = JSON.parse(rawDraft);
+            sessionStorage.removeItem(key);
+            break;
+          } catch {
+            sessionStorage.removeItem(key);
+          }
+        }
+
+        if (!pendingDraft) {
+          for (let i = 0; i < sessionStorage.length; i += 1) {
+            const key = sessionStorage.key(i);
+            if (!key || !key.startsWith("website-draft-")) continue;
+
+            try {
+              const rawDraft = sessionStorage.getItem(key);
+              if (!rawDraft) continue;
+              pendingDraft = JSON.parse(rawDraft);
+              sessionStorage.removeItem(key);
+              break;
+            } catch {
+              sessionStorage.removeItem(key);
+            }
+          }
+        }
+      }
+
+      if (pendingDraft) {
+        setContent({
+          ...siteData,
+          html: pendingDraft.html || siteData?.html || "",
+          script: pendingDraft.script || siteData?.script || "",
+          data: pendingDraft.data || siteData?.data || "",
+        });
+        return;
+      }
+
+      setContent(siteData);
     };
 
     fetchData();
