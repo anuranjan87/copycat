@@ -10,6 +10,7 @@ import { useParams } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { Timer } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -48,6 +49,8 @@ type Message = {
 
   liveMessage?: string
 
+  responseTimeMs?: number
+
   responseType?:
     | "website_template"
     | "template_search"
@@ -63,6 +66,12 @@ const examples = [
 
 function formatAssistantReply(content: string) {
   return content.replace(/\s+(?=\d+\.\s+\*\*)/g, "\n")
+}
+
+function formatResponseTime(milliseconds: number) {
+  return milliseconds < 1000
+    ? `${milliseconds} ms`
+    : `${(milliseconds / 1000).toFixed(2)} sec`
 }
 
 export default function Page() {
@@ -128,6 +137,7 @@ export default function Page() {
     ])
 
     setLoading(true)
+    const requestStartedAt = performance.now()
 
     try {
       const response =
@@ -313,7 +323,10 @@ export default function Page() {
 
       setHistory((current) => [
         ...current,
-        assistantMessage,
+        {
+          ...assistantMessage,
+          responseTimeMs: Math.max(1, Math.round(performance.now() - requestStartedAt)),
+        },
       ])
     } catch (error) {
       setHistory((current) => [
@@ -328,6 +341,8 @@ export default function Page() {
               : "Request failed.",
 
           error: true,
+
+          responseTimeMs: Math.max(1, Math.round(performance.now() - requestStartedAt)),
 
           responseType:
             "chat",
@@ -425,6 +440,19 @@ AI marketing copilot that helps small businesses turn ideas into action         
                           {formatAssistantReply(item.content)}
                         </ReactMarkdown>
                       </div>
+
+                      {item.responseTimeMs !== undefined && (
+                        <div
+                          className="mb-4 flex w-full items-center justify-end gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500"
+                          aria-label={`Response time: ${formatResponseTime(item.responseTimeMs)}`}
+                          title={`Response time: ${formatResponseTime(item.responseTimeMs)}`}
+                        >
+                          <Timer size={12} strokeWidth={1.8} aria-hidden="true" />
+                          <span className="font-mono tabular-nums">
+                            {formatResponseTime(item.responseTimeMs)}
+                          </span>
+                        </div>
+                      )}
 
                       {item.button && (
                         <a
