@@ -10,12 +10,12 @@ import { useParams } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { Timer } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 
 type WebsiteTemplate = {
@@ -64,6 +64,80 @@ const examples = [
   "find a restaurant website",
 ]
 
+type WelcomeTab = "website" | "google-ads" | "domain"
+
+type WelcomeSuggestion = {
+  label: string
+  icon?: string
+  iconAlt?: string
+}
+
+const welcomeExamples: WelcomeSuggestion[] = [
+  { label: "Sign out button" },
+  {
+    label: "Netflix landing page clone",
+    icon: "https://img.icons8.com/plasticine/100/netflix.png",
+    iconAlt: "Netflix logo",
+  },
+  {
+    label: "Google search page",
+    icon: "https://img.icons8.com/color/48/google-logo.png",
+    iconAlt: "Google logo",
+  },
+  {
+    label: "Reddit homepage",
+    icon: "https://img.icons8.com/doodle/48/reddit--v4.png",
+    iconAlt: "Reddit logo",
+  },
+  {
+    label: "Apple product check-out",
+    icon: "https://img.icons8.com/arcade/64/mac-os.png",
+    iconAlt: "Apple logo",
+  },
+  { label: "Convert Visitors" },
+  { label: "Unlock Premium" },
+  { label: "Grow Traffic" },
+  { label: "Find Opportunities" },
+  { label: "Build My Website" },
+  { label: "View Analytics" },
+]
+
+const googleAdsExamples: WelcomeSuggestion[] = [
+  { label: "Check my Google Ads campaigns" },
+  { label: "Which campaigns should I improve first?" },
+  { label: "Suggest a low-budget search campaign" },
+  { label: "Give me creative Google Ads ideas" },
+]
+
+const domainExamples: WelcomeSuggestion[] = [
+  { label: "Find a domain for my business" },
+  { label: "Suggest a memorable .com domain" },
+  { label: "Check domain availability" },
+  { label: "Suggest brandable domain names" },
+]
+
+const agents: {
+  name: string
+  endpoint: string
+  welcomeTab: WelcomeTab
+}[] = [
+  {
+    name: "Website Ideas",
+    endpoint: "/api/unsplash-agent-one",
+    welcomeTab: "website",
+  },
+  {
+    name: "Google Ads",
+    endpoint: "/api/dev-agent",
+    welcomeTab: "google-ads",
+  },
+  {
+    name: "Add Domain",
+    endpoint: "/api/unsplash-agent-three",
+    welcomeTab: "domain",
+  },
+]
+
 function formatAssistantReply(content: string) {
   return content.replace(/\s+(?=\d+\.\s+\*\*)/g, "\n")
 }
@@ -83,6 +157,12 @@ export default function Page() {
     useState<Message[]>([])
 
   const [loading, setLoading] =
+    useState(false)
+
+  const [selectedAgent, setSelectedAgent] =
+    useState(agents[0])
+
+  const [isAgentMenuOpen, setIsAgentMenuOpen] =
     useState(false)
 
   const [dark, setDark] =
@@ -142,7 +222,7 @@ export default function Page() {
     try {
       const response =
         await fetch(
-          "/api/unsplash-agent-four",
+          selectedAgent.endpoint,
           {
             method: "POST",
 
@@ -172,8 +252,37 @@ export default function Page() {
           },
         )
 
-      const data =
-        await response.json()
+      let data: any
+
+      if (response.headers.get("content-type")?.includes("text/event-stream")) {
+        const eventText = await response.text()
+        let reply = ""
+
+        for (const event of eventText.split(/\r?\n\r?\n/)) {
+          const dataLine = event
+            .split(/\r?\n/)
+            .find((line) => line.startsWith("data:"))
+
+          if (!dataLine) continue
+
+          const payload = JSON.parse(dataLine.slice(5).trim())
+          if (payload.error) throw new Error(payload.error)
+          if (typeof payload.text === "string") reply += payload.text
+          if (typeof payload.answer === "string") reply = payload.answer
+        }
+
+        data = { ok: response.ok, type: "chat", reply }
+      } else {
+        data = await response.json()
+        if (typeof data.success === "boolean" && data.ok === undefined) {
+          data = {
+            ...data,
+            ok: data.success,
+            type: "chat",
+            reply: data.answer,
+          }
+        }
+      }
 
       if (
         !response.ok ||
@@ -374,33 +483,29 @@ export default function Page() {
       <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-between px-4 pb-36 pt-24 sm:px-6">
 
         {history.length === 0 ? (
-          <Card
-            className="relative my-auto mx-auto aspect-[958/950] w-full max-w-2xl -translate-y-4 overflow-hidden border border-white/60 shadow-lg sm:mb-14"
-            style={{
-              borderRadius: "30px",
-            }}
-          >
-            <div
-              className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage:
-                  'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
-                backgroundSize: "120% auto",
-              }}
-              aria-hidden="true"
+          <div className="my-auto w-full max-w-2xl">
+            <WelcomeMessage
+              setInput={setMessage}
+              welcomeTab={selectedAgent.welcomeTab}
             />
-            <CardHeader className="sr-only">
-              <CardTitle>Welcome to 7Wingz</CardTitle>
-            </CardHeader>
-            <CardContent className="absolute inset-x-0 bottom-0 flex flex-col bg-white/85 px-6 py-5 text-center backdrop-blur-sm dark:bg-zinc-950/80 sm:px-8">
-              <h1 className="mx-auto mb-2 font-mono text-[1.1rem] font-bold text-zinc-900 dark:text-zinc-100">
-                Hi {user?.firstName?.trim() || "there"}! Welcome to 7Wingz
-              </h1>
-              <p className="mx-auto mb-2 text-sm text-zinc-700 dark:text-zinc-200">
-AI marketing copilot that helps small businesses turn ideas into action         </p>
-            </CardContent>
-          </Card>
-
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {agents.map((agent) => (
+                  <button
+                    key={agent.endpoint}
+                    type="button"
+                    aria-pressed={selectedAgent.endpoint === agent.endpoint}
+                    onClick={() => setSelectedAgent(agent)}
+                    className={`rounded-full border px-3 py-2 text-xs font-medium shadow-sm transition ${
+                      selectedAgent.endpoint === agent.endpoint
+                        ? "border-zinc-800 bg-zinc-900 text-white dark:border-zinc-200 dark:bg-white dark:text-zinc-900"
+                        : "border-zinc-200 bg-white/90 text-zinc-700 hover:border-zinc-400 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:border-zinc-500"
+                    }`}
+                  >
+                    {agent.name}
+                  </button>
+                ))}
+              </div>
+            </div>
         ) : (
 
           <div className="w-full space-y-7 text-sm leading-relaxed sm:text-base">
@@ -572,8 +677,45 @@ AI marketing copilot that helps small businesses turn ideas into action         
     {/* Input */}
     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-200/80 bg-white p-2 shadow-sm transition-shadow focus-within:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
 
-      <div className="border-r border-zinc-100 pr-3 text-xs font-semibold text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-        Templates
+      <div className="relative shrink-0 border-r border-zinc-100 pr-2 dark:border-zinc-800">
+        <button
+          type="button"
+          aria-label={`Selected assistant: ${selectedAgent.name}`}
+          aria-expanded={isAgentMenuOpen}
+          aria-haspopup="listbox"
+          onClick={() => setIsAgentMenuOpen((open) => !open)}
+          className="flex max-w-40 items-center gap-1 py-2 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+        >
+          <span className="truncate">{selectedAgent.name}</span>
+          <ChevronDown size={14} className="shrink-0" />
+        </button>
+        {isAgentMenuOpen && (
+          <div
+            role="listbox"
+            aria-label="Choose an assistant"
+            className="absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            {agents.map((agent) => (
+              <button
+                key={agent.endpoint}
+                type="button"
+                role="option"
+                aria-selected={selectedAgent.endpoint === agent.endpoint}
+                onClick={() => {
+                  setSelectedAgent(agent)
+                  setIsAgentMenuOpen(false)
+                }}
+                className={`block w-full rounded-md px-3 py-2.5 text-left text-xs transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                  selectedAgent.endpoint === agent.endpoint
+                    ? "font-semibold text-zinc-900 dark:text-white"
+                    : "text-zinc-600 dark:text-zinc-300"
+                }`}
+              >
+                {agent.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <label
@@ -613,7 +755,8 @@ AI marketing copilot that helps small businesses turn ideas into action         
   </form>
 
   {/* Suggestions */}
-  <div className="mt-3 flex max-w-3xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
+  {history.length > 0 && (
+    <div className="mt-3 flex max-w-3xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
 
     <span className="mr-1 py-1.5">
       Try an idea:
@@ -634,11 +777,110 @@ AI marketing copilot that helps small businesses turn ideas into action         
       ),
     )}
 
-  </div>
+    </div>
+  )}
 
 </div>
 
     </main>
+  )
+}
+
+function WelcomeMessage({
+  setInput,
+  welcomeTab,
+}: {
+  setInput: (input: string) => void
+  welcomeTab: WelcomeTab
+}) {
+  const { user } = useUser()
+  const [examplePage, setExamplePage] = useState(0)
+
+  const activeExamples =
+    welcomeTab === "google-ads"
+      ? googleAdsExamples
+      : welcomeTab === "domain"
+        ? domainExamples
+        : welcomeExamples
+  const examplesPerPage = 5
+  const totalPages = Math.max(1, Math.ceil(activeExamples.length / examplesPerPage))
+  const currentPage = examplePage % totalPages
+  const visibleExamples = activeExamples.slice(
+    currentPage * examplesPerPage,
+    currentPage * examplesPerPage + examplesPerPage,
+  )
+
+  return (
+    <Card
+      className="relative mx-auto flex aspect-[958/780] w-full flex-col overflow-hidden border border-white/70 shadow-xl"
+      style={{ borderRadius: "30px" }}
+    >
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage:
+            'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
+          backgroundSize: "85% auto",
+          backgroundPosition: "center 38%",
+          backgroundColor: "#fff",
+        }}
+        aria-hidden="true"
+      />
+
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/90"
+        aria-hidden="true"
+      />
+
+      <div className="absolute inset-x-0 top-7 z-10 px-6 text-center">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+          Welcome to 7Wingz
+        </p>
+        <h1 className="mt-2 font-mono text-[1.05rem] font-bold text-zinc-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]">
+          Hi {user?.firstName?.trim() || "there"}.
+        </h1>
+      </div>
+
+      <CardContent className="relative z-10 mt-auto w-full bg-white/90 px-4 py-4 text-center backdrop-blur-md dark:bg-zinc-950/90 sm:px-6">
+        <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-300">
+          Create elegant and sophisticated components in just a few prompts
+        </p>
+
+        <div className="mb-1 mt-2 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setExamplePage((page) => (page + 1) % totalPages)}
+            aria-label="Show more suggestions"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-2">
+          {visibleExamples.map((example) => (
+            <Button
+              key={example.label}
+              type="button"
+              variant="outline"
+              onClick={() => setInput(example.label)}
+              className="h-auto max-w-full gap-2 whitespace-normal rounded-full px-3 py-2 text-xs text-foreground hover:text-primary sm:text-sm"
+            >
+              {example.icon && (
+                <img
+                  src={example.icon}
+                  alt={example.iconAlt || ""}
+                  width={22}
+                  height={22}
+                  className="h-5 w-5 shrink-0 object-contain"
+                />
+              )}
+              {example.label}
+            </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

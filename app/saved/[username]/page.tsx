@@ -6,17 +6,106 @@ interface PageProps {
   params: Promise<{ username: string }>;
 }
 
-function buildPreview(html: string, data: string) {
-  if (!data.trim()) return html;
+function findDataDeclaration(source: string) {
+  const match = source.match(/(?:^|[\r\n])\s*(?:const|let|var)\s+data\s*=\s*\{/i);
+  if (!match || match.index === undefined) return null;
 
-  const dataScript = `<script>\n${data}\n</script>`;
-  const babelScript = /<script[^>]*type=["']text\/babel["'][^>]*>/i;
+  const braceOffset = match[0].indexOf("{");
+  if (braceOffset === -1) return null;
 
-  if (babelScript.test(html)) {
-    return html.replace(babelScript, `${dataScript}\n$&`);
+  return {
+    start: match.index,
+    openingBrace: match.index + braceOffset,
+  };
+}
+
+function findMatchingClosingBrace(source: string, openingBrace: number) {
+  let depth = 0;
+  let quote: "\"" | "'" | "`" | null = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = openingBrace; index < source.length; index++) {
+    const character = source[index];
+    const next = source[index + 1];
+
+    if (lineComment) {
+      if (character === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && next === "/") {
+        blockComment = false;
+        index++;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      lineComment = true;
+      index++;
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      blockComment = true;
+      index++;
+      continue;
+    }
+    if (character === "\"" || character === "'" || character === "`") {
+      quote = character;
+      continue;
+    }
+    if (character === "{") depth++;
+    if (character === "}" && --depth === 0) return index;
   }
 
-  return html.replace(/<\/head>/i, `${dataScript}\n</head>`);
+  return -1;
+}
+
+function buildDataScript(data: string) {
+  const trimmed = data.trim();
+  if (!trimmed) return "window.data = {};";
+
+  const declaration = findDataDeclaration(trimmed);
+  if (declaration) {
+    const closingBrace = findMatchingClosingBrace(trimmed, declaration.openingBrace);
+    if (closingBrace !== -1) {
+      return `window.data = ${trimmed.slice(declaration.openingBrace, closingBrace + 1)};`;
+    }
+  }
+
+  return `window.data = {\n${trimmed}\n};`;
+}
+
+function buildPreview(html: string, data: string) {
+  if (!html) return html;
+
+  const cleanHtml = html
+    .replace(/<script>\s*(?:var|const|let)\s+data\s*=\s*\{[\s\S]*?\}\s*;?\s*<\/script>\s*/i, "")
+    .trim();
+  const zoomStyle = "<style>html{zoom:0.8}</style>";
+  const previewHtml = /<\/head>/i.test(cleanHtml)
+    ? cleanHtml.replace(/<\/head>/i, `${zoomStyle}\n</head>`)
+    : `${zoomStyle}\n${cleanHtml}`;
+  const dataBlock = `<script>\n${buildDataScript(data)}\n</script>`;
+  const babelScript = /<script\b[^>]*type=["']text\/babel["'][^>]*>/i;
+  const babelMatch = previewHtml.match(babelScript);
+
+  if (babelMatch) return previewHtml.replace(babelMatch[0], `${dataBlock}\n${babelMatch[0]}`);
+  if (/<\/body>/i.test(previewHtml)) return previewHtml.replace(/<\/body>/i, `${dataBlock}\n</body>`);
+  return `${dataBlock}\n${previewHtml}`;
 }
 
 export default async function SavedItemsPage({ params }: PageProps) {

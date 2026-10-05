@@ -151,7 +151,7 @@ export default function Nav({
           right-0
           top-0
           z-50
-          bg-black/75
+          bg-black/80
           px-4
           py-3.5
           tracking-[0.1em]
@@ -189,22 +189,13 @@ export default function Nav({
               md:flex
             "
           >
-            <Link
-              href="/lander"
-              className="transition hover:opacity-70"
-            >
-              Home
-            </Link>
-
-            <span className="text-white/30">
-              |
-            </span>
+            
 
             <Link
               href={`/dashboard/${username}`}
               className="transition hover:opacity-70"
             >
-              Dashboard
+              Analytics
             </Link>
 
             <span className="text-white/30">
@@ -218,16 +209,7 @@ export default function Nav({
               Templates
             </Link>
 
-            <span className="text-white/30">
-              |
-            </span>
-
-            <Link
-              href={`/pricing/${username}`}
-              className="transition hover:opacity-70"
-            >
-              Premium
-            </Link>
+         
 
             <span className="text-white/30">
               |
@@ -237,7 +219,7 @@ export default function Nav({
               href={`/marketing/${username}`}
               className="transition hover:opacity-70"
             >
-              Marketing
+              Google Ads
             </Link>
 
             <span className="text-white/30">
@@ -250,6 +232,20 @@ export default function Nav({
             >
               Saved Items
             </Link>
+
+
+               <span className="text-white/30">
+              |
+            </span>
+
+            <Link
+              href={`/pricing/${username}`}
+              className="transition hover:opacity-70"
+            >
+              Pricing
+            </Link>
+
+
           </div>
 
           {/* ========================================================

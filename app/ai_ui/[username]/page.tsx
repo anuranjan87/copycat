@@ -3,6 +3,7 @@
 
 import { type FormEvent, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 import {
   ArrowLeft,
   ChevronDown,
@@ -62,6 +63,7 @@ const templates = [
 ]
 
 export function NewsletterEditor() {
+  const { user, isLoaded } = useUser()
   const params = useParams<{ username: string }>()
   const username = params?.username || ''
   const [activeTab] = useState<'preview' | 'write'>('preview')
@@ -78,7 +80,38 @@ export function NewsletterEditor() {
   const [fieldNotes, setFieldNotes] = useState<FieldNotesContent>({ ...fieldNotesDefaults })
   const [editSubject, setEditSubject] = useState(fieldNotesDefaults.subject)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false)
+  const [isConnectingGmail, setIsConnectingGmail] = useState(false)
+  const [gmailConnectError, setGmailConnectError] = useState('')
   const fieldNotesTemplateHtml = generatedHtml || buildFieldNotesTemplate(fieldNotes)
+
+  async function connectGmail() {
+    if (!isLoaded || !user || isConnectingGmail) return
+
+    setGmailConnectError('')
+    setIsConnectingGmail(true)
+    const googleAccount = user.externalAccounts.find((account) => account.provider === 'google')
+    if (!googleAccount) {
+      setGmailConnectError('Link a Google account to your profile before connecting Gmail.')
+      setIsConnectingGmail(false)
+      return
+    }
+
+    try {
+      const reauth = await googleAccount.reauthorize({
+        redirectUrl: window.location.href,
+        additionalScopes: ['https://www.googleapis.com/auth/gmail.send'],
+      })
+      const redirectUrl = reauth?.verification?.externalVerificationRedirectURL?.href
+      if (!redirectUrl) {
+        throw new Error('Clerk did not return a Google authorization link. Please try again.')
+      }
+      window.location.href = redirectUrl
+    } catch (error) {
+      setGmailConnectError(error instanceof Error ? error.message : 'Unable to connect Gmail.')
+      setIsConnectingGmail(false)
+    }
+  }
 
   async function generateDraft() {
     const instruction = prompt.trim()
@@ -208,14 +241,49 @@ export function NewsletterEditor() {
             Schedule send
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="More options"
-            className="text-[#77766f]"
-          >
-            <MoreHorizontal data-icon="inline-start" />
-          </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More options"
+              aria-expanded={isOptionsOpen}
+              aria-haspopup="menu"
+              className="text-[#77766f]"
+              onClick={() => {
+                setGmailConnectError('')
+                setIsOptionsOpen((open) => !open)
+              }}
+            >
+              <MoreHorizontal data-icon="inline-start" />
+            </Button>
+            {isOptionsOpen && (
+              <div
+                role="menu"
+                aria-label="Newsletter options"
+                className="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-[#e4e3dd] bg-white p-1.5 shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!isLoaded || !user || isConnectingGmail}
+                  onClick={() => void connectGmail()}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] font-medium text-[#45443f] hover:bg-[#f4f4f1] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isConnectingGmail ? (
+                    <LoaderCircle size={16} className="animate-spin" />
+                  ) : (
+                    <Mail size={16} />
+                  )}
+                  {isConnectingGmail ? 'Connecting Gmail…' : 'Connect Gmail'}
+                </button>
+                {gmailConnectError && (
+                  <p role="alert" className="px-3 pb-2 pt-1 text-[11px] leading-4 text-red-700">
+                    {gmailConnectError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

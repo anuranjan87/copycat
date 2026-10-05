@@ -1,7 +1,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import tailwindColors from "tailwindcss/colors";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -27,42 +29,35 @@ import {
 import { useSubscription } from "@/components/subscription-provider";
 import PremiumRequiredModal from "@/components/ui_components/PremiumRequiredModal";
 export default function ColorPalette() {
-  const [copyFormat, setCopyFormat] = useState("HEX");
   const { isPremium } = useSubscription();
     const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const paletteRef = useRef<HTMLDivElement>(null);
 
-const handleColorClick = (color: string, shade: string) => {
-  if (!isPremium) {
-    setShowPremiumModal(true);
-    return;
-  }
+  useEffect(() => {
+    paletteRef.current
+      ?.querySelectorAll<HTMLButtonElement>("button.h-12.w-full")
+      .forEach((button) => {
+        button.title = "Click to copy the color";
+      });
+  }, []);
 
-  handleColorClick(color, shade);
-};
-  const copyToClipboard = (color: string, shade: string) => {
-    let textToCopy = "";
-
-    switch (copyFormat) {
-      case "HEX":
-        textToCopy = `#${color}${shade}`;
-        break;
-
-      case "RGB":
-        // Placeholder. Add HEX → RGB conversion here if needed.
-        textToCopy = `rgb(0, 0, 0)`;
-        break;
-
-      case "HSL":
-        // Placeholder. Add HEX → HSL conversion here if needed.
-        textToCopy = `hsl(0, 0%, 0%)`;
-        break;
-
-      case "Tailwind":
-        textToCopy = `${color.toLowerCase()}-${shade}`;
-        break;
+  const handleColorClick = async (color: string, shade: string) => {
+    if (!isPremium) {
+      setShowPremiumModal(true);
+      return;
     }
 
-    navigator.clipboard.writeText(textToCopy);
+    const palette = tailwindColors as unknown as Record<string, Record<string, string>>;
+    const hex = palette[color]?.[shade];
+    if (!hex) return;
+
+    try {
+      await navigator.clipboard.writeText(hex);
+      toast.success(`${hex} copied to clipboard`);
+    } catch (error) {
+      console.error("Could not copy color to clipboard:", error);
+      toast.error("Could not copy the color. Check clipboard permissions.");
+    }
   };
 
   const renderLock = () => {
@@ -83,7 +78,7 @@ const handleColorClick = (color: string, shade: string) => {
           className="container mx-auto mb-11 mt-9 p-9"
           style={{ zoom: "0.76" }}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div ref={paletteRef} className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 
             {/* RED */}
             <div className="group relative overflow-hidden rounded-lg bg-white shadow-md">

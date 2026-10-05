@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { updateWebsiteContent, getTemplateById } from '@/lib/website-actions';
+import { updateWebsiteContent, getTemplateById, saveWebsiteDraft } from '@/lib/website-actions';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
@@ -107,6 +107,7 @@ export function CodeEditor({
   // ------------------------------------------------------------
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(
     !!templateId && !disableTemplateLoad
   );
@@ -492,17 +493,44 @@ ${draftData}
     }
   };
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    if (isSaving) return;
+
+    setIsSaving(true);
     captureScrollPosition();
-    setSavedHtml(draftHtml);
-    setSavedData(draftData);
-    pushHistory(draftHtml, draftData);
-    toast.success('Changes saved', {
-      description: 'Your draft has been updated.',
-      position: 'top-center',
-      duration: 2000,
-    });
-  }, [draftHtml, draftData, captureScrollPosition, pushHistory]);
+
+    try {
+      const result = await saveWebsiteDraft(
+        username,
+        draftHtml,
+        draftData,
+        draftData
+      );
+
+      if (!result.success) {
+        toast.error(result.error || 'Failed to save website draft.', {
+          position: 'top-center',
+        });
+        return;
+      }
+
+      setSavedHtml(draftHtml);
+      setSavedData(draftData);
+      pushHistory(draftHtml, draftData);
+      toast.success('Changes saved', {
+        description: 'Your draft has been saved.',
+        position: 'top-center',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Save draft error:', error);
+      toast.error('Failed to save website draft.', {
+        position: 'top-center',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [username, isSaving, draftHtml, draftData, captureScrollPosition, pushHistory]);
 
   // Keyboard shortcut: Ctrl+S
   useEffect(() => {
@@ -897,6 +925,7 @@ ${savedData}
 
           <button
             onClick={handleSave}
+            disabled={isSaving}
             className={`px-3 py-1 rounded text-xs font-medium transition-all flex items-center gap-1.5 ${
               hasUnsavedChanges
                 ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'

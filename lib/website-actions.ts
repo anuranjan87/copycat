@@ -1412,7 +1412,7 @@ export async function ensureSubscriptionTable() {
 // ==================================================
 
 export async function getSubscription(
-  userId: string
+  userIdOrUsername: string
 ): Promise<SubscriptionData> {
   try {
     const result = await sql`
@@ -1428,7 +1428,13 @@ export async function getSubscription(
 
       FROM subscriptions
 
-      WHERE user_id = ${userId}
+      WHERE user_id = ${userIdOrUsername}
+        OR username = ${userIdOrUsername}
+
+      ORDER BY CASE
+        WHEN user_id = ${userIdOrUsername} THEN 0
+        ELSE 1
+      END
 
       LIMIT 1
     `;

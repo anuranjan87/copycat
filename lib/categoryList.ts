@@ -29,7 +29,6 @@ export interface TemplateMeta {
  */
 export const getCategories = (userFirstName?: string) => [
   { name: userFirstName?.trim() || "For You", icon: UserRound },
-  { name: "Landing Page", icon: LayoutTemplate },
   { name: "Entrepreneurs & Startups", icon: Rocket },
   { name: "Professional Services", icon: BriefcaseBusiness },
   { name: "Job Search", icon: GraduationCap },
