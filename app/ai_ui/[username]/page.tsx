@@ -1,12 +1,14 @@
 'use client'
 
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
+import * as XLSX from 'xlsx'
 import {
   ArrowLeft,
   ChevronDown,
   Code2,
+  Download,
   Eye,
   FileText,
   ImageIcon,
@@ -24,6 +26,7 @@ import {
   Sparkles,
   Type,
   Undo2,
+  Upload,
   WandSparkles,
   X,
 } from 'lucide-react'
@@ -46,6 +49,36 @@ type EmailTemplate = {
   category: string | null
   subject: string | null
   htmlContent: string
+}
+
+type CampaignRecipient = {
+  name: string
+  email: string
+}
+
+type CampaignResult = {
+  sentCount: number
+  failedEmails: Array<{ email: string; error: string }>
+}
+
+function parseCampaignRecipients(value: string): CampaignRecipient[] {
+  const recipients = new Map<string, CampaignRecipient>()
+  for (const line of value.split(/\r?\n/)) {
+    const trimmedLine = line.trim()
+    if (!trimmedLine) continue
+    if (/^name\s*,\s*email$/i.test(trimmedLine)) continue
+
+    const separator = trimmedLine.lastIndexOf(',')
+    const name = separator >= 0 ? trimmedLine.slice(0, separator).trim() : ''
+    const email = (separator >= 0 ? trimmedLine.slice(separator + 1) : trimmedLine).trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(`Invalid email address: ${email || trimmedLine}`)
+    }
+    recipients.set(email.toLowerCase(), { name, email })
+  }
+
+  if (recipients.size === 0) throw new Error('Add at least one recipient email address.')
+  return [...recipients.values()]
 }
 
 function isEmailTemplate(value: unknown): value is EmailTemplate {
@@ -73,6 +106,11 @@ export function NewsletterEditor() {
   const [generatedHtml, setGeneratedHtml] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState(defaultSuggestions)
   const [isTestEmailOpen, setIsTestEmailOpen] = useState(false)
+  const [isCampaignOpen, setIsCampaignOpen] = useState(false)
+  const [campaignContacts, setCampaignContacts] = useState('')
+  const [campaignError, setCampaignError] = useState('')
+  const [campaignResult, setCampaignResult] = useState<CampaignResult | null>(null)
+  const [isSendingCampaign, setIsSendingCampaign] = useState(false)
   const [testEmail, setTestEmail] = useState('')
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false)
   const [testEmailSent, setTestEmailSent] = useState(false)
@@ -87,8 +125,23 @@ export function NewsletterEditor() {
   const [isOptionsOpen, setIsOptionsOpen] = useState(false)
   const [isConnectingGmail, setIsConnectingGmail] = useState(false)
   const [gmailConnectError, setGmailConnectError] = useState('')
+  const promptInputRef = useRef<HTMLTextAreaElement>(null)
+  const campaignFileInputRef = useRef<HTMLInputElement>(null)
+  const hasAutoFocusedPrompt = useRef(false)
   const storedTemplateHtml = selectedTemplate?.htmlContent || ''
   const fieldNotesTemplateHtml = generatedHtml || storedTemplateHtml
+
+  useEffect(() => {
+    try {
+      const existingContacts = sessionStorage.getItem('emailCampaignContacts')
+      if (existingContacts) {
+        setCampaignContacts(existingContacts)
+        sessionStorage.removeItem('emailCampaignContacts')
+      }
+    } catch (error) {
+      console.error('Could not restore campaign contacts:', error)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isLoaded || !user?.id) return
@@ -166,6 +219,21 @@ export function NewsletterEditor() {
     void loadTemplate()
     return () => controller.abort()
   }, [isLoaded, user?.id])
+
+  useEffect(() => {
+    if (
+      isTemplateLoading ||
+      templateError ||
+      editorView !== 'preview' ||
+      hasAutoFocusedPrompt.current ||
+      !window.matchMedia('(min-width: 1280px)').matches
+    ) {
+      return
+    }
+
+    promptInputRef.current?.focus()
+    hasAutoFocusedPrompt.current = true
+  }, [editorView, isTemplateLoading, templateError])
 
   async function connectGmail() {
     if (!isLoaded || !user || isConnectingGmail) return
@@ -274,6 +342,113 @@ export function NewsletterEditor() {
     }
   }
 
+  async function sendCampaign(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSendingCampaign) return
+
+    setCampaignError('')
+    setCampaignResult(null)
+
+    let recipients: CampaignRecipient[]
+    try {
+      recipients = parseCampaignRecipients(campaignContacts)
+    } catch (error) {
+      setCampaignError(error instanceof Error ? error.message : 'Check the recipient list and try again.')
+      return
+    }
+
+    if (recipients.length > 500) {
+      setCampaignError('Send campaigns to 500 recipients or fewer at a time.')
+      return
+    }
+    if (!fieldNotesTemplateHtml || !fieldNotes.subject.trim()) {
+      setCampaignError('The email preview is not ready to send.')
+      return
+    }
+
+    setIsSendingCampaign(true)
+    try {
+      const response = await fetch('/api/send-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipients,
+          subject: fieldNotes.subject.trim(),
+          html: fieldNotesTemplateHtml,
+        }),
+      })
+      const data = await response.json()
+      if (!Array.isArray(data.results)) {
+        throw new Error(data.error || 'The campaign could not be sent.')
+      }
+
+      const failedEmails = data.results
+        .filter((result: { status?: unknown }) => result.status !== 'sent')
+        .map((result: { email?: unknown; error?: unknown }) => ({
+          email: typeof result.email === 'string' ? result.email : 'Unknown recipient',
+          error: typeof result.error === 'string' ? result.error : 'Email delivery failed.',
+        }))
+      setCampaignResult({
+        sentCount: typeof data.sentCount === 'number' ? data.sentCount : 0,
+        failedEmails,
+      })
+      if (failedEmails.length === 0) {
+        setCampaignContacts('')
+      } else {
+        setCampaignError(data.error || 'Some messages could not be sent. Review the failed addresses below.')
+      }
+    } catch (error) {
+      setCampaignError(error instanceof Error ? error.message : 'The campaign could not be sent.')
+    } finally {
+      setIsSendingCampaign(false)
+    }
+  }
+
+  async function importCampaignContacts(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!firstSheet) throw new Error('The selected file has no worksheet.')
+
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' })
+      const contacts = rows.map((row) => {
+        const nameKey = Object.keys(row).find((key) => key.trim().toLowerCase() === 'name')
+        const emailKey = Object.keys(row).find((key) => key.trim().toLowerCase() === 'email')
+        if (!emailKey) throw new Error('The file must contain a column named "Email".')
+        const name = nameKey ? String(row[nameKey]).trim() : ''
+        const email = String(row[emailKey]).trim()
+        return name ? `${name}, ${email}` : email
+      }).filter(Boolean)
+
+      if (contacts.length === 0) throw new Error('The selected file contains no contacts.')
+      setCampaignContacts((current) => [current.trim(), ...contacts].filter(Boolean).join('\n'))
+      setCampaignError('')
+      setCampaignResult(null)
+    } catch (error) {
+      setCampaignError(error instanceof Error ? error.message : 'Could not read the contacts file.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  function downloadCampaignSample() {
+    const blob = new Blob(
+      ['Name,Email\nJohn Doe,john@example.com\nJane Smith,jane@example.com'],
+      { type: 'text/csv;charset=utf-8;' },
+    )
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'sample_contacts.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main className="min-h-screen bg-[#f4f4f1] text-[#242321]">
       {/* TOP HEADER */}
@@ -323,6 +498,12 @@ export function NewsletterEditor() {
           <Button
             size="sm"
             className="rounded-lg bg-[#292824] px-4 text-white hover:bg-[#3d3b36]"
+            disabled={isTemplateLoading || !storedTemplateHtml || isSendingCampaign}
+            onClick={() => {
+              setCampaignError('')
+              setCampaignResult(null)
+              setIsCampaignOpen(true)
+            }}
           >
             <Send data-icon="inline-start" />
             Schedule send
@@ -386,30 +567,30 @@ export function NewsletterEditor() {
             <div
               role="group"
               aria-label="Editor view"
-              className="inline-flex overflow-hidden rounded-lg border border-[#deded8] bg-white shadow-sm"
+              className="inline-flex rounded-xl border border-[#d8d7d0] bg-white p-1 shadow-[0_4px_12px_rgba(41,40,36,0.14)] ring-1 ring-black/[0.04]"
             >
               <button
                 type="button"
                 aria-pressed={editorView === 'preview'}
                 onClick={() => setEditorView('preview')}
-                className={`inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold transition ${
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
                   editorView === 'preview'
-                    ? 'bg-[#f3f3ef] text-[#33312c]'
+                    ? 'bg-[#f3f3ef] text-[#33312c] shadow-sm'
                     : 'text-[#77766f] hover:bg-[#f8f8f5]'
                 }`}
               >
                 <Eye size={16} />
                 Preview
               </button>
-              <span className="w-px bg-[#deded8]" aria-hidden="true" />
+              <span className="mx-1 my-1 w-px bg-[#deded8]" aria-hidden="true" />
               <button
                 type="button"
                 aria-pressed={editorView === 'templates'}
                 disabled={isTemplateLoading || !storedTemplateHtml}
                 onClick={() => setEditorView('templates')}
-                className={`inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
                   editorView === 'templates'
-                    ? 'bg-[#f3f3ef] text-[#33312c]'
+                    ? 'bg-[#f3f3ef] text-[#33312c] shadow-sm'
                     : 'text-[#77766f] hover:bg-[#f8f8f5]'
                 }`}
               >
@@ -647,6 +828,8 @@ export function NewsletterEditor() {
 
               <div className="relative mt-auto">
                 <textarea
+                  ref={promptInputRef}
+                  tabIndex={2}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Ask anything about your draft..."
@@ -834,6 +1017,155 @@ export function NewsletterEditor() {
                 </div>
               </form>
             )}
+          </section>
+        </div>
+      )}
+
+      {isCampaignOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSendingCampaign) {
+              setIsCampaignOpen(false)
+            }
+          }}
+        >
+          <section
+            aria-labelledby="campaign-title"
+            aria-modal="true"
+            role="dialog"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#deded8] bg-[#fafaf8] p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="campaign-title" className="text-lg font-semibold text-[#292824]">
+                  Send email campaign
+                </h2>
+                <p className="mt-1 text-sm text-[#77766f]">
+                  Send “{fieldNotes.subject}” using the {selectedTemplate?.title || 'selected'} template preview.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close campaign dialog"
+                disabled={isSendingCampaign}
+                onClick={() => setIsCampaignOpen(false)}
+                className="rounded-md p-1 text-[#77766f] hover:bg-[#eeeeea] disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {campaignResult && (
+              <div
+                role={campaignResult.failedEmails.length ? 'alert' : 'status'}
+                className={`mb-4 rounded-lg border p-4 text-sm ${
+                  campaignResult.failedEmails.length
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                }`}
+              >
+                Sent to {campaignResult.sentCount} recipient{campaignResult.sentCount === 1 ? '' : 's'}.
+                {campaignResult.failedEmails.length > 0 && (
+                  <div className="mt-2">
+                    Failed:
+                    <ul className="mt-1 list-inside list-disc">
+                      {campaignResult.failedEmails.map(({ email, error }) => (
+                        <li key={email}>{email}: {error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <form onSubmit={sendCampaign} className="space-y-4">
+              <div>
+                <label htmlFor="campaign-recipients" className="mb-2 block text-sm font-medium text-[#45443f]">
+                  Recipients
+                </label>
+                <textarea
+                  id="campaign-recipients"
+                  rows={9}
+                  required
+                  value={campaignContacts}
+                  onChange={(event) => {
+                    setCampaignContacts(event.target.value)
+                    setCampaignResult(null)
+                    setCampaignError('')
+                  }}
+                  placeholder={'Name, email (one per line)\nJohn Doe, john@example.com\njane@example.com'}
+                  disabled={isSendingCampaign}
+                  className="w-full resize-y rounded-lg border border-[#d8d7d0] bg-white p-3 text-sm outline-none transition focus:border-[#77766f] focus:ring-2 focus:ring-[#e4e3dd] disabled:opacity-60"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSendingCampaign}
+                  onClick={() => campaignFileInputRef.current?.click()}
+                >
+                  <Upload data-icon="inline-start" />
+                  Upload CSV / Excel
+                </Button>
+                <input
+                  ref={campaignFileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={(event) => void importCampaignContacts(event)}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadCampaignSample}
+                >
+                  <Download data-icon="inline-start" />
+                  Sample CSV
+                </Button>
+                <p className="text-xs text-[#77766f]">
+                  Up to 500 recipients. Upload a file with an Email column.
+                </p>
+              </div>
+
+              {campaignError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {campaignError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={isSendingCampaign}
+                  onClick={() => setIsCampaignOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSendingCampaign || isTemplateLoading || !storedTemplateHtml}
+                  className="bg-[#292824] text-white hover:bg-[#3d3b36]"
+                >
+                  {isSendingCampaign ? (
+                    <>
+                      <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Send data-icon="inline-start" />
+                      Send campaign
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
           </section>
         </div>
       )}

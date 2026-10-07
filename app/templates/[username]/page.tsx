@@ -3,8 +3,8 @@
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import * as XLSX from "xlsx";
 import { useUser } from "@clerk/nextjs";
+import { motion, useReducedMotion } from "framer-motion";
 
 import {
   templatesMeta,
@@ -20,14 +20,11 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Download,
   LayoutGrid,
   Loader2,
-  Mail,
   Plus,
   Search,
   Sparkles,
-  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,49 +39,12 @@ import Colors from "@/components/ui_components/colors";
 import Gradients from "@/components/ui_components/gradients";
 import UserAgent from "@/components/ui_components/user-agent";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-
 import Nav from "@/components/nav";
 import mat from "@/asset/mat.gif";
 
 interface PageProps {
   params: Promise<{ username: string }>;
 }
-
-interface EmailTemplate {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-}
-
-const emailTemplates: EmailTemplate[] = [
-  {
-    id: "email1",
-    title: "Newsletter",
-    description: "Clean, minimal design perfect for regular updates.",
-    image: "/email1.png",
-  },
-  {
-    id: "email2",
-    title: "Promotional",
-    description: "Bold, attention-grabbing layout for offers and launches.",
-    image: "/email2.png",
-  },
-  {
-    id: "email3",
-    title: "Announcement",
-    description: "Professional, trustworthy design for company news.",
-    image: "/email3.png",
-  },
-];
 
 export default function Page({ params }: PageProps) {
   const { username } = use(params);
@@ -109,6 +69,7 @@ export default function Page({ params }: PageProps) {
   // Categories: first tab is the user's first name (or "For You")
   const categories = useMemo(() => getCategories(firstName), [firstName]);
   const forYouTabName = categories[0]?.name ?? "For You";
+  const prefersReducedMotion = useReducedMotion();
 
   // ------------------------------------------------------------
   // General state
@@ -200,6 +161,7 @@ export default function Page({ params }: PageProps) {
   // ------------------------------------------------------------
 
   const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const categoryScrollAnimationRef = useRef<number | null>(null);
 
   useEffect(() => {
     const element = categoryScrollRef.current;
@@ -211,23 +173,49 @@ export default function Page({ params }: PageProps) {
 
     if (!selectedPill) return;
 
-    window.requestAnimationFrame(() => {
-      element.scrollTo({
-        left: Math.max(0, selectedPill.offsetLeft),
-        behavior: "smooth",
-      });
+    const startFrame = window.requestAnimationFrame(() => {
+      const startLeft = element.scrollLeft;
+      const targetLeft = Math.max(
+        0,
+        Math.min(
+          element.scrollWidth - element.clientWidth,
+          selectedPill.offsetLeft - (element.clientWidth - selectedPill.offsetWidth) / 2,
+        ),
+      );
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (prefersReducedMotion || Math.abs(targetLeft - startLeft) < 1) {
+        element.scrollLeft = targetLeft;
+        return;
+      }
+
+      const startedAt = performance.now();
+      const duration = 720;
+      const animateScroll = (now: number) => {
+        const progress = Math.min((now - startedAt) / duration, 1);
+        const easedProgress = progress < 0.5
+          ? 4 * progress ** 3
+          : 1 - ((-2 * progress + 2) ** 3) / 2;
+        element.scrollLeft = startLeft + (targetLeft - startLeft) * easedProgress;
+
+        if (progress < 1) {
+          categoryScrollAnimationRef.current = window.requestAnimationFrame(animateScroll);
+        } else {
+          categoryScrollAnimationRef.current = null;
+        }
+      };
+
+      categoryScrollAnimationRef.current = window.requestAnimationFrame(animateScroll);
     });
+
+    return () => {
+      window.cancelAnimationFrame(startFrame);
+      if (categoryScrollAnimationRef.current !== null) {
+        window.cancelAnimationFrame(categoryScrollAnimationRef.current);
+        categoryScrollAnimationRef.current = null;
+      }
+    };
   }, [activeCategory]);
-
-  // ------------------------------------------------------------
-  // Email campaign modal
-  // ------------------------------------------------------------
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalStep, setModalStep] = useState<1 | 2>(1);
-  const [contactsText, setContactsText] = useState("");
-  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ------------------------------------------------------------
   // Rox font
@@ -315,147 +303,6 @@ export default function Page({ params }: PageProps) {
       return matchesSearch && matchesCategory;
     });
   }, [searchQuery, activeCategory]);
-
-  // ------------------------------------------------------------
-  // Email modal
-  // ------------------------------------------------------------
-
-  const openModal = () => {
-    setIsModalOpen(true);
-    setModalStep(1);
-    setContactsText("");
-    setSelectedEmailTemplate(null);
-  };
-
-  const closeModal = () => setIsModalOpen(false);
-
-  // ------------------------------------------------------------
-  // File upload
-  // ------------------------------------------------------------
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = (loadEvent) => {
-      try {
-        const extension = file.name.split(".").pop()?.toLowerCase();
-        let rows: any[] = [];
-
-        if (extension === "csv") {
-          const csv = loadEvent.target?.result as string;
-          const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "");
-
-          if (lines.length === 0) {
-            alert("The CSV file is empty.");
-            return;
-          }
-
-          const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-          const nameIndex = headers.findIndex((h) => h.includes("name"));
-          const emailIndex = headers.findIndex((h) => h.includes("email"));
-
-          rows = lines.slice(1).map((line) => {
-            const columns = line.split(",").map((c) => c.trim());
-            return {
-              name: nameIndex >= 0 ? columns[nameIndex] || "" : "",
-              email: emailIndex >= 0 ? columns[emailIndex] || "" : "",
-            };
-          });
-        } else if (extension === "xlsx" || extension === "xls") {
-          const workbook = XLSX.read(loadEvent.target?.result, { type: "array" });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          rows = XLSX.utils.sheet_to_json(firstSheet);
-        } else {
-          alert("Unsupported file format. Please upload CSV or Excel.");
-          return;
-        }
-
-        const contacts = rows
-          .map((row) => {
-            const name = row.name ?? row.Name ?? "";
-            const email = row.email ?? row.Email ?? "";
-            return `${String(name).trim()}, ${String(email).trim()}`;
-          })
-          .filter((line) => line.trim() !== ",")
-          .join("\n");
-
-        setContactsText((previous) => {
-          if (!previous.trim()) return contacts;
-          if (!contacts.trim()) return previous;
-          return `${previous}\n${contacts}`;
-        });
-      } catch (error) {
-        console.error("Contact file parsing error:", error);
-        alert("Failed to parse file. Please check the format.");
-      }
-    };
-
-    if (file.name.toLowerCase().endsWith(".csv")) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsArrayBuffer(file);
-    }
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  // ------------------------------------------------------------
-  // Download sample CSV
-  // ------------------------------------------------------------
-
-  const downloadSampleCSV = () => {
-    const csv =
-      "Name,Email\nJohn Doe,john@example.com\nJane Smith,jane@example.com";
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "sample_contacts.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  // ------------------------------------------------------------
-  // Modal step 1 → step 2
-  // ------------------------------------------------------------
-
-  const handleNextStep = () => {
-    if (modalStep !== 1) return;
-
-    const contacts = contactsText
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (contacts.length === 0) {
-      alert("Please add at least one contact (name, email).");
-      return;
-    }
-
-    setModalStep(2);
-  };
-
-  const handleSelectEmailTemplate = (templateId: string) =>
-    setSelectedEmailTemplate(templateId);
-
-  const handleProceedWithTemplate = () => {
-    if (!selectedEmailTemplate) {
-      alert("Please select a template.");
-      return;
-    }
-
-    sessionStorage.setItem("emailCampaignContacts", contactsText);
-    closeModal();
-
-    router.push(
-      `/ai_ui/${username}?templateId=${selectedEmailTemplate}`
-    );
-  };
 
   // ============================================================
   // RENDER
@@ -578,12 +425,28 @@ export default function Page({ params }: PageProps) {
                     size="sm"
                     onClick={() => handleCategoryChange(category.name)}
                     data-category={category.name}
-                    className={
+                    aria-pressed={isActive}
+                    className={`relative isolate h-9 shrink-0 gap-2 whitespace-nowrap rounded-full px-4 text-sm font-medium transition-[color,transform] duration-300 ease-out active:scale-[0.98] ${
                       isActive
-                        ? "h-9 shrink-0 gap-2 whitespace-nowrap rounded-full border border-foreground bg-foreground px-4 text-sm font-medium text-background transition-all hover:bg-foreground/90 hover:text-background"
-                        : "h-9 shrink-0 gap-2 whitespace-nowrap rounded-full border border-transparent bg-muted/50 px-4 text-sm font-medium text-foreground transition-all hover:bg-muted"
-                    }
+                        ? "text-background hover:text-background"
+                        : "text-foreground hover:text-foreground"
+                    }`}
                   >
+                    {isActive && (
+                      <motion.span
+                        layoutId="active-category-pill"
+                        aria-hidden="true"
+                        transition={prefersReducedMotion
+                          ? { duration: 0 }
+                          : {
+                              type: "spring",
+                              stiffness: 360,
+                              damping: 34,
+                              mass: 0.85,
+                            }}
+                        className="absolute inset-0 -z-10 rounded-full border border-foreground bg-foreground shadow-[0_3px_12px_rgba(0,0,0,0.12)]"
+                      />
+                    )}
                     <Icon className="h-4 w-4 shrink-0" />
                     {category.name}
                   </Button>
@@ -632,15 +495,6 @@ export default function Page({ params }: PageProps) {
               )}
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={openModal}
-              className="rounded-full"
-            >
-              <Mail className="mr-1.5 h-4 w-4 text-primary" />
-              Create Email Campaign
-            </Button>
           </div>
         </div>
 
@@ -711,138 +565,6 @@ export default function Page({ params }: PageProps) {
 
         <Footer />
       </main>
-
-      {/* Email Campaign Dialog */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {modalStep === 1 ? "Add Contacts" : "Choose Email Template"}
-            </DialogTitle>
-
-            <DialogDescription>
-              {modalStep === 1
-                ? "Add your contacts in the format: name, email (one per line). You can also upload a CSV or Excel file."
-                : "Select a template to start your email campaign."}
-            </DialogDescription>
-          </DialogHeader>
-
-          {modalStep === 1 && (
-            <div className="space-y-4 py-2">
-              <div>
-                <label htmlFor="contacts" className="text-sm font-medium">
-                  Contacts
-                </label>
-
-                <textarea
-                  id="contacts"
-                  rows={8}
-                  value={contactsText}
-                  onChange={(event) => setContactsText(event.target.value)}
-                  placeholder="John Doe, john@example.com"
-                  className="mt-1 w-full resize-none rounded-md border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Bulk Upload (CSV / Excel)
-                </Button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={downloadSampleCSV}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Sample CSV
-                </Button>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Supported formats: .csv, .xlsx, .xls. The file should contain
-                columns named "Name" and "Email".
-              </p>
-            </div>
-          )}
-
-          {modalStep === 2 && (
-            <div className="grid grid-cols-1 gap-4 py-2 md:grid-cols-3">
-              {emailTemplates.map((template) => {
-                const selected = selectedEmailTemplate === template.id;
-
-                return (
-                  <Card
-                    key={template.id}
-                    onClick={() => handleSelectEmailTemplate(template.id)}
-                    className={
-                      selected
-                        ? "cursor-pointer overflow-hidden border-2 border-primary ring-2 ring-primary/20"
-                        : "cursor-pointer overflow-hidden border border-muted transition-colors hover:border-primary"
-                    }
-                  >
-                    <div className="relative aspect-video overflow-hidden bg-muted/30">
-                      <Image
-                        src={template.image}
-                        alt={template.title}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-
-                    <CardContent className="p-4">
-                      <h4 className="font-medium">{template.title}</h4>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {template.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          <DialogFooter className="flex items-center justify-between gap-2">
-            <Button type="button" variant="ghost" onClick={closeModal}>
-              Cancel
-            </Button>
-
-            <div className="flex gap-2">
-              {modalStep === 1 && (
-                <Button type="button" onClick={handleNextStep}>
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-
-              {modalStep === 2 && (
-                <Button
-                  type="button"
-                  disabled={!selectedEmailTemplate}
-                  onClick={handleProceedWithTemplate}
-                >
-                  Start Campaign
-                </Button>
-              )}
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Animation CSS */}
       <style jsx global>{`
