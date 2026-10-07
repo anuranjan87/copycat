@@ -1,7 +1,6 @@
-
 'use client'
 
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import {
@@ -30,10 +29,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  buildFieldNotesTemplate,
   fieldNotesDefaults,
   type FieldNotesContent,
-} from '../../../lib/field-notes-template'
+} from '../../../lib/field-notes-email-template'
 
 const defaultSuggestions = [
   'Make this warmer',
@@ -41,32 +39,34 @@ const defaultSuggestions = [
   'Add a stronger opening',
 ]
 
-const templates = [
-  {
-    name: 'The Sunday Edit',
-    category: 'Editorial',
-    tone: 'bg-[#f6efe3]',
-    accent: 'bg-[#d86f4d]',
-  },
-  {
-    name: 'Product Notes',
-    category: 'Product update',
-    tone: 'bg-[#e9f0ef]',
-    accent: 'bg-[#4c7b78]',
-  },
-  {
-    name: 'The Field Guide',
-    category: 'Storytelling',
-    tone: 'bg-[#eeeaf7]',
-    accent: 'bg-[#8b6fc1]',
-  },
-]
+type EmailTemplate = {
+  id: string
+  title: string
+  description: string | null
+  category: string | null
+  subject: string | null
+  htmlContent: string
+}
+
+function isEmailTemplate(value: unknown): value is EmailTemplate {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value && typeof value.id === 'string' &&
+    'title' in value && typeof value.title === 'string' &&
+    'htmlContent' in value && typeof value.htmlContent === 'string' &&
+    value.htmlContent.length > 0 &&
+    'subject' in value && (typeof value.subject === 'string' || value.subject === null) &&
+    'description' in value && (typeof value.description === 'string' || value.description === null) &&
+    'category' in value && (typeof value.category === 'string' || value.category === null)
+  )
+}
 
 export function NewsletterEditor() {
   const { user, isLoaded } = useUser()
   const params = useParams<{ username: string }>()
   const username = params?.username || ''
-  const [activeTab] = useState<'preview' | 'write'>('preview')
+  const [editorView, setEditorView] = useState<'preview' | 'templates'>('preview')
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
@@ -78,12 +78,94 @@ export function NewsletterEditor() {
   const [testEmailSent, setTestEmailSent] = useState(false)
   const [testEmailError, setTestEmailError] = useState('')
   const [fieldNotes, setFieldNotes] = useState<FieldNotesContent>({ ...fieldNotesDefaults })
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
+  const [isTemplateLoading, setIsTemplateLoading] = useState(true)
+  const [templateError, setTemplateError] = useState('')
   const [editSubject, setEditSubject] = useState(fieldNotesDefaults.subject)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isOptionsOpen, setIsOptionsOpen] = useState(false)
   const [isConnectingGmail, setIsConnectingGmail] = useState(false)
   const [gmailConnectError, setGmailConnectError] = useState('')
-  const fieldNotesTemplateHtml = generatedHtml || buildFieldNotesTemplate(fieldNotes)
+  const storedTemplateHtml = selectedTemplate?.htmlContent || ''
+  const fieldNotesTemplateHtml = generatedHtml || storedTemplateHtml
+
+  useEffect(() => {
+    if (!isLoaded || !user?.id) return
+
+    const controller = new AbortController()
+    const cacheKey = `email-templates:v1:${user.id}`
+    let hasCachedTemplates = false
+
+    function applyTemplates(templates: EmailTemplate[]) {
+      const initialTemplate = templates.find((template) => template.id === 'field-notes')
+      if (!initialTemplate || !templates.some((template) => template.id === 'empire-excellence')) {
+        throw new Error('The email template list is incomplete. Please try again.')
+      }
+
+      setEmailTemplates(templates)
+      setSelectedTemplate(initialTemplate)
+      setFieldNotes((current) => ({
+        ...current,
+        subject: initialTemplate.subject || current.subject,
+      }))
+      setEditSubject(initialTemplate.subject || fieldNotesDefaults.subject)
+    }
+
+    try {
+      const cachedTemplates = localStorage.getItem(cacheKey)
+      if (cachedTemplates) {
+        const parsedTemplates: unknown = JSON.parse(cachedTemplates)
+        if (
+          Array.isArray(parsedTemplates) &&
+          parsedTemplates.every(isEmailTemplate) &&
+          parsedTemplates.some((template) => template.id === 'field-notes') &&
+          parsedTemplates.some((template) => template.id === 'empire-excellence')
+        ) {
+          applyTemplates(parsedTemplates)
+          hasCachedTemplates = true
+          setIsTemplateLoading(false)
+        }
+      }
+    } catch (error) {
+      console.error('Could not read cached email templates:', error)
+    }
+
+    async function loadTemplate() {
+      try {
+        const response = await fetch('/api/email-templates/field-notes', {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const data = await response.json()
+        const templates = data?.templates
+        if (!response.ok || !Array.isArray(templates)) {
+          throw new Error(data?.error || 'Email templates could not be loaded.')
+        }
+
+        const validTemplates = templates.filter(isEmailTemplate)
+        applyTemplates(validTemplates)
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(validTemplates))
+        } catch (error) {
+          console.error('Could not cache email templates locally:', error)
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          if (hasCachedTemplates) {
+            console.error('Could not refresh cached email templates:', error)
+          } else {
+            setTemplateError(error instanceof Error ? error.message : 'Email templates could not be loaded.')
+          }
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsTemplateLoading(false)
+      }
+    }
+
+    void loadTemplate()
+    return () => controller.abort()
+  }, [isLoaded, user?.id])
 
   async function connectGmail() {
     if (!isLoaded || !user || isConnectingGmail) return
@@ -115,7 +197,7 @@ export function NewsletterEditor() {
 
   async function generateDraft() {
     const instruction = prompt.trim()
-    if (!instruction || isGenerating) return
+    if (!instruction || isGenerating || !storedTemplateHtml) return
 
     setIsGenerating(true)
     setGenerationError('')
@@ -159,6 +241,10 @@ export function NewsletterEditor() {
   async function sendTestEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isSendingTestEmail) return
+    if (!fieldNotesTemplateHtml) {
+      setTestEmailError(templateError || 'The Field Notes email template has not loaded yet.')
+      return
+    }
 
     setIsSendingTestEmail(true)
     setTestEmailError('')
@@ -169,7 +255,7 @@ export function NewsletterEditor() {
         fetch('/api/unsplash-agent-four', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'send-field-notes-test', to: testEmail.trim(), username, content: fieldNotes, html: generatedHtml }),
+          body: JSON.stringify({ action: 'send-field-notes-test', to: testEmail.trim(), username, content: fieldNotes, html: fieldNotesTemplateHtml }),
         })
           .then(async (response) => ({ ok: response.ok, data: await response.json() }))
           .catch(() => ({ ok: false, data: { error: 'Unable to send the test email. Please try again.' } })),
@@ -223,6 +309,7 @@ export function NewsletterEditor() {
             variant="ghost"
             size="sm"
             className="hidden text-[#686761] sm:flex"
+            disabled={isTemplateLoading || !storedTemplateHtml}
             onClick={() => {
               setTestEmailError('')
               setTestEmailSent(false)
@@ -291,79 +378,44 @@ export function NewsletterEditor() {
       <div className="flex min-h-[calc(100vh-68px)]">
 
         {/* LEFT NAVIGATION */}
-        <aside className="hidden w-[218px] shrink-0 border-r border-[#deded8] bg-[#f8f8f5] px-4 py-6 lg:flex lg:flex-col">
-          <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#999890]">
-            Create
-          </p>
-
-          <nav className="mt-3 flex flex-col gap-1">
-            {[
-              {
-                label: 'Compose',
-                icon: PenLine,
-                active: true,
-              },
-              {
-                label: 'Templates',
-                icon: LayoutTemplate,
-              },
-              {
-                label: 'Content blocks',
-                icon: FileText,
-              },
-            ].map((item) => (
-              <button
-                key={item.label}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium transition ${
-                  item.active
-                    ? 'bg-white text-[#292824] shadow-sm ring-1 ring-[#e4e3dd]'
-                    : 'text-[#77766f] hover:bg-white/70'
-                }`}
-              >
-                <item.icon data-icon="inline-start" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* TIPS */}
-          <div className="mt-9 border-t border-[#e2e2dc] pt-6">
-            <p className="px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[#999890]">
-              Tips
-            </p>
-
-            <div className="mt-3 rounded-xl bg-[#eeebf8] p-3.5 text-[#62557f]">
-              <Sparkles
-                data-icon="inline-start"
-                className="mb-2"
-              />
-
-              <p className="text-[12px] font-semibold">
-                Write with your voice
-              </p>
-
-              <p className="mt-1 text-[11px] leading-relaxed text-[#756a8d]">
-                Tell the assistant how you want to sound and it will learn as
-                you edit.
-              </p>
-            </div>
-          </div>
-
-          {/* INVITE */}
-          <div className="mt-auto pt-12">
-            <button className="flex items-center gap-2 px-3 text-[12px] text-[#8a8982] hover:text-[#45443f]">
-              <Plus data-icon="inline-start" />
-              Invite a teammate
-            </button>
-          </div>
-        </aside>
 
         {/* CENTER EDITOR */}
         <section className="min-w-0 flex-1">
           {/* EDITOR TOOLBAR */}
           <div className="flex h-[56px] items-center justify-between border-b border-[#deded8] bg-[#fafaf8] px-5 lg:px-8">
-            <div className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-[#33312c] shadow-sm ring-1 ring-[#e4e3dd]">
-              Preview
+            <div
+              role="group"
+              aria-label="Editor view"
+              className="inline-flex overflow-hidden rounded-lg border border-[#deded8] bg-white shadow-sm"
+            >
+              <button
+                type="button"
+                aria-pressed={editorView === 'preview'}
+                onClick={() => setEditorView('preview')}
+                className={`inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold transition ${
+                  editorView === 'preview'
+                    ? 'bg-[#f3f3ef] text-[#33312c]'
+                    : 'text-[#77766f] hover:bg-[#f8f8f5]'
+                }`}
+              >
+                <Eye size={16} />
+                Preview
+              </button>
+              <span className="w-px bg-[#deded8]" aria-hidden="true" />
+              <button
+                type="button"
+                aria-pressed={editorView === 'templates'}
+                disabled={isTemplateLoading || !storedTemplateHtml}
+                onClick={() => setEditorView('templates')}
+                className={`inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                  editorView === 'templates'
+                    ? 'bg-[#f3f3ef] text-[#33312c]'
+                    : 'text-[#77766f] hover:bg-[#f8f8f5]'
+                }`}
+              >
+                <LayoutTemplate size={16} />
+                Templates
+              </button>
             </div>
 
             <div className="flex items-center gap-1 text-[#a09f97]">
@@ -389,88 +441,59 @@ export function NewsletterEditor() {
             </div>
           </div>
 
-          {/* PREVIEW */}
-          {activeTab === 'write' ? (
-            <div className="mx-auto max-w-[820px] px-5 py-8 lg:px-12 lg:py-12">
-              <div className="mb-7 flex items-start justify-between">
-                <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#9a9991]">
-                    Draft / October 06, 2024
-                  </p>
-
-                  <h1 className="font-serif text-3xl tracking-[-0.03em] text-[#292824]">
-                    A quieter way to make a living
-                  </h1>
-                </div>
-
-              </div>
-
-              <div className="overflow-hidden rounded-xl border border-[#dbdad4] bg-white shadow-[0_12px_35px_rgba(60,57,46,0.06)]">
-                <div className="flex items-center justify-between border-b border-[#eeeee9] px-6 py-3 text-[11px] text-[#aaa9a1]">
-                  <span>Untitled newsletter</span>
-                  <span>412 words</span>
-                </div>
-
-                <article className="px-7 py-9 sm:px-14 sm:py-12">
-                  <div className="mb-9 flex items-center justify-between">
-                    <div className="font-serif text-[17px] font-bold tracking-tight">
-                      Field Notes
-                      <span className="text-[#a48ed7]">.</span>
-                    </div>
-
-                    <span className="text-[11px] text-[#9b9a92]">
-                      Issue 04 / 24
-                    </span>
-                  </div>
-
-                  <div className="mb-8 border-y border-[#ebeae4] py-5">
-                    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[#9b9a92]">
-                      A note from the desk
-                    </p>
-
-                    <h2 className="max-w-[580px] font-serif text-[38px] leading-[1.06] tracking-[-0.045em] text-[#292824]">
-                      {fieldNotes.headline}
-                    </h2>
-                  </div>
-
-                  <div className="mb-8 aspect-[2.2/1] overflow-hidden rounded-lg bg-[#ebe8e0]">
-                    <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_30%,#c7d2ca,transparent_34%),linear-gradient(120deg,#d9d2c2,#aaa99b)]">
-                      <div className="h-[72%] w-[26%] rotate-6 rounded-[45%_45%_4%_4%] bg-[#6b7567]/70 shadow-2xl" />
-                    </div>
-                  </div>
-
-                  <div className="max-w-[580px] font-serif text-[17px] leading-[1.65] text-[#4b4942]">
-                    <p className="mb-5">
-                      {fieldNotes.paragraphs[0]}
-                    </p>
-
-                    <p className="mb-5">
-                      {fieldNotes.paragraphs[1]}
-                    </p>
-
-                  </div>
-
-                  <div className="mt-10 flex items-center justify-between border-t border-[#ebeae4] pt-5 text-[11px] text-[#999890]">
-                    <span>{fieldNotes.linkText}</span>
-                    <span>{fieldNotes.website}</span>
-                  </div>
-                </article>
-
-                <div className="flex items-center gap-2 border-t border-[#eeeee9] bg-[#fbfbf9] px-5 py-3 text-[#919089]">
-                  {[Type, ImageIcon, Link2, List].map((Icon, i) => (
-                    <Button
-                      key={i}
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Editing tool"
+          {editorView === 'templates' ? (
+            <div className="min-h-[calc(100vh-124px)] bg-[#f8f8f5] p-5 sm:p-8">
+              <div className="mx-auto max-w-5xl">
+                <h1 className="text-xl font-semibold text-[#292824]">Email templates</h1>
+                <p className="mt-1 text-sm text-[#77766f]">Choose a template to use in your newsletter.</p>
+                <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                  {emailTemplates.map((template) => (
+                    <article
+                      key={template.id}
+                      className="overflow-hidden rounded-xl border border-[#deded8] bg-white shadow-sm"
                     >
-                      <Icon data-icon="inline-start" />
-                    </Button>
+                      <div className="aspect-[16/9] overflow-hidden bg-[#f1f1ed]">
+                        <iframe
+                          title={`${template.title} template preview`}
+                          srcDoc={`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;padding:0">${template.htmlContent}</body></html>`}
+                          sandbox=""
+                          scrolling="no"
+                          tabIndex={-1}
+                          className="pointer-events-none h-[200%] w-[200%] origin-top-left scale-50 border-0 bg-white"
+                        />
+                      </div>
+                      <div className="flex min-h-[172px] flex-col p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h2 className="font-semibold text-[#292824]">{template.title}</h2>
+                          {template.category && (
+                            <span className="rounded-full bg-[#f1ecfb] px-2.5 py-1 text-[11px] font-medium text-[#62557f]">
+                              {template.category}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 min-h-10 text-sm text-[#77766f]">
+                          {template.description || 'Email newsletter template'}
+                        </p>
+                        <button
+                          type="button"
+                          aria-pressed={selectedTemplate?.id === template.id}
+                          onClick={() => {
+                            setSelectedTemplate(template)
+                            setFieldNotes((current) => ({
+                              ...current,
+                              subject: template.subject || current.subject,
+                            }))
+                            setEditSubject(template.subject || fieldNotes.subject)
+                            setGeneratedHtml(null)
+                            setEditorView('preview')
+                          }}
+                          className="mt-auto w-full rounded-lg bg-[#292824] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3d3b36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a48ed7] focus-visible:ring-offset-2"
+                        >
+                          {selectedTemplate?.id === template.id ? 'Selected template' : 'Use template'}
+                        </button>
+                      </div>
+                    </article>
                   ))}
-
-                  <span className="ml-auto text-[11px]">
-                    Click anywhere to edit
-                  </span>
                 </div>
               </div>
             </div>
@@ -517,7 +540,7 @@ export function NewsletterEditor() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <p className="text-[14px] font-semibold leading-5">
-                        Field Notes
+                        {selectedTemplate?.title || 'Field Notes'}
                       </p>
 
                       <p className="text-[12px] leading-4 text-[#5f6368]">
@@ -556,10 +579,20 @@ export function NewsletterEditor() {
                 </div>
               </div>
 
-              <article
-                className="mx-auto mb-12 w-[calc(100%-2rem)] max-w-[760px] overflow-hidden rounded-lg bg-white shadow-sm sm:w-[calc(100%-5rem)]"
-                dangerouslySetInnerHTML={{ __html: fieldNotesTemplateHtml }}
-              />
+              {isTemplateLoading ? (
+                <p role="status" className="p-8 text-sm text-[#77766f]">
+                  Loading newsletter template…
+                </p>
+              ) : templateError ? (
+                <p role="alert" className="p-8 text-sm text-red-700">
+                  {templateError}
+                </p>
+              ) : (
+                <div
+                  className="w-full"
+                  dangerouslySetInnerHTML={{ __html: fieldNotesTemplateHtml }}
+                />
+              )}
             </div>
           )}
         </section>
@@ -617,14 +650,14 @@ export function NewsletterEditor() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Ask anything about your draft..."
-                  disabled={isGenerating}
+                  disabled={isGenerating || isTemplateLoading || !storedTemplateHtml}
                   className="min-h-[90px] w-full resize-none rounded-xl border border-[#dddcd5] bg-white p-3 pr-10 text-[12px] outline-none placeholder:text-[#aaa9a1] focus:border-[#a48ed7] focus:ring-2 focus:ring-[#eee8fb]"
                 />
 
                 <button
                   type="button"
                   onClick={() => void generateDraft()}
-                  disabled={isGenerating || !prompt.trim()}
+                  disabled={isGenerating || isTemplateLoading || !storedTemplateHtml || !prompt.trim()}
                   aria-label="Generate"
                   className="absolute bottom-3 right-3 flex size-7 items-center justify-center rounded-lg bg-[#292824] text-white transition hover:bg-[#4a4740] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -732,7 +765,7 @@ export function NewsletterEditor() {
                   Send a test email
                 </h2>
                 <p className="mt-1 text-sm text-[#77766f]">
-                  Preview the Field Notes newsletter in your inbox.
+                  Preview {selectedTemplate?.title || 'Field Notes'} in your inbox.
                 </p>
               </div>
               <button
@@ -809,4 +842,3 @@ export function NewsletterEditor() {
 }
 
 export default NewsletterEditor
-

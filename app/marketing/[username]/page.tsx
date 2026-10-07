@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const API_PROXY = "/api/marketing-proxy";
+const META_ADS_APP_URL = "https://marketing.7wingz.com/meta";
 
 async function apiRequest<T = any>(
   path: string,
@@ -364,6 +365,66 @@ function ToggleRow({
   );
 }
 
+function PlatformMark({
+  platform,
+}: {
+  platform: "google" | "meta" | "ai";
+}) {
+  if (platform === "google") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
+        <path
+          fill="#4285F4"
+          d="M44.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.5a10 10 0 0 1-4.3 6.6v5.5h7c4.1-3.8 6.3-9.4 6.3-16.1Z"
+        />
+        <path
+          fill="#34A853"
+          d="M24 45c5.9 0 10.9-2 14.5-5.5l-7-5.5c-2 1.3-4.5 2.1-7.5 2.1-5.8 0-10.7-3.9-12.5-9.2h-7.2v5.7A21.9 21.9 0 0 0 24 45Z"
+        />
+        <path
+          fill="#FBBC05"
+          d="M11.5 26.9a13 13 0 0 1 0-8v-5.7H4.3a21.9 21.9 0 0 0 0 19.4l7.2-5.7Z"
+        />
+        <path
+          fill="#EA4335"
+          d="M24 9.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 3.1 29.9 1 24 1A21.9 21.9 0 0 0 4.3 13.2l7.2 5.7C13.3 13.6 18.2 9.7 24 9.7Z"
+        />
+      </svg>
+    );
+  }
+
+  if (platform === "meta") {
+    return (
+      <svg viewBox="0 0 48 32" className="h-6 w-8" aria-hidden="true">
+        <defs>
+          <linearGradient id="meta-mark-gradient" x1="0" x2="1" y1="1" y2="0">
+            <stop offset="0" stopColor="#0866FF" />
+            <stop offset="1" stopColor="#8A3FFC" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M4 21.5C7.3 9.6 12.6 4 17.5 4c7.1 0 13.4 23.8 19 23.8 3.6 0 6.5-5.2 7.5-10.3"
+          fill="none"
+          stroke="url(#meta-mark-gradient)"
+          strokeLinecap="round"
+          strokeWidth="5"
+        />
+        <path
+          d="M4 17.5C5 22.6 7.9 27.8 11.5 27.8 17.1 27.8 23.4 4 30.5 4c4.9 0 10.2 5.6 13.5 17.5"
+          fill="none"
+          stroke="url(#meta-mark-gradient)"
+          strokeLinecap="round"
+          strokeWidth="5"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <Icon name="sparkles" size={20} />
+  );
+}
+
 export default function GoogleAdsPage() {
   const [activeTab, setActiveTab] = useState<"create" | "history">("create");
   const [form, setForm] = useState<FormState>({
@@ -722,94 +783,126 @@ export default function GoogleAdsPage() {
     <div className="min-h-screen bg-[#f6f6f3] text-gray-950">
       <div className="flex min-h-screen">
         {/* Sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[252px] border-r border-gray-200/80 bg-white lg:flex lg:flex-col">
-          <div className="flex h-[72px] items-center border-b border-gray-100 px-6">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[252px] border-r border-[#edf1f7] bg-[#fbfcff] lg:flex lg:flex-col">
+          <div className="flex h-[72px] items-center border-b border-[#edf1f7] px-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-950 text-sm font-bold text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#a8d8ff] via-[#c8c7ff] to-[#ffd4df] text-sm font-extrabold text-[#25304d] shadow-[0_4px_12px_rgba(165,190,255,0.22)]">
                 7
               </div>
               <div>
-                <div className="text-[15px] font-bold tracking-tight">7wingz</div>
-                <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400">
-                  Ads Manager
+                <div className="text-[15px] font-bold tracking-[-0.04em] text-[#242b3a]">7wingz</div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#9aa4b6]">
+                  ads studio
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 px-3 py-5">
-            <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">
-              Campaigns
+          <div className="flex-1 px-4 py-7">
+            <div className="px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#a4adbd]">
+              Channels
             </div>
 
             <button
               type="button"
               onClick={() => setActiveTab("create")}
-              className={`group mb-1.5 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
+              className={`group relative mb-1 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-200 ${
                 activeTab === "create"
-                  ? "bg-gray-950 text-white shadow-sm"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-950"
+                  ? "bg-[#eaf4ff] text-[#243b61]"
+                  : "text-[#647086] hover:bg-white hover:text-[#26354d]"
               }`}
             >
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  activeTab === "create" ? "bg-white/10" : "bg-gray-100"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+                  activeTab === "create" ? "bg-white shadow-[0_2px_8px_rgba(85,135,190,0.1)]" : "bg-[#f0f3f8] group-hover:bg-white"
                 }`}
               >
-                <Icon name="plus" size={16} />
+                <PlatformMark platform="google" />
               </span>
-              <span>
-                <span className="block text-xs font-semibold">New campaign</span>
-                <span
-                  className={`mt-0.5 block text-[10px] ${
-                    activeTab === "create" ? "text-gray-400" : "text-gray-400"
-                  }`}
-                >
-                  Build a search campaign
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="block text-[12px] font-semibold tracking-tight">Google Ads</span>
+                  {activeTab === "create" && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#76aef2]" />
+                  )}
+                </span>
+                <span className={`mt-0.5 block text-[10px] leading-4 ${activeTab === "create" ? "text-[#7890b2]" : "text-[#a0a9b8]"}`}>
+                  Search
                 </span>
               </span>
             </button>
 
+            <a
+              href={META_ADS_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open Meta Ads campaign manager in a new tab: reach people on Facebook and Instagram"
+              className="group mb-1 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[#647086] transition-all duration-200 hover:bg-[#f2efff] hover:text-[#343452]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f3f8] transition group-hover:bg-white">
+                <PlatformMark platform="meta" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="block text-[12px] font-semibold tracking-tight">Meta Ads</span>
+                  <span className="text-[10px] text-[#c2c7d2] transition group-hover:text-[#8b86c9]">↗</span>
+                </span>
+                <span className="mt-0.5 block text-[10px] leading-4 text-[#a0a9b8]">
+                  Instagram & Facebook
+                </span>
+              </span>
+            </a>
+
+            <div className="mb-7 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[#9aa4b4]">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f3f4f8]">
+                <PlatformMark platform="ai" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="block text-[12px] font-semibold tracking-tight text-[#788397]">AI ad studio</span>
+                  <span className="text-[9px] font-medium text-[#aab2bf]">
+                    soon
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-[10px] leading-4 text-[#a0a9b8]">
+                  Your next big idea
+                </span>
+              </span>
+            </div>
+
+            <div className="mx-3 mb-3 border-t border-[#edf1f7]" />
+            <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#a4adbd]">
+              Workspace
+            </div>
             <button
               type="button"
               onClick={() => setActiveTab("history")}
-              className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
+              className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
                 activeTab === "history"
-                  ? "bg-gray-950 text-white shadow-sm"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-950"
+                  ? "bg-[#fff1f4] text-[#704555]"
+                  : "text-[#647086] hover:bg-white hover:text-[#26354d]"
               }`}
             >
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  activeTab === "history" ? "bg-white/10" : "bg-gray-100"
+                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                  activeTab === "history" ? "bg-white text-[#cf7894]" : "bg-[#f0f3f8] text-[#8290a4] group-hover:bg-white"
                 }`}
               >
                 <Icon name="history" size={16} />
               </span>
               <span>
-                <span className="block text-xs font-semibold">Campaigns</span>
-                <span
-                  className={`mt-0.5 block text-[10px] ${
-                    activeTab === "history" ? "text-gray-400" : "text-gray-400"
-                  }`}
-                >
-                  View and manage
+                <span className="block text-[12px] font-semibold">Campaigns</span>
+                <span className={`mt-0.5 block text-[10px] ${activeTab === "history" ? "text-[#b17e91]" : "text-[#a0a9b8]"}`}>
+                  Your campaign list
                 </span>
               </span>
             </button>
           </div>
 
-          <div className="border-t border-gray-100 p-4">
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white shadow-sm">
-                  <Icon name="sparkles" size={13} />
-                </span>
-                Keep it simple
-              </div>
-              <p className="mt-2 text-[11px] leading-5 text-gray-500">
-                Start with one focused campaign. You can expand your strategy later.
-              </p>
+          <div className="border-t border-[#edf1f7] px-6 py-4">
+            <div className="flex items-center gap-2 text-[10px] text-[#9aa4b4]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#a9d9c7]" />
+              A little room to grow
             </div>
           </div>
         </aside>
