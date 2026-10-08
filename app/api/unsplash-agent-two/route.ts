@@ -8,7 +8,9 @@ const sql = neon(process.env.POSTGRES_URL!);
 
 function isAccountDataRequest(message: string) {
   return /\b(?:my\s+)?account\s+(?:status|data|details|plan|subscription|credits)\b/i.test(message) ||
-    /\b(?:what(?:'s| is)\s+)?my\s+(?:subscription|plan|account)\b/i.test(message);
+    /\b(?:what(?:'s| is)\s+)?my\s+(?:subscription|plan|account)\b/i.test(message) ||
+    /\b(?:website|site)\s+(?:publication\s+)?status\b/i.test(message) ||
+    /\b(?:is|check(?:\s+whether|\s+if)?|has)\b.*\b(?:my\s+)?(?:website|site)\b.*\b(?:published|live|online)\b/i.test(message);
 }
 
 async function getAuthenticatedAccountData() {

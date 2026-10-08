@@ -25,6 +25,20 @@ type WebsiteTemplate = {
   code_data: string
 }
 
+type ToolCall = {
+  name: string
+  label: string
+  detail: string
+}
+
+type WebsiteDraft = {
+  username: string
+  html: string
+  script: string
+  data: string
+  language: string
+}
+
 type Message = {
   role:
     | "user"
@@ -51,49 +65,53 @@ type Message = {
 
   responseTimeMs?: number
 
+  toolCalls?: ToolCall[]
+
+  websiteDraft?: WebsiteDraft
+
+  agentName?: string
+
+  routedFrom?: string
+
   responseType?:
     | "website_template"
     | "template_search"
     | "chat"
     | "publish"
+    | "website_draft"
 }
 
-const examples = [
-  "get the first website template",
-  "fetch a random website template",
-  "find a restaurant website",
-]
+type WelcomeTab = "website" | "google-ads" | "domain" | "account" | "email"
 
-type WelcomeTab = "website" | "google-ads" | "domain"
+type Agent = {
+  name: string
+  endpoint: string
+  welcomeTab: WelcomeTab
+}
 
 type WelcomeSuggestion = {
   label: string
-  icon?: string
-  iconAlt?: string
+}
+
+function readToolCalls(value: unknown): ToolCall[] | undefined {
+  if (!Array.isArray(value)) return undefined
+
+  const calls = value.filter(
+    (tool: unknown): tool is ToolCall =>
+      typeof tool === "object" &&
+      tool !== null &&
+      "name" in tool &&
+      typeof tool.name === "string" &&
+      "label" in tool &&
+      typeof tool.label === "string" &&
+      "detail" in tool &&
+      typeof tool.detail === "string",
+  )
+
+  return calls.length > 0 ? calls : undefined
 }
 
 const welcomeExamples: WelcomeSuggestion[] = [
-  { label: "Sign out button" },
-  {
-    label: "Netflix landing page clone",
-    icon: "https://img.icons8.com/plasticine/100/netflix.png",
-    iconAlt: "Netflix logo",
-  },
-  {
-    label: "Google search page",
-    icon: "https://img.icons8.com/color/48/google-logo.png",
-    iconAlt: "Google logo",
-  },
-  {
-    label: "Reddit homepage",
-    icon: "https://img.icons8.com/doodle/48/reddit--v4.png",
-    iconAlt: "Reddit logo",
-  },
-  {
-    label: "Apple product check-out",
-    icon: "https://img.icons8.com/arcade/64/mac-os.png",
-    iconAlt: "Apple logo",
-  },
   { label: "Convert Visitors" },
   { label: "Unlock Premium" },
   { label: "Grow Traffic" },
@@ -116,11 +134,22 @@ const domainExamples: WelcomeSuggestion[] = [
   { label: "Suggest brandable domain names" },
 ]
 
-const agents: {
-  name: string
-  endpoint: string
-  welcomeTab: WelcomeTab
-}[] = [
+const accountExamples: WelcomeSuggestion[] = [
+  { label: "Show my account status" },
+  { label: "What plan am I on?" },
+  { label: "Is my website published?" },
+  { label: "Show my subscription details" },
+  { label: "How many credits do I have?" },
+]
+
+const emailExamples: WelcomeSuggestion[] = [
+  { label: "Draft an email to introduce my business" },
+  { label: "Write a follow-up email for a new lead" },
+  { label: "Create a product announcement email" },
+  { label: "Draft a newsletter for my customers" },
+]
+
+const agents: Agent[] = [
   {
     name: "Website Ideas",
     endpoint: "/api/unsplash-agent-one",
@@ -136,6 +165,16 @@ const agents: {
     endpoint: "/api/unsplash-agent-three",
     welcomeTab: "domain",
   },
+  {
+    name: "Account Assistant",
+    endpoint: "/api/unsplash-agent-two",
+    welcomeTab: "account",
+  },
+  {
+    name: "Email Assistant",
+    endpoint: "/api/unsplash-agent-four",
+    welcomeTab: "email",
+  },
 ]
 
 function formatAssistantReply(content: string) {
@@ -146,6 +185,145 @@ function formatResponseTime(milliseconds: number) {
   return milliseconds < 1000
     ? `${milliseconds} ms`
     : `${(milliseconds / 1000).toFixed(2)} sec`
+}
+
+function getFollowUpIdeas(input: string, tab: WelcomeTab) {
+  const topic = input
+    .replace(/^(?:(?:please|can you|could you|help me|i want|i need|i am looking for|i'm looking for|looking for)\s+)+/i, "")
+    .replace(/^(?:find|show me|create|build|design|make|generate|suggest|fetch|get|search for)\s+/i, "")
+    .replace(/\b(?:a|an|the|me|my|for|please|first|random|latest|available|website|websites|site|sites|template|templates|page|pages)\b/gi, " ")
+    .replace(/[?!.,]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase() || "my business"
+
+  if (tab === "google-ads") {
+    return [
+      `Review my ${topic} campaign and suggest improvements`,
+      `Find high-intent Google Ads keywords for ${topic}`,
+      `Write three compelling ad headlines for ${topic}`,
+    ]
+  }
+
+  if (tab === "domain") {
+    return [
+      `Suggest memorable domain names for ${topic}`,
+      `Find short .com domain ideas for ${topic}`,
+      `Suggest alternatives if my preferred ${topic} domain is taken`,
+    ]
+  }
+
+  if (tab === "account") {
+    return [
+      "Show my account status and subscription",
+      "Check whether my website is published",
+      "Show the account details linked to my website",
+    ]
+  }
+
+  if (tab === "email") {
+    return [
+      `Draft a follow-up email about ${topic}`,
+      `Write a concise customer update about ${topic}`,
+      `Create a newsletter section about ${topic}`,
+    ]
+  }
+
+  return [
+    `Find another website template for ${topic}`,
+    `Show a ${topic} website with a clear call to action`,
+    `Customize a ${topic} homepage for mobile visitors`,
+  ]
+}
+
+function getAgentForRequest(
+  message: string,
+  currentAgent: Agent,
+  history: Message[],
+): Agent {
+  const normalized = message.toLowerCase()
+  const recentContext = history
+    .slice(-6)
+    .map((item) => item.content)
+    .join(" ")
+    .toLowerCase()
+  const answersRecentLanguageQuestion =
+    /\b(?:hindi|spanish|french|german|arabic|japanese|chinese|portuguese|italian|korean|dutch|russian|bengali|urdu|marathi|punjabi)\b/.test(normalized) &&
+    history.slice(-2).some((item) => /which language.*(?:website|site).*translate/i.test(item.content)) ||
+    ((message.includes("हिंदी") || message.includes("हिन्दी")) &&
+      history.slice(-2).some((item) => /which language.*(?:website|site).*translate/i.test(item.content)))
+  const refersToRecentWebsite =
+    (
+      /\b(?:it|this|that|the same|above)\b/.test(normalized) &&
+      /\b(?:website|web site|site|homepage|home page|webpage|web page|template)\b/.test(recentContext)
+    ) ||
+    answersRecentLanguageQuestion
+  const hasWebsite =
+    /\b(?:website|web site|site|homepage|home page|webpage|web page|template)\b/.test(normalized) ||
+    refersToRecentWebsite
+  const hasRecentTemplate = history.some((item) => Boolean(item.template))
+  const websiteCreationRequest = hasWebsite &&
+    /\b(?:build|create|design|find|show|customi[sz]e|need|want|give me|make me|looking for)\b/.test(normalized)
+  const recentTemplateEditRequest = hasRecentTemplate &&
+    /\b(?:edit|modify|customi[sz]e|update|change|adapt)\b/.test(normalized)
+  const recentTemplatePublishRequest = hasRecentTemplate &&
+    /\b(?:publish|publishing|launch|launched)\b/.test(normalized)
+  const asksForWebsiteTranslation =
+    /\b(?:translate|translation|hindi|spanish|french|german|arabic|japanese|chinese|portuguese|italian|korean|dutch|russian|bengali|urdu|marathi|punjabi|language|locali[sz]e)\b/.test(normalized) ||
+    message.includes("हिंदी") ||
+    message.includes("हिन्दी")
+
+  if (
+    hasWebsite &&
+    asksForWebsiteTranslation
+  ) {
+    return agents.find((agent) => agent.welcomeTab === "website") || currentAgent
+  }
+
+  if (
+    /\b(?:write|draft|compose|create|send)\b/.test(normalized) &&
+    /\b(?:email|e-mail|newsletter)\b/.test(normalized)
+  ) {
+    return agents.find((agent) => agent.welcomeTab === "email") || currentAgent
+  }
+
+  if (/\b(?:google ads|ad campaign|ads campaign|advertising campaign|keywords for ads|ad headlines|ad copy)\b/.test(normalized)) {
+    return agents.find((agent) => agent.welcomeTab === "google-ads") || currentAgent
+  }
+
+  if (/\b(?:domain|domain name|availability of .+ domain|register .+ domain)\b/.test(normalized)) {
+    return agents.find((agent) => agent.welcomeTab === "domain") || currentAgent
+  }
+
+  if (
+    /\b(?:account|subscription|my plan|credits|website status|published status)\b/.test(normalized) ||
+    /\b(?:is|check whether|check if|has)\b.*\b(?:website|site)\b.*\b(?:published|live|online)\b/.test(normalized)
+  ) {
+    return agents.find((agent) => agent.welcomeTab === "account") || currentAgent
+  }
+
+  if (websiteCreationRequest || recentTemplateEditRequest || recentTemplatePublishRequest) {
+    return agents.find((agent) => agent.welcomeTab === "website") || currentAgent
+  }
+
+  return currentAgent
+}
+
+function isWebsiteDraft(value: unknown): value is WebsiteDraft {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "username" in value &&
+    typeof value.username === "string" &&
+    "html" in value &&
+    typeof value.html === "string" &&
+    "script" in value &&
+    typeof value.script === "string" &&
+    "data" in value &&
+    typeof value.data === "string" &&
+    "language" in value &&
+    typeof value.language === "string"
+  )
 }
 
 export default function Page() {
@@ -161,6 +339,9 @@ export default function Page() {
 
   const [selectedAgent, setSelectedAgent] =
     useState(agents[0])
+  const [activeToolStatus, setActiveToolStatus] = useState("")
+  const latestUserInput = [...history].reverse().find((item) => item.role === "user")?.content || ""
+  const followUpIdeas = getFollowUpIdeas(latestUserInput, selectedAgent.welcomeTab)
 
   const [isAgentMenuOpen, setIsAgentMenuOpen] =
     useState(false)
@@ -205,6 +386,10 @@ export default function Page() {
       return
     }
 
+    const requestAgent = getAgentForRequest(value, selectedAgent, history)
+    const wasRouted = requestAgent.endpoint !== selectedAgent.endpoint
+    if (wasRouted) setSelectedAgent(requestAgent)
+
     setMessage("")
 
     setHistory((current) => [
@@ -217,12 +402,21 @@ export default function Page() {
     ])
 
     setLoading(true)
+    setActiveToolStatus(
+      wasRouted
+        ? `Switching to ${requestAgent.name} for this request…`
+        : requestAgent.welcomeTab === "website"
+          ? "Website Ideas is selecting and running the right template tool…"
+          : requestAgent.welcomeTab === "account"
+            ? "Account Assistant is securely checking your account…"
+            : `${requestAgent.name} is working on your request…`,
+    )
     const requestStartedAt = performance.now()
 
     try {
       const response =
         await fetch(
-          selectedAgent.endpoint,
+          requestAgent.endpoint,
           {
             method: "POST",
 
@@ -296,7 +490,15 @@ export default function Page() {
 
       let assistantMessage: Message
 
-      if (data.type === "publish") {
+      if (data.type === "website_draft" && isWebsiteDraft(data.draft)) {
+        assistantMessage = {
+          role: "assistant",
+          content: data.reply || "Your translated website draft is ready to review.",
+          websiteDraft: data.draft,
+          toolCalls: readToolCalls(data.toolCalls),
+          responseType: "website_draft",
+        }
+      } else if (data.type === "publish") {
         assistantMessage = {
           role: "assistant",
           content:
@@ -321,6 +523,7 @@ export default function Page() {
             typeof data.liveMessage === "string"
               ? data.liveMessage
               : undefined,
+          toolCalls: readToolCalls(data.toolCalls),
           responseType: "publish",
         }
       }
@@ -337,8 +540,9 @@ export default function Page() {
         const template =
           data.template
 
-        let content =
-          "Here is the website template."
+        let content = typeof data.reply === "string"
+          ? data.reply
+          : "Here is the website template."
 
         if (
           data.operation ===
@@ -378,6 +582,7 @@ export default function Page() {
           content,
 
           template,
+          toolCalls: readToolCalls(data.toolCalls),
 
           responseType:
             "website_template",
@@ -403,6 +608,7 @@ export default function Page() {
             `I found ${templates.length} matching website template${templates.length === 1 ? "" : "s"} for "${data.query}".`,
 
           templates,
+          toolCalls: readToolCalls(data.toolCalls),
 
           query:
             data.query,
@@ -434,6 +640,12 @@ export default function Page() {
         ...current,
         {
           ...assistantMessage,
+          ...(wasRouted
+            ? {
+                agentName: requestAgent.name,
+                routedFrom: selectedAgent.name,
+              }
+            : { agentName: requestAgent.name }),
           responseTimeMs: Math.max(1, Math.round(performance.now() - requestStartedAt)),
         },
       ])
@@ -452,12 +664,15 @@ export default function Page() {
           error: true,
 
           responseTimeMs: Math.max(1, Math.round(performance.now() - requestStartedAt)),
+          agentName: requestAgent.name,
+          ...(wasRouted ? { routedFrom: selectedAgent.name } : {}),
 
           responseType:
             "chat",
         },
       ])
     } finally {
+      setActiveToolStatus("")
       setLoading(false)
     }
   }
@@ -545,6 +760,67 @@ export default function Page() {
                           {formatAssistantReply(item.content)}
                         </ReactMarkdown>
                       </div>
+
+                      {item.routedFrom && item.agentName && (
+                        <p className="mb-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
+                          Routed from {item.routedFrom} to {item.agentName}
+                        </p>
+                      )}
+
+                      {item.websiteDraft && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              sessionStorage.setItem(
+                                `website-draft-${item.websiteDraft?.username}`,
+                                JSON.stringify({
+                                  html: item.websiteDraft?.html,
+                                  script: item.websiteDraft?.script,
+                                  data: item.websiteDraft?.data,
+                                }),
+                              )
+                              window.location.assign(`/edit_new/${encodeURIComponent(item.websiteDraft.username)}`)
+                            } catch (error) {
+                              console.error("Could not open the translated website draft:", error)
+                              setHistory((current) => [
+                                ...current,
+                                {
+                                  role: "assistant",
+                                  content: "I couldn't open the draft in the editor. Please try again.",
+                                  error: true,
+                                  agentName: item.agentName,
+                                },
+                              ])
+                            }
+                          }}
+                          className="mb-4 inline-flex items-center rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                        >
+                          Review {item.websiteDraft.language} draft
+                        </button>
+                      )}
+
+                      {item.toolCalls && item.toolCalls.length > 0 && (
+                        <details open className="mb-4 max-w-2xl rounded-xl border border-zinc-200 bg-zinc-50/80 text-xs dark:border-zinc-800 dark:bg-zinc-900/70">
+                          <summary className="cursor-pointer list-none px-3 py-2.5 font-medium text-zinc-600 marker:hidden dark:text-zinc-300">
+                            Tools called · {item.toolCalls.length}
+                          </summary>
+                          <ol className="space-y-2 border-t border-zinc-200 px-3 py-3 dark:border-zinc-800">
+                            {item.toolCalls.map((tool, toolIndex) => (
+                              <li key={`${tool.name}-${toolIndex}`} className="flex gap-2.5">
+                                <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-emerald-100 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                  ✓
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-zinc-700 dark:text-zinc-200">{tool.label}</p>
+                                  <p className="mt-0.5 leading-5 text-zinc-500 dark:text-zinc-400">{tool.detail}</p>
+                                  <code className="mt-1 inline-block rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{tool.name}</code>
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
+                      )}
 
                       {item.responseTimeMs !== undefined && (
                         <div
@@ -634,10 +910,10 @@ export default function Page() {
 
             {loading && (
               <div className="flex justify-start">
-                <div
-                  className="h-4 w-24 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800"
-                  aria-label="Loading"
-                />
+                <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white/80 px-3.5 py-2.5 text-xs text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-300" role="status" aria-live="polite">
+                  <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+                  {activeToolStatus || "Working…"}
+                </div>
               </div>
             )}
 
@@ -762,17 +1038,17 @@ export default function Page() {
       Try an idea:
     </span>
 
-    {examples.map(
-      (example) => (
+    {followUpIdeas.map(
+      (idea) => (
         <button
-          key={example}
+          key={idea}
           type="button"
           onClick={() =>
-            setMessage(example)
+            setMessage(idea)
           }
           className="rounded-full border border-zinc-200 px-3 py-1.5 transition hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500"
         >
-          {example}
+          {idea}
         </button>
       ),
     )}
@@ -801,7 +1077,11 @@ function WelcomeMessage({
       ? googleAdsExamples
       : welcomeTab === "domain"
         ? domainExamples
-        : welcomeExamples
+        : welcomeTab === "account"
+          ? accountExamples
+            : welcomeTab === "email"
+              ? emailExamples
+              : welcomeExamples
   const examplesPerPage = 5
   const totalPages = Math.max(1, Math.ceil(activeExamples.length / examplesPerPage))
   const currentPage = examplePage % totalPages
@@ -843,7 +1123,15 @@ function WelcomeMessage({
 
       <CardContent className="relative z-10 mt-auto w-full bg-white/90 px-4 py-4 text-center backdrop-blur-md dark:bg-zinc-950/90 sm:px-6">
         <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-300">
-          Create elegant and sophisticated components in just a few prompts
+          {welcomeTab === "account"
+            ? "Get a clear snapshot of your account, plan, and website status"
+            : welcomeTab === "google-ads"
+              ? "Plan and improve your Google Ads campaigns"
+              : welcomeTab === "domain"
+                ? "Find and check domain ideas for your business"
+                : welcomeTab === "email"
+                  ? "Draft polished emails and newsletters with a few prompts"
+                  : "Create elegant and sophisticated components in just a few prompts"}
         </p>
 
         <div className="mb-1 mt-2 flex items-center justify-end">
@@ -866,15 +1154,6 @@ function WelcomeMessage({
               onClick={() => setInput(example.label)}
               className="h-auto max-w-full gap-2 whitespace-normal rounded-full px-3 py-2 text-xs text-foreground hover:text-primary sm:text-sm"
             >
-              {example.icon && (
-                <img
-                  src={example.icon}
-                  alt={example.iconAlt || ""}
-                  width={22}
-                  height={22}
-                  className="h-5 w-5 shrink-0 object-contain"
-                />
-              )}
               {example.label}
             </Button>
           ))}
