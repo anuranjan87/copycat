@@ -52,7 +52,43 @@ function asksToPublish(message: string): boolean {
 
 function asksToEdit(message: string): boolean {
   return /\b(edit|modify|customize|update|change|adapt)\b/i.test(message) ||
-    /\bmake\s+it\s+for\b/i.test(message)
+    /\b(?:make|do|use|apply)\s+(?:it|this|that)\s+(?:for|to|as|in)\b/i.test(message)
+}
+
+function getRequestedTemplateId(message: string): number | null {
+  const match = message.match(/\btemplate\s*(?:id\s*)?#?\s*(\d+)\b/i)
+  if (!match) return null
+
+  const id = Number(match[1])
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+function isTemplateSelectionCorrection(message: string): boolean {
+  return getRequestedTemplateId(message) !== null &&
+    /\b(?:no|instead|rather)\b/i.test(message) &&
+    /\b(?:this|that|it)\b/i.test(message)
+}
+
+function getRecentCustomizationRequest(history: unknown): string | null {
+  if (!Array.isArray(history)) return null
+
+  for (const item of [...history].reverse()) {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      !("role" in item) ||
+      item.role !== "user" ||
+      !("content" in item) ||
+      typeof item.content !== "string" ||
+      !asksToEdit(item.content)
+    ) {
+      continue
+    }
+
+    return item.content
+  }
+
+  return null
 }
 
 const supportedWebsiteLanguages = [
@@ -1220,7 +1256,11 @@ You can retrieve website templates using exactly four operations.
 
 OPERATION 1 — SEARCH
 
-Use search_website_templates when the user wants a template based on:
+Use search_website_templates when the user describes a business, project,
+audience, or desired outcome that a website could support, even if they do
+not explicitly ask for a website. This includes goals such as finding
+customers, getting more bookings, selling a product, or promoting a service.
+Also use it when the user wants a template based on:
 
 - industry
 - business
@@ -1305,10 +1345,29 @@ You are selecting a template.
 
 After the server retrieves the template, another AI step will customize ONLY code_data.
 
-If the user asks to edit, modify, customize, update, change, or adapt the template
-shown in the recent chat, reuse that recent template instead of searching for a new
-template. Keep its HTML, layout, CSS, and JavaScript unchanged; customize only the
-values in code_data. The user can also ask to change the business idea or language.
+When using search_website_templates, also provide a concise, personalized
+"reply" for the user:
+
+- If they describe a broader goal, acknowledge the specific goal in plain
+  language and propose the most useful first website-related step.
+- Choose the step based on their request, not a fixed industry example. For
+  customer or booking goals, a focused landing page with a clear offer and
+  enquiry or booking action is a good starting point. For other goals, choose
+  a suitable site or page for that goal.
+- Mention that a first draft is included below, since the server will create
+  one from the selected template.
+- Do not promise results, invent facts, or assume a budget or marketing plan.
+- If they only ask to find a template, briefly say what kind of template was
+  found instead of giving an unrelated growth plan.
+- Keep the reply to a few short sentences. Do not ask questions before
+  producing the first draft; mention useful details they can provide to refine it.
+
+If the user asks to edit, modify, customize, update, change, or adapt a template
+shown in the recent chat, reuse that template instead of searching for a new one.
+If they explicitly name a template ID while correcting which template to use, honor
+that ID instead of using the most recent template. Keep its HTML, layout, CSS, and
+JavaScript unchanged; customize only the values in code_data. The user can also ask
+to change the business idea or language.
 
 The HTML/code and JavaScript/code_script must remain unchanged.
 
@@ -1351,10 +1410,17 @@ Choose exactly one retrieval operation.
                       description:
                         "Short keywords describing the desired website template.",
                     },
+                    reply: {
+                      type: "string",
+
+                      description:
+                        "A concise, personalized acknowledgment and useful first website-related step for the user's business, project, or goal.",
+                    },
                   },
 
                   required: [
                     "query",
+                    "reply",
                   ],
 
                   additionalProperties:
@@ -1475,16 +1541,37 @@ Choose exactly one retrieval operation.
      * ---------------------------------------------------
      */
 
-    let template: TemplateRow | null =
-      asksToEdit(message)
-        ? getRecentTemplate(history)
-        : null
+    const requestedTemplateId = getRequestedTemplateId(message)
+    const templateEditRequested = asksToEdit(message)
+    let template: TemplateRow | null = null
+
+    if (templateEditRequested && requestedTemplateId !== null) {
+      const rows = await getWebsiteTemplateById(requestedTemplateId)
+
+      if (!rows.length) {
+        return Response.json({
+          ok: true,
+          type: "chat",
+          reply: `I could not find website template ${requestedTemplateId}.`,
+        })
+      }
+
+      template = normalizeTemplate(
+        rows[0] as Record<string, unknown>,
+      )
+    } else if (templateEditRequested) {
+      template = getRecentTemplate(history)
+    }
 
     let operation = template
-      ? "edit_recent"
+      ? requestedTemplateId !== null
+        ? "edit_id"
+        : "edit_recent"
       : ""
 
     let searchQuery: string | null =
+      null
+    let searchReply: string | null =
       null
 
     /**
@@ -1496,7 +1583,7 @@ Choose exactly one retrieval operation.
         "get_first_website_template",
       )
 
-    if (firstCall) {
+    if (!template && firstCall) {
       const rows =
         await getFirstWebsiteTemplate()
 
@@ -1635,6 +1722,14 @@ Choose exactly one retrieval operation.
             args.query.trim()
         }
 
+        if (
+          typeof args?.reply === "string" &&
+          args.reply.trim()
+        ) {
+          searchReply =
+            args.reply.trim()
+        }
+
         const rows =
           await searchWebsiteTemplates(
             query,
@@ -1713,10 +1808,18 @@ Choose exactly one retrieval operation.
     const originalCodeData =
       template.code_data
 
+    const previousCustomization =
+      isTemplateSelectionCorrection(message)
+        ? getRecentCustomizationRequest(history)
+        : null
+    const templateEditRequest = previousCustomization
+      ? `${previousCustomization}\n\nThe user is correcting the template selection: apply that same customization to website template ${template.id}. Do not search for or switch to another template.`
+      : message
+
     const editedCodeDataRaw =
       await editTemplateData(
         originalCodeData,
-        message,
+        templateEditRequest,
         openaiKey,
       )
 
@@ -1777,6 +1880,12 @@ Choose exactly one retrieval operation.
             label: "Reuse recent template",
             detail: `Reused website template ${template.id} from this conversation.`,
           }
+        : operation === "edit_id"
+          ? {
+              name: "get_website_template_by_id",
+              label: "Use requested website template",
+              detail: `Used website template ${template.id} as requested.`,
+            }
         : operation === "first"
           ? {
               name: "get_first_website_template",
@@ -1812,6 +1921,12 @@ Choose exactly one retrieval operation.
       type: "website_template",
 
       operation,
+
+      ...(searchReply
+        ? {
+            reply: searchReply,
+          }
+        : {}),
 
       ...(searchQuery
         ? {

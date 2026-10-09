@@ -50,6 +50,7 @@ const examples = [
   "get the first website template",
   "fetch a random website template",
   "find a restaurant website",
+  "I want more bookings for my salon",
 ]
 
 export default function Page() {
@@ -242,7 +243,11 @@ export default function Page() {
         assistantMessage = {
           role: "assistant",
 
-          content,
+          content:
+            typeof data.reply === "string" &&
+            data.reply.trim()
+              ? data.reply.trim()
+              : content,
 
           template,
 
@@ -381,9 +386,8 @@ export default function Page() {
             </div>
 
             <p className="mt-5 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Ask for a website template
-              or retrieve one from the
-              template library.
+              Describe your business, project, or goal, and I’ll create a
+              website draft to help you move it forward.
             </p>
 
           </div>
@@ -535,7 +539,7 @@ export default function Page() {
             htmlFor="website-template-request"
             className="sr-only"
           >
-            Ask for a website template
+            Describe your business, project, or goal
           </label>
 
           <input
@@ -546,7 +550,7 @@ export default function Page() {
                 event.target.value,
               )
             }
-            placeholder="Ask for a website template"
+            placeholder="Describe your business, project, or goal"
             maxLength={1000}
             className="min-h-10 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-zinc-400"
           />

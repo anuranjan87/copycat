@@ -88,6 +88,36 @@ type FormState = {
   descriptions: string[];
 };
 
+type AssistantCampaignDraft = {
+  campaignName: string;
+  adGroupName: string;
+  keywords: string[];
+  headlines: string[];
+  descriptions: string[];
+  finalUrl: string | null;
+  dailyBudget: number | null;
+};
+
+function isAssistantCampaignDraft(
+  value: unknown,
+): value is AssistantCampaignDraft {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Record<string, unknown>;
+
+  return (
+    typeof draft.campaignName === "string" &&
+    typeof draft.adGroupName === "string" &&
+    Array.isArray(draft.keywords) &&
+    draft.keywords.every((item) => typeof item === "string") &&
+    Array.isArray(draft.headlines) &&
+    draft.headlines.every((item) => typeof item === "string") &&
+    Array.isArray(draft.descriptions) &&
+    draft.descriptions.every((item) => typeof item === "string") &&
+    (typeof draft.finalUrl === "string" || draft.finalUrl === null) &&
+    (typeof draft.dailyBudget === "number" || draft.dailyBudget === null)
+  );
+}
+
 const defaultForm: FormState = {
   campaignName: "7wingz Website Builder",
   dailyBudget: 500,
@@ -462,6 +492,56 @@ export default function GoogleAdsPage() {
       if (locationSearchTimer.current) clearTimeout(locationSearchTimer.current);
     };
   }, [activeTab]);
+
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("draft") !== "assistant") return;
+
+    const username = decodeURIComponent(
+      window.location.pathname.split("/").filter(Boolean)[1] || "",
+    );
+    const storageKey = `google-ads-campaign-draft-${username}`;
+    const savedDraft = sessionStorage.getItem(storageKey);
+
+    if (!savedDraft) {
+      currentUrl.searchParams.delete("draft");
+      window.history.replaceState({}, "", currentUrl);
+      return;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(savedDraft);
+      if (!isAssistantCampaignDraft(parsed)) {
+        throw new Error("Campaign draft data is incomplete.");
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        campaignName: parsed.campaignName,
+        dailyBudget: parsed.dailyBudget ?? 0,
+        status: "PAUSED",
+        websiteUrl: parsed.finalUrl || "",
+        adGroupName: parsed.adGroupName,
+        keywords: parsed.keywords,
+        headlines: parsed.headlines,
+        descriptions: parsed.descriptions,
+        locations: [],
+      }));
+      setEditingCampaignId(null);
+      setCreateError("");
+      setCreateSuccess("Draft loaded. Choose a target location and review the campaign details before creating it.");
+      setActiveTab("create");
+      sessionStorage.removeItem(storageKey);
+      currentUrl.searchParams.delete("draft");
+      window.history.replaceState({}, "", currentUrl);
+    } catch (error) {
+      console.error("Could not load Google Ads campaign draft:", error);
+      setCreateError("This campaign draft could not be loaded. Please return to the chat and create a new draft.");
+      sessionStorage.removeItem(storageKey);
+      currentUrl.searchParams.delete("draft");
+      window.history.replaceState({}, "", currentUrl);
+    }
+  }, []);
 
   function updateForm<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [field]: value }));

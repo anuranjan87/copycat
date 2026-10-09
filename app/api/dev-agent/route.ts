@@ -118,6 +118,20 @@ function createAgentStream(
 
 type ToolArgs = Record<string, unknown>;
 
+type GoogleAdsCampaignDraft = {
+  campaignName: string;
+  objective: string;
+  campaignType: "Search";
+  adGroupName: string;
+  keywords: string[];
+  headlines: string[];
+  descriptions: string[];
+  finalUrl: string | null;
+  locationTargeting: string | null;
+  dailyBudget: number | null;
+  primaryConversionGoal: string;
+};
+
 type AgentRequestBody = {
   message?: unknown;
 };
@@ -127,6 +141,100 @@ type WebsiteContent = {
   script: string;
   data: string;
 };
+
+function validateGoogleAdsCampaignDraft(
+  args: ToolArgs,
+): { draft: GoogleAdsCampaignDraft } | { error: string } {
+  const readText = (key: string) =>
+    typeof args[key] === "string" ? args[key].trim() : "";
+  const readList = (key: string): string[] | null => {
+    const value = args[key];
+    if (!Array.isArray(value)) return null;
+
+    const items: string[] = [];
+    for (const item of value) {
+      if (typeof item !== "string") return null;
+      if (item.trim()) items.push(item.trim());
+    }
+
+    return items;
+  };
+
+  const campaignName = readText("campaignName");
+  const objective = readText("objective");
+  const campaignType = args.campaignType;
+  const adGroupName = readText("adGroupName");
+  const keywords = readList("keywords");
+  const headlines = readList("headlines");
+  const descriptions = readList("descriptions");
+  const primaryConversionGoal = readText("primaryConversionGoal");
+  const finalUrl =
+    args.finalUrl === null ? null : readText("finalUrl") || null;
+  const locationTargeting =
+    args.locationTargeting === null
+      ? null
+      : readText("locationTargeting") || null;
+  const dailyBudget =
+    args.dailyBudget === null
+      ? null
+      : typeof args.dailyBudget === "number"
+        ? args.dailyBudget
+        : Number.NaN;
+
+  if (
+    !campaignName ||
+    !objective ||
+    campaignType !== "Search" ||
+    !adGroupName ||
+    !primaryConversionGoal ||
+    !keywords?.length ||
+    !headlines ||
+    headlines.length < 3 ||
+    !descriptions ||
+    descriptions.length < 2
+  ) {
+    return { error: "The campaign draft is missing required details." };
+  }
+
+  if (headlines.some((headline) => headline.length > 30)) {
+    return { error: "A campaign headline exceeds Google's 30-character limit." };
+  }
+
+  if (descriptions.some((description) => description.length > 90)) {
+    return { error: "A campaign description exceeds Google's 90-character limit." };
+  }
+
+  if (dailyBudget !== null && (!Number.isFinite(dailyBudget) || dailyBudget <= 0)) {
+    return { error: "The campaign draft contains an invalid daily budget." };
+  }
+
+  if (finalUrl !== null) {
+    try {
+      const parsedUrl = new URL(finalUrl);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return { error: "The campaign draft contains an invalid final URL." };
+      }
+    } catch {
+      return { error: "The campaign draft contains an invalid final URL." };
+    }
+  }
+
+  return {
+    draft: {
+      campaignName,
+      objective,
+      campaignType,
+      adGroupName,
+      keywords,
+      headlines,
+      descriptions,
+      finalUrl,
+      locationTargeting,
+      dailyBudget,
+      primaryConversionGoal,
+    },
+  };
+}
 
 type UnsplashPhoto = {
   id?: string;
@@ -361,6 +469,56 @@ const tools = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "prepare_google_ads_campaign_draft",
+      description:
+        "Prepare a reviewable Google Ads Search campaign content draft from the authenticated user's latest published website. Use only when the user asks to create, draft, or build a campaign. First call get_google_ads_campaigns, then call this tool. This does not create or activate a campaign.",
+      strict: true,
+      parameters: {
+        type: "object",
+        properties: {
+          campaignName: { type: "string" },
+          objective: { type: "string" },
+          campaignType: { type: "string", enum: ["Search"] },
+          adGroupName: { type: "string" },
+          keywords: {
+            type: "array",
+            items: { type: "string" },
+          },
+          headlines: {
+            type: "array",
+            minItems: 3,
+            items: { type: "string", maxLength: 30 },
+          },
+          descriptions: {
+            type: "array",
+            minItems: 2,
+            items: { type: "string", maxLength: 90 },
+          },
+          finalUrl: { type: ["string", "null"] },
+          locationTargeting: { type: ["string", "null"] },
+          dailyBudget: { type: ["number", "null"] },
+          primaryConversionGoal: { type: "string" },
+        },
+        required: [
+          "campaignName",
+          "objective",
+          "campaignType",
+          "adGroupName",
+          "keywords",
+          "headlines",
+          "descriptions",
+          "finalUrl",
+          "locationTargeting",
+          "dailyBudget",
+          "primaryConversionGoal",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 // ============================================================
 // 7. SYSTEM PROMPT
@@ -396,19 +554,10 @@ ${
 
 CORE BEHAVIOR:
 
-- Every final user-facing answer MUST be returned as a complete HTML
-  fragment styled with Tailwind utility classes. Never return Markdown,
-  plain text, JSON, code fences, or a full document with html/head/body.
-- Use the attached Google Ads recommendation layout as the visual and
-  editorial model for every topic: a clear lead headline, short signal
-  section, useful action cards or sections, and a closing thought.
-- Use semantic HTML such as section, header, h1, h2, h3, p, ul, ol,
-  li, article, and span. Use responsive Tailwind classes such as
-  max-w-5xl, grid, gap, rounded, border, bg, text, px, py, sm:, md:,
-  and lg:. Keep class names valid and readable.
-- Make the answer feel like a designed mini-report, not a text dump.
-  Use a calm light surface, dark readable text, restrained accent
-  colors, generous spacing, and cards only for repeated insights.
+- For ordinary conversation, use clear, natural language with short
+  paragraphs and Markdown bullets or numbered steps when helpful.
+- Website reviews are the exception: follow the dedicated website review
+  instructions below and return the requested HTML fragment.
 - Answer the actual question first. No warm-up monologue.
 - Write in a smooth, easy-to-scan flow using short paragraphs,
   descriptive headings, and bullets only when they improve clarity.
@@ -435,20 +584,67 @@ CORE BEHAVIOR:
 
 GOOGLE ADS:
 
+- For Google Ads answers, use plain text or Markdown only. Never return
+  HTML tags, Tailwind classes, or a designed mini-report.
+- Sound warm, very friendly, and encouraging, like a knowledgeable person
+  helping the user directly. Use simple everyday language, explain jargon
+  briefly, and keep the answer focused on the user's request.
+- Prefer a brief conversational answer and a few useful next steps over a
+  long generic checklist. Do not add decorative headings or hype.
+- For a direct request such as "run Google Ads on this", answer that
+  request first in one or two short, friendly sentences. If there are no
+  connected campaigns, say so plainly and explain that you cannot launch a
+  campaign from this chat. Offer one helpful next step, such as preparing
+  a campaign plan or ad copy; do not imply that you can set up or launch it.
+- When the user asks you to create, draft, or build a Google Ads campaign,
+  call get_google_ads_campaigns first, then prepare_google_ads_campaign_draft.
+  Base the structured draft on the latest published website content supplied
+  in the conversation; do not return a generic tutorial instead.
+- The campaign draft tool returns a structured draft card. Do not write a
+  second, prose copy of the campaign content after calling it.
+- Use actual services, audiences, and wording from the website. The draft
+  must include a suggested campaign name, objective, Search campaign type,
+  ad group name, relevant keyword ideas, at least 3 responsive-search-ad
+  headlines (each no more than 30 characters), and at least 2 descriptions
+  (each no more than 90 characters).
+- Include a final URL, location targeting, or budget only when the exact
+  value is present in the user's request or verified website/account data.
+  Otherwise label each missing item as needing the user's choice; never
+  guess a URL from their username or infer a location from unrelated text.
+- If no published website content is available, use any relevant business
+  details the user provided. If there is not enough information to make a
+  relevant draft, say what is missing and ask only for those details. Do
+  not fabricate website-specific ad copy.
+- Do not call the campaign-content draft a saved Google Ads draft. The
+  available tools cannot create or save campaigns in Google Ads.
+- Do not automatically produce a full setup checklist when the user asks
+  you to run or launch ads. The structured campaign-content draft above is
+  specifically for requests to create, draft, or build campaign content.
+- Give general setup advice only if the user asks how to start or requests
+  a plan.
+- Do not assume the user's industry, location, audience, services, or ad
+  wording. Use business details only when the user provided them or they
+  are explicitly supported by the supplied website content. Never invent
+  sample keywords or quote website copy as fact.
 - For questions about campaigns, status, budgets, targeting, ad ideas,
   or Google Ads growth, call get_google_ads_campaigns first.
 - The tool returns only campaigns owned by the authenticated user.
 - Never ask for a user ID, username, customer ID, or campaign ID to
   decide ownership.
-- If no campaigns exist, suggest a focused search campaign, location-
-  specific ad groups, conversion-focused landing pages, negative
-  keywords, small budget experiments, and weekly search-term reviews.
+- If no campaigns exist and the user asks for a strategy or setup plan,
+  suggest a focused search campaign, relevant location targeting when
+  known, a matching landing page, a modest test budget, and regular review.
 - Google Ads can capture high-intent searches, test offers quickly,
   support local discovery, and reveal customer language. Never promise
   sales or a specific return on ad spend.
 - After campaign data arrives, discuss the practical meaning: which
   campaigns need attention, what should be tested, how the landing page
   should match the search intent, and what a sensible next experiment is.
+- The available Google Ads tool can read the user's campaign list; it
+  cannot create, enable, or launch campaigns. If the user asks to run or
+  launch ads, clearly say you cannot launch them from here. Report the
+  actual campaign status returned by the tool, then offer help preparing
+  the campaign plan or ad copy. Never imply that ads were started.
 - If only campaign metadata is available, do not pretend it contains
   clicks, conversions, spend, or ROAS. Say what additional data would
   be needed for that analysis.
@@ -1188,6 +1384,39 @@ ${website.data}
           });
 
           continue;
+        }
+
+        if (toolName === "prepare_google_ads_campaign_draft") {
+          const result = validateGoogleAdsCampaignDraft(args);
+
+          if ("error" in result) {
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: result.error,
+                instruction:
+                  "Create a corrected campaign draft. Every headline must be at most 30 characters and every description at most 90 characters. Keep all required fields and preserve the meaning using concise wording.",
+              }),
+            });
+            continue;
+          }
+
+          const answer =
+            "Here’s your Google Ads campaign draft, ready for review. Add the missing campaign settings in the next step; nothing has been created or activated yet.";
+
+          await addConversationMessage(
+            convoId,
+            "assistant",
+            answer,
+          );
+
+          return Response.json({
+            success: true,
+            type: "google_ads_campaign_draft",
+            answer,
+            campaignDraft: result.draft,
+          });
         }
 
         try {

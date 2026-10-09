@@ -10,13 +10,27 @@ import { useParams } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ChevronDown, ChevronRight } from "lucide-react"
-import { Timer } from "lucide-react"
+import {
+  ChevronDown,
+  Globe2,
+  LayoutTemplate,
+  Mail,
+  Megaphone,
+  Timer,
+  UserRound,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 type WebsiteTemplate = {
   id: number
@@ -37,6 +51,20 @@ type WebsiteDraft = {
   script: string
   data: string
   language: string
+}
+
+type GoogleAdsCampaignDraft = {
+  campaignName: string
+  objective: string
+  campaignType: "Search"
+  adGroupName: string
+  keywords: string[]
+  headlines: string[]
+  descriptions: string[]
+  finalUrl: string | null
+  locationTargeting: string | null
+  dailyBudget: number | null
+  primaryConversionGoal: string
 }
 
 type Message = {
@@ -69,6 +97,8 @@ type Message = {
 
   websiteDraft?: WebsiteDraft
 
+  campaignDraft?: GoogleAdsCampaignDraft
+
   agentName?: string
 
   routedFrom?: string
@@ -79,14 +109,17 @@ type Message = {
     | "chat"
     | "publish"
     | "website_draft"
+    | "google_ads_campaign_draft"
 }
 
 type WelcomeTab = "website" | "google-ads" | "domain" | "account" | "email"
 
 type Agent = {
   name: string
+  label: string
   endpoint: string
   welcomeTab: WelcomeTab
+  description: string
 }
 
 type WelcomeSuggestion = {
@@ -109,6 +142,30 @@ function readToolCalls(value: unknown): ToolCall[] | undefined {
   )
 
   return calls.length > 0 ? calls : undefined
+}
+
+function isGoogleAdsCampaignDraft(
+  value: unknown,
+): value is GoogleAdsCampaignDraft {
+  if (!value || typeof value !== "object") return false
+  const draft = value as Record<string, unknown>
+
+  return (
+    typeof draft.campaignName === "string" &&
+    typeof draft.objective === "string" &&
+    draft.campaignType === "Search" &&
+    typeof draft.adGroupName === "string" &&
+    Array.isArray(draft.keywords) &&
+    draft.keywords.every((item) => typeof item === "string") &&
+    Array.isArray(draft.headlines) &&
+    draft.headlines.every((item) => typeof item === "string") &&
+    Array.isArray(draft.descriptions) &&
+    draft.descriptions.every((item) => typeof item === "string") &&
+    (typeof draft.finalUrl === "string" || draft.finalUrl === null) &&
+    (typeof draft.locationTargeting === "string" || draft.locationTargeting === null) &&
+    (typeof draft.dailyBudget === "number" || draft.dailyBudget === null) &&
+    typeof draft.primaryConversionGoal === "string"
+  )
 }
 
 const welcomeExamples: WelcomeSuggestion[] = [
@@ -152,30 +209,93 @@ const emailExamples: WelcomeSuggestion[] = [
 const agents: Agent[] = [
   {
     name: "Website Ideas",
+    label: "Website",
     endpoint: "/api/unsplash-agent-one",
     welcomeTab: "website",
+    description: "Create & edit",
   },
   {
     name: "Google Ads",
+    label: "Google Ads",
     endpoint: "/api/dev-agent",
     welcomeTab: "google-ads",
+    description: "Get more traffic",
   },
   {
     name: "Add Domain",
+    label: "Domain",
     endpoint: "/api/unsplash-agent-three",
     welcomeTab: "domain",
+    description: "Find & connect",
   },
   {
     name: "Account Assistant",
+    label: "Account",
     endpoint: "/api/unsplash-agent-two",
     welcomeTab: "account",
+    description: "Manage settings",
   },
   {
     name: "Email Assistant",
+    label: "Email",
     endpoint: "/api/unsplash-agent-four",
     welcomeTab: "email",
+    description: "Send & automate",
   },
 ]
+
+function AgentIcon({
+  welcomeTab,
+  className,
+}: {
+  welcomeTab: WelcomeTab
+  className?: string
+}) {
+  const iconProps = { className: className || "size-5", "aria-hidden": true as const }
+
+  switch (welcomeTab) {
+    case "website":
+      return <LayoutTemplate {...iconProps} />
+    case "google-ads":
+      return <Megaphone {...iconProps} />
+    case "domain":
+      return <Globe2 {...iconProps} />
+    case "account":
+      return <UserRound {...iconProps} />
+    case "email":
+      return <Mail {...iconProps} />
+  }
+}
+
+function getAgentColor(welcomeTab: WelcomeTab) {
+  switch (welcomeTab) {
+    case "website":
+      return {
+        icon: "bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-300",
+        selected: "border-sky-200 ring-sky-100 dark:border-sky-800 dark:ring-sky-950",
+      }
+    case "google-ads":
+      return {
+        icon: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+        selected: "border-amber-200 ring-amber-100 dark:border-amber-800 dark:ring-amber-950",
+      }
+    case "domain":
+      return {
+        icon: "bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-300",
+        selected: "border-violet-200 ring-violet-100 dark:border-violet-800 dark:ring-violet-950",
+      }
+    case "account":
+      return {
+        icon: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",
+        selected: "border-emerald-200 ring-emerald-100 dark:border-emerald-800 dark:ring-emerald-950",
+      }
+    case "email":
+      return {
+        icon: "bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-300",
+        selected: "border-rose-200 ring-rose-100 dark:border-rose-800 dark:ring-rose-950",
+      }
+  }
+}
 
 function formatAssistantReply(content: string) {
   return content.replace(/\s+(?=\d+\.\s+\*\*)/g, "\n")
@@ -247,6 +367,11 @@ function getAgentForRequest(
     .map((item) => item.content)
     .join(" ")
     .toLowerCase()
+  const asksAboutSevenWingz =
+    /\b(?:7\s*wingz|7\s*wings|seven\s*wingz|seven\s*wings)\b/i.test(message)
+  const followsSevenWingzQuestion =
+    /\b(?:7\s*wingz|7\s*wings|seven\s*wingz|seven\s*wings)\b/i.test(recentContext) &&
+    /\b(?:how|what|where|which|who|why|use|tool|platform|service|company)\b/i.test(normalized)
   const answersRecentLanguageQuestion =
     /\b(?:hindi|spanish|french|german|arabic|japanese|chinese|portuguese|italian|korean|dutch|russian|bengali|urdu|marathi|punjabi)\b/.test(normalized) &&
     history.slice(-2).some((item) => /which language.*(?:website|site).*translate/i.test(item.content)) ||
@@ -264,6 +389,14 @@ function getAgentForRequest(
   const hasRecentTemplate = history.some((item) => Boolean(item.template))
   const websiteCreationRequest = hasWebsite &&
     /\b(?:build|create|design|find|show|customi[sz]e|need|want|give me|make me|looking for)\b/.test(normalized)
+  const websiteTemplateActionRequest =
+    (
+      /\b(?:fetch|get|retrieve|find|show|search|pick|choose)\b/.test(normalized) &&
+      /\b(?:website|web)?\s*template\b/.test(normalized)
+    ) ||
+    /\b(?:first|random)\s+(?:website\s+)?template\b/.test(normalized) ||
+    /\btemplate\s*(?:id\s*)?#?\s*\d+\b/.test(normalized) ||
+    /\b(?:fetch|get|retrieve|find|show)\b.{0,30}\b(?:first|random)\s+website\b/.test(normalized)
   const recentTemplateEditRequest = hasRecentTemplate &&
     /\b(?:edit|modify|customi[sz]e|update|change|adapt)\b/.test(normalized)
   const recentTemplatePublishRequest = hasRecentTemplate &&
@@ -274,10 +407,17 @@ function getAgentForRequest(
     message.includes("हिन्दी")
 
   if (
-    hasWebsite &&
-    asksForWebsiteTranslation
+    (hasWebsite && asksForWebsiteTranslation) ||
+    websiteCreationRequest ||
+    websiteTemplateActionRequest ||
+    recentTemplateEditRequest ||
+    recentTemplatePublishRequest
   ) {
     return agents.find((agent) => agent.welcomeTab === "website") || currentAgent
+  }
+
+  if (asksAboutSevenWingz || followsSevenWingzQuestion) {
+    return agents.find((agent) => agent.welcomeTab === "account") || currentAgent
   }
 
   if (
@@ -302,10 +442,6 @@ function getAgentForRequest(
     return agents.find((agent) => agent.welcomeTab === "account") || currentAgent
   }
 
-  if (websiteCreationRequest || recentTemplateEditRequest || recentTemplatePublishRequest) {
-    return agents.find((agent) => agent.welcomeTab === "website") || currentAgent
-  }
-
   return currentAgent
 }
 
@@ -326,6 +462,201 @@ function isWebsiteDraft(value: unknown): value is WebsiteDraft {
   )
 }
 
+function GoogleAdsCampaignDraftCard({
+  draft,
+  username,
+}: {
+  draft: GoogleAdsCampaignDraft
+  username: string
+}) {
+  const [finalUrl, setFinalUrl] = useState(draft.finalUrl || "")
+  const [dailyBudget, setDailyBudget] = useState(
+    draft.dailyBudget?.toString() || "",
+  )
+  const [openError, setOpenError] = useState("")
+
+  function continueToCampaignSetup() {
+    if (!username) {
+      setOpenError("I couldn't identify your account. Please reopen this from your workspace.")
+      return
+    }
+
+    const budget = dailyBudget.trim() ? Number(dailyBudget) : null
+    if (budget !== null && (!Number.isFinite(budget) || budget <= 0)) {
+      setOpenError("Enter a daily budget greater than zero, or leave it blank to choose later.")
+      return
+    }
+
+    try {
+      sessionStorage.setItem(
+        `google-ads-campaign-draft-${username}`,
+        JSON.stringify({
+          ...draft,
+          finalUrl: finalUrl.trim() || null,
+          dailyBudget: budget,
+        }),
+      )
+      window.location.assign(
+        `/marketing/${encodeURIComponent(username)}?draft=assistant`,
+      )
+    } catch (error) {
+      console.error("Could not open Google Ads campaign setup:", error)
+      setOpenError("I couldn't open campaign setup. Please try again.")
+    }
+  }
+
+  const previewUrl = draft.finalUrl
+    ? draft.finalUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+    : "Final URL to be confirmed"
+
+  return (
+    <section className="mb-5 max-w-2xl overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+      <header className="border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+              Google Ads campaign draft
+            </p>
+            <h2 className="mt-1 text-base font-semibold">
+              {draft.campaignName}
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {draft.objective}
+            </p>
+          </div>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+            Draft
+          </span>
+        </div>
+      </header>
+
+      <div className="space-y-3 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+              Campaign goal
+            </p>
+            <p className="mt-1 text-sm font-medium">{draft.primaryConversionGoal}</p>
+          </div>
+          <div className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+              Campaign type
+            </p>
+            <p className="mt-1 text-sm font-medium">{draft.campaignType} Ads</p>
+          </div>
+        </div>
+
+        <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+          <h3 className="text-xs font-semibold">01 · Campaign setup</h3>
+          <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+                Campaign name
+              </p>
+              <p className="mt-1 font-medium">{draft.campaignName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+                Ad group
+              </p>
+              <p className="mt-1 font-medium">{draft.adGroupName}</p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+              Keyword ideas
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {draft.keywords.map((keyword, index) => (
+                <span
+                  key={`${keyword}-${index}`}
+                  className="rounded-md bg-zinc-100 px-2 py-1 text-[11px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                >
+                  {keyword}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+          <h3 className="text-xs font-semibold">02 · Your Google ad</h3>
+          <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+            <p className="text-[10px] text-zinc-500">
+              Sponsored · Search preview
+            </p>
+            <p className="mt-2 text-[11px] text-blue-700 dark:text-blue-400">
+              {previewUrl}
+            </p>
+            <p className="mt-1 font-medium leading-5 text-blue-800 dark:text-blue-300">
+              {draft.headlines.join(" | ")}
+            </p>
+            <p className="mt-1 leading-5 text-zinc-600 dark:text-zinc-400">
+              {draft.descriptions.join(" ")}
+            </p>
+          </div>
+          <p className="mt-2 text-[10px] text-zinc-400">
+            Illustrative preview. Google may combine headlines and descriptions.
+          </p>
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+          <h3 className="text-xs font-semibold">03 · Let’s get it ready</h3>
+          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+            Add the remaining details, then review everything before creating your campaign.
+          </p>
+          <label className="mt-3 block text-[10px] font-medium text-zinc-500">
+            Final page URL
+            <input
+              type="url"
+              value={finalUrl}
+              onChange={(event) => setFinalUrl(event.target.value)}
+              placeholder="Paste the page customers should visit"
+              className="mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-800 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+          </label>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-800/70">
+              <p className="text-[10px] uppercase tracking-wide text-zinc-400">
+                Target location
+              </p>
+              <p className="mt-1 text-xs font-medium">
+                {draft.locationTargeting || "Choose a location in campaign setup"}
+              </p>
+            </div>
+            <label className="rounded-lg bg-zinc-50 p-3 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800/70">
+              Daily budget · INR
+              <input
+                type="number"
+                min="1"
+                value={dailyBudget}
+                onChange={(event) => setDailyBudget(event.target.value)}
+                placeholder="Choose your daily budget"
+                className="mt-1.5 w-full rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs text-zinc-800 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              />
+            </label>
+          </div>
+          {openError && (
+            <p role="alert" className="mt-3 text-xs text-red-600 dark:text-red-400">
+              {openError}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={continueToCampaignSetup}
+            className="mt-4 w-full rounded-lg bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            Continue to campaign setup →
+          </button>
+          <p className="mt-2 text-center text-[10px] leading-4 text-zinc-400">
+            This is a draft for review. It won’t create, publish, or activate ads yet.
+          </p>
+        </section>
+      </div>
+    </section>
+  )
+}
+
 export default function Page() {
   const { user } = useUser()
   const [message, setMessage] =
@@ -340,6 +671,7 @@ export default function Page() {
   const [selectedAgent, setSelectedAgent] =
     useState(agents[0])
   const [activeToolStatus, setActiveToolStatus] = useState("")
+  const [isPromptPickerOpen, setIsPromptPickerOpen] = useState(false)
   const latestUserInput = [...history].reverse().find((item) => item.role === "user")?.content || ""
   const followUpIdeas = getFollowUpIdeas(latestUserInput, selectedAgent.welcomeTab)
 
@@ -472,7 +804,7 @@ export default function Page() {
           data = {
             ...data,
             ok: data.success,
-            type: "chat",
+            type: data.type || "chat",
             reply: data.answer,
           }
         }
@@ -490,7 +822,19 @@ export default function Page() {
 
       let assistantMessage: Message
 
-      if (data.type === "website_draft" && isWebsiteDraft(data.draft)) {
+      if (
+        data.type === "google_ads_campaign_draft" &&
+        isGoogleAdsCampaignDraft(data.campaignDraft)
+      ) {
+        assistantMessage = {
+          role: "assistant",
+          content:
+            data.answer ||
+            "Here’s your Google Ads campaign draft, ready for review.",
+          campaignDraft: data.campaignDraft,
+          responseType: "google_ads_campaign_draft",
+        }
+      } else if (data.type === "website_draft" && isWebsiteDraft(data.draft)) {
         assistantMessage = {
           role: "assistant",
           content: data.reply || "Your translated website draft is ready to review.",
@@ -571,6 +915,14 @@ export default function Page() {
         if (
           data.operation ===
           "edit_recent"
+        ) {
+          content =
+            `Here is the updated website template (ID ${template?.id}).`
+        }
+
+        if (
+          data.operation ===
+          "edit_id"
         ) {
           content =
             `Here is the updated website template (ID ${template?.id}).`
@@ -703,22 +1055,37 @@ export default function Page() {
               setInput={setMessage}
               welcomeTab={selectedAgent.welcomeTab}
             />
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                {agents.map((agent) => (
-                  <button
-                    key={agent.endpoint}
-                    type="button"
-                    aria-pressed={selectedAgent.endpoint === agent.endpoint}
-                    onClick={() => setSelectedAgent(agent)}
-                    className={`rounded-full border px-3 py-2 text-xs font-medium shadow-sm transition ${
-                      selectedAgent.endpoint === agent.endpoint
-                        ? "border-zinc-800 bg-zinc-900 text-white dark:border-zinc-200 dark:bg-white dark:text-zinc-900"
-                        : "border-zinc-200 bg-white/90 text-zinc-700 hover:border-zinc-400 hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-200 dark:hover:border-zinc-500"
-                    }`}
-                  >
-                    {agent.name}
-                  </button>
-                ))}
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {agents.map((agent) => {
+                  const isSelected = selectedAgent.endpoint === agent.endpoint
+                  const colors = getAgentColor(agent.welcomeTab)
+
+                  return (
+                    <button
+                      key={agent.endpoint}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedAgent(agent)}
+                      className={`group flex min-w-0 flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-center transition ${
+                        isSelected
+                          ? `bg-white shadow-[0_4px_18px_rgba(99,102,241,0.12)] ring-1 ${colors.selected} dark:bg-zinc-900`
+                          : "border-transparent bg-white/70 hover:border-zinc-200 hover:bg-white dark:bg-zinc-900/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      <span
+                        className={`grid size-11 place-items-center rounded-2xl transition ${colors.icon}`}
+                      >
+                        <AgentIcon welcomeTab={agent.welcomeTab} className="size-5" />
+                      </span>
+                      <span className="max-w-full truncate text-[11px] font-semibold text-zinc-800 dark:text-zinc-100">
+                        {agent.label}
+                      </span>
+                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                        {agent.description}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
         ) : (
@@ -755,11 +1122,18 @@ export default function Page() {
                       }`}
                     >
 
-                      <div className="agent-markdown mb-4 text-sm leading-7 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-3 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:pl-1 [&_ol]:mb-4 [&_ol]:ml-5 [&_ol]:list-decimal [&_ol]:space-y-2 [&_p]:mb-3 [&_strong]:font-semibold [&_ul]:mb-4 [&_ul]:ml-5 [&_ul]:list-disc [&_ul]:space-y-2 [&_hr]:my-5 [&_hr]:border-zinc-300 dark:[&_hr]:border-zinc-700">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {formatAssistantReply(item.content)}
-                        </ReactMarkdown>
-                      </div>
+                      {item.campaignDraft ? (
+                        <GoogleAdsCampaignDraftCard
+                          draft={item.campaignDraft}
+                          username={username}
+                        />
+                      ) : (
+                        <div className="agent-markdown mb-4 text-sm leading-7 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-3 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:pl-1 [&_ol]:mb-4 [&_ol]:ml-5 [&_ol]:list-decimal [&_ol]:space-y-2 [&_p]:mb-3 [&_strong]:font-semibold [&_ul]:mb-4 [&_ul]:ml-5 [&_ul]:list-disc [&_ul]:space-y-2 [&_hr]:my-5 [&_hr]:border-zinc-300 dark:[&_hr]:border-zinc-700">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {formatAssistantReply(item.content)}
+                          </ReactMarkdown>
+                        </div>
+                      )}
 
                       {item.routedFrom && item.agentName && (
                         <p className="mb-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
@@ -962,6 +1336,10 @@ export default function Page() {
           onClick={() => setIsAgentMenuOpen((open) => !open)}
           className="flex max-w-40 items-center gap-1 py-2 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
         >
+          <AgentIcon
+            welcomeTab={selectedAgent.welcomeTab}
+            className="size-4 shrink-0"
+          />
           <span className="truncate">{selectedAgent.name}</span>
           <ChevronDown size={14} className="shrink-0" />
         </button>
@@ -981,13 +1359,25 @@ export default function Page() {
                   setSelectedAgent(agent)
                   setIsAgentMenuOpen(false)
                 }}
-                className={`block w-full rounded-md px-3 py-2.5 text-left text-xs transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
                   selectedAgent.endpoint === agent.endpoint
                     ? "font-semibold text-zinc-900 dark:text-white"
                     : "text-zinc-600 dark:text-zinc-300"
                 }`}
               >
-                {agent.name}
+                <AgentIcon
+                  welcomeTab={agent.welcomeTab}
+                  className="size-4 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block">{agent.label}</span>
+                  <span className="mt-0.5 block text-[10px] font-normal text-zinc-400">
+                    {agent.description}
+                  </span>
+                </span>
+                {selectedAgent.endpoint === agent.endpoint && (
+                  <span className="text-[10px] text-emerald-600">Selected</span>
+                )}
               </button>
             ))}
           </div>
@@ -1032,29 +1422,26 @@ export default function Page() {
 
   {/* Suggestions */}
   {history.length > 0 && (
-    <div className="mt-3 flex max-w-3xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
-
-    <span className="mr-1 py-1.5">
-      Try an idea:
-    </span>
-
-    {followUpIdeas.map(
-      (idea) => (
-        <button
-          key={idea}
-          type="button"
-          onClick={() =>
-            setMessage(idea)
-          }
-          className="rounded-full border border-zinc-200 px-3 py-1.5 transition hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500"
-        >
-          {idea}
-        </button>
-      ),
-    )}
-
+    <div className="mt-3 flex max-w-3xl items-center justify-center gap-2 text-xs text-zinc-500">
+      <span>Need an idea?</span>
+      <button
+        type="button"
+        onClick={() => setIsPromptPickerOpen(true)}
+        className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 transition hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600"
+      >
+        Browse suggestions
+      </button>
     </div>
   )}
+
+  <PromptSuggestionsDialog
+    open={isPromptPickerOpen}
+    onOpenChange={setIsPromptPickerOpen}
+    suggestions={followUpIdeas.map((label) => ({ label }))}
+    onSelect={(prompt) => setMessage(prompt)}
+    title="Choose a prompt"
+    description="Pick a suggestion to add it to your message. You can edit it before sending."
+  />
 
 </div>
 
@@ -1070,7 +1457,7 @@ function WelcomeMessage({
   welcomeTab: WelcomeTab
 }) {
   const { user } = useUser()
-  const [examplePage, setExamplePage] = useState(0)
+  const [isPromptPickerOpen, setIsPromptPickerOpen] = useState(false)
 
   const activeExamples =
     welcomeTab === "google-ads"
@@ -1082,84 +1469,112 @@ function WelcomeMessage({
             : welcomeTab === "email"
               ? emailExamples
               : welcomeExamples
-  const examplesPerPage = 5
-  const totalPages = Math.max(1, Math.ceil(activeExamples.length / examplesPerPage))
-  const currentPage = examplePage % totalPages
-  const visibleExamples = activeExamples.slice(
-    currentPage * examplesPerPage,
-    currentPage * examplesPerPage + examplesPerPage,
-  )
-
   return (
-    <Card
-      className="relative mx-auto flex aspect-[958/780] w-full flex-col overflow-hidden border border-white/70 shadow-xl"
-      style={{ borderRadius: "30px" }}
-    >
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage:
-            'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
-          backgroundSize: "85% auto",
-          backgroundPosition: "center 38%",
-          backgroundColor: "#fff",
-        }}
-        aria-hidden="true"
-      />
+    <>
+      <Card
+        className="relative mx-auto flex aspect-[958/780] w-full flex-col overflow-hidden border border-white/70 shadow-xl"
+        style={{ borderRadius: "30px" }}
+      >
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage:
+              'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
+            backgroundSize: "105% auto",
+            backgroundPosition: "center 38%",
+            backgroundColor: "#fff",
+          }}
+          aria-hidden="true"
+        />
 
-      <div
-        className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/90"
-        aria-hidden="true"
-      />
+        <div
+          className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/90"
+          aria-hidden="true"
+        />
 
-      <div className="absolute inset-x-0 top-7 z-10 px-6 text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
-          Welcome to 7Wingz
-        </p>
-        <h1 className="mt-2 font-mono text-[1.05rem] font-bold text-zinc-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]">
-          Hi {user?.firstName?.trim() || "there"}.
-        </h1>
-      </div>
-
-      <CardContent className="relative z-10 mt-auto w-full bg-white/90 px-4 py-4 text-center backdrop-blur-md dark:bg-zinc-950/90 sm:px-6">
-        <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-300">
-          {welcomeTab === "account"
-            ? "Get a clear snapshot of your account, plan, and website status"
-            : welcomeTab === "google-ads"
-              ? "Plan and improve your Google Ads campaigns"
-              : welcomeTab === "domain"
-                ? "Find and check domain ideas for your business"
-                : welcomeTab === "email"
-                  ? "Draft polished emails and newsletters with a few prompts"
-                  : "Create elegant and sophisticated components in just a few prompts"}
-        </p>
-
-        <div className="mb-1 mt-2 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => setExamplePage((page) => (page + 1) % totalPages)}
-            aria-label="Show more suggestions"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-white"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+        <div className="absolute inset-x-0 top-7 z-10 px-6 text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+            Welcome to 7Wingz
+          </p>
+          <h1 className="mt-2 font-mono text-[1.05rem] font-bold text-zinc-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]">
+            Hi {user?.firstName?.trim() || "there"}.
+          </h1>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-2">
-          {visibleExamples.map((example) => (
-            <Button
-              key={example.label}
+        <CardContent className="relative z-10 mt-auto w-full bg-white/90 px-4 py-4 text-center backdrop-blur-md dark:bg-zinc-950/90 sm:px-6">
+          <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-300">
+            {welcomeTab === "account"
+              ? "Get a clear snapshot of your account, plan, and website status"
+              : welcomeTab === "google-ads"
+                ? "Plan and improve your Google Ads campaigns"
+                : welcomeTab === "domain"
+                  ? "Find and check domain ideas for your business"
+                  : welcomeTab === "email"
+                    ? "Draft polished emails and newsletters with a few prompts"
+                    : "Create elegant and sophisticated components in just a few prompts"}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsPromptPickerOpen(true)}
+            className="rounded-full px-4"
+          >
+            Browse prompt suggestions
+          </Button>
+        </CardContent>
+      </Card>
+
+      <PromptSuggestionsDialog
+        open={isPromptPickerOpen}
+        onOpenChange={setIsPromptPickerOpen}
+        suggestions={activeExamples}
+        onSelect={(prompt) => setInput(prompt)}
+        title="Choose a prompt"
+        description="Select a suggestion to add it to the message box. You can edit it before sending."
+      />
+    </>
+  )
+}
+
+function PromptSuggestionsDialog({
+  open,
+  onOpenChange,
+  suggestions,
+  onSelect,
+  title,
+  description,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  suggestions: WelcomeSuggestion[]
+  onSelect: (prompt: string) => void
+  title: string
+  description: string
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[min(80vh,640px)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.label}
               type="button"
-              variant="outline"
-              onClick={() => setInput(example.label)}
-              className="h-auto max-w-full gap-2 whitespace-normal rounded-full px-3 py-2 text-xs text-foreground hover:text-primary sm:text-sm"
+              onClick={() => {
+                onSelect(suggestion.label)
+                onOpenChange(false)
+              }}
+              className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-left text-sm text-zinc-700 transition hover:border-indigo-300 hover:bg-indigo-50/60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40"
             >
-              {example.label}
-            </Button>
+              {suggestion.label}
+            </button>
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }
 
