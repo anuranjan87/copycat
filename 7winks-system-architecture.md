@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-This document describes the system architecture implied by the repository for 7winks, a web application that combines website creation, AI-assisted editing, growth analytics, domain research, and user-agent guidance. The platform is architected as a modern full-stack SaaS product using Next.js on the server and client, connected to cloud services for authentication, data storage, media handling, AI inference, and external business integrations.
+This document describes the system architecture implied by the repository for 7winks, a web application that combines website creation, AI-assisted editing, growth analytics, domain research, and a Marketing AI Copilot for user guidance. The platform is architected as a modern full-stack SaaS product using Next.js on the server and client, connected to cloud services for authentication, data storage, media handling, AI inference, and external business integrations.
 
 The architectural pattern is a layered application: a user-facing web experience, authenticated API layer, business logic services, persistence layer, and third-party platform integrations. The design supports a broad operational model where a user can create and edit a website, connect it to their identity, ask AI questions about the site, retrieve performance data, and act on marketing recommendations.
 
@@ -15,6 +15,7 @@ The repository reflects a SaaS product for small business owners and growth-focu
 - User sign-in and onboarding
 - Website template browsing and selection
 - Website editing and content generation
+- Marketing AI Copilot for marketing analysis and recommendations
 - AI-assisted website analysis and recommendations
 - Analytics and visitor tracking review
 - Enquiry and lead retrieval
@@ -113,10 +114,21 @@ There are multiple AI-related services in the codebase. They include:
 - Code generation for editing site content
 - Blank-page website generation from prompts
 - Conversational agent with tool use
+- Marketing AI Copilot for campaign, funnel, and performance guidance
 - Content generation for website copy and structure
 - Natural language recommendation generation from website metrics
 
 These services call OpenAI or Google GenAI APIs. They are orchestrated in route handlers, with rules to maintain conversation state, streaming output, and structured tool responses.
+
+### 5.4.1 Marketing AI Copilot
+The Marketing AI Copilot is the product’s strategic assistant layer. It sits above the website editor and analytics pipelines and turns raw data into prioritized recommendations for growth. In practice, it interprets visitor trends, active user behavior, enquiry quality, campaign spend, landing-page friction, and domain opportunities to answer questions such as:
+
+- Which section of my page is blocking conversion?
+- Are my ad campaigns still efficient?
+- Which leads need follow-up first?
+- What is the most important marketing action this week?
+
+The assistant should use website context, authenticated data, and approved tools only, rather than making unsupported claims.
 
 ### 5.5 Analytics and insight engine
 The system includes analytics logic for:

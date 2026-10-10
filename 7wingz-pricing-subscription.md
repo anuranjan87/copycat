@@ -1,7 +1,7 @@
 # 7Wingz Premium
 
 ## You haven't seen everything.
-Free gets you started. Premium gives you more room to build.
+Free gets you started. Premium gives you more room to build, including access to the Marketing AI Copilot for smarter growth decisions.
 
 ### Premium pricing
 **Unlock Premium → €6.66 / month**
@@ -25,6 +25,8 @@ Free gets you started. Premium gives you more room to build.
 - Keep your work and return whenever you want.
 - Full layout + code access
 - More control without platform limits.
+- Marketing AI Copilot
+- Get strategy, funnel feedback, campaign analysis, and next-step recommendations based on your live site and marketing data.
 - AI, email & Google Ads credits
 - Credits are included with your Premium purchase.
 

@@ -2,9 +2,9 @@
 
 ## 1. Executive Summary
 
-This PRD captures the product direction implied by the current repository: 7winks is an AI-assisted website creation and growth platform for small businesses, founders, and marketing teams that need to go from idea to live site, then optimize traffic, leads, and conversions. The product combines website templates, a visual editor, AI-driven copy and page generation, analytics dashboards, domain research, and a conversational agent that can answer questions using real website and campaign data.
+This PRD captures the product direction implied by the current repository: 7winks is an AI-assisted website creation and growth platform for small businesses, founders, and marketing teams that need to go from idea to live site, then optimize traffic, leads, and conversions. The product combines website templates, a visual editor, AI-driven copy and page generation, analytics dashboards, domain research, and a Marketing AI Copilot that can answer questions using real website and campaign data.
 
-The repo shows a product that is not only a website builder, but a growth operating system for digital businesses. Users can sign in, create a custom username, choose templates, edit pages, publish content, and then ask an AI agent to review performance, campaign health, visitor activity, domain opportunities, and customer enquiries. This makes 7winks a hybrid of website builder, marketing dashboard, AI copilot, and lead-generation assistant.
+The repo shows a product that is not only a website builder, but a growth operating system for digital businesses. Users can sign in, create a custom username, choose templates, edit pages, publish content, and then ask the Marketing AI Copilot to review performance, campaign health, visitor activity, domain opportunities, and customer enquiries. This makes 7winks a hybrid of website builder, marketing dashboard, AI copilot, and lead-generation assistant.
 
 The core opportunity is to help non-technical owners quickly launch a modern online presence and make better decisions using AI and live business data. The product should prioritize speed to launch, clarity of metrics, and trust in automated recommendations.
 
@@ -15,7 +15,7 @@ The repository includes the following product signals:
 - A sign-in and onboarding flow that links a Clerk user to a website username.
 - A template selection experience for landing pages and marketing pages.
 - A rich page editor with AI-assisted generation and blank-site creation.
-- An AI agent for website analysis and performance interpretation.
+- A Marketing AI Copilot for website analysis, campaign review, and performance interpretation.
 - Analytics features for visitor counts, active visitors, and traffic trends.
 - Enquiry retrieval and customer lead handling.
 - Google Ads campaign review and optimization guidance.
@@ -79,12 +79,12 @@ Pain points: complexity of site publishing and maintaining visual quality.
 
 Success metric: user publishes a live site in under 20 minutes.
 
-### Journey 2: Ask the AI agent for guidance
-1. User opens the AI agent interface.
-2. User asks a question about traffic, enquiries, ads, or marketing strategy.
+### Journey 2: Ask the Marketing AI Copilot for guidance
+1. User opens the Marketing AI Copilot interface.
+2. User asks a question about traffic, enquiries, ads, customer objections, or marketing strategy.
 3. The system resolves the authenticated website and data sources.
-4. The agent interprets website and performance information.
-5. The agent returns a concise recommendation.
+4. The copilot interprets website and performance information.
+5. The copilot returns a concise recommendation with next marketing actions.
 
 Success metric: user receives actionable insight within a few seconds.
 
@@ -142,9 +142,10 @@ Success metric: user receives relevant, revenue-oriented naming options quickly.
 
 ### 8.3 AI assistance
 - The AI should generate website copy and structure from prompts.
-- The AI should answer strategic questions about site performance, traffic, and leads.
+- The Marketing AI Copilot should answer strategic questions about site performance, traffic, campaigns, and leads.
 - The AI should use website data and tools to answer based on actual state, not guessed assumptions.
 - AI output should be concise, action-oriented, and clear for non-technical users.
+- The copilot should explain conversion bottlenecks, suggest higher-intent CTAs, and prioritize recommended marketing actions.
 
 ### 8.4 Analytics and insights
 - Users should be able to see total visit counts.

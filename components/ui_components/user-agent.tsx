@@ -361,7 +361,9 @@ function getAgentForRequest(
   currentAgent: Agent,
   history: Message[],
 ): Agent {
-  const normalized = message.toLowerCase()
+  const normalized = message
+    .toLowerCase()
+    .replace(/\bgooggle\b/g, "google")
   const recentContext = history
     .slice(-6)
     .map((item) => item.content)
@@ -406,6 +408,14 @@ function getAgentForRequest(
     message.includes("हिंदी") ||
     message.includes("हिन्दी")
 
+  const asksAboutGoogleAds =
+    /\b(?:google ads?|ad campaign|ads campaign|advertising campaign|keywords for ads|ad headlines|ad copy|ad ideas)\b/.test(normalized) ||
+    /\b(?:run|create|draft|build|launch|start)\s+(?:\w+\s+){0,2}ads?\b/.test(normalized)
+
+  if (asksAboutGoogleAds) {
+    return agents.find((agent) => agent.welcomeTab === "google-ads") || currentAgent
+  }
+
   if (
     (hasWebsite && asksForWebsiteTranslation) ||
     websiteCreationRequest ||
@@ -425,10 +435,6 @@ function getAgentForRequest(
     /\b(?:email|e-mail|newsletter)\b/.test(normalized)
   ) {
     return agents.find((agent) => agent.welcomeTab === "email") || currentAgent
-  }
-
-  if (/\b(?:google ads|ad campaign|ads campaign|advertising campaign|keywords for ads|ad headlines|ad copy)\b/.test(normalized)) {
-    return agents.find((agent) => agent.welcomeTab === "google-ads") || currentAgent
   }
 
   if (/\b(?:domain|domain name|availability of .+ domain|register .+ domain)\b/.test(normalized)) {
@@ -1047,47 +1053,17 @@ export default function Page() {
       {/* CONTENT */}
       {/* ---------------------------------------- */}
 
-      <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-between px-4 pb-36 pt-24 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-3xl flex-col items-center justify-between px-4 pb-8 pt-24 sm:px-6">
 
         {history.length === 0 ? (
           <div className="my-auto w-full max-w-2xl">
             <WelcomeMessage
               setInput={setMessage}
               welcomeTab={selectedAgent.welcomeTab}
+              selectedAgent={selectedAgent}
+              onSelectAgent={setSelectedAgent}
             />
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {agents.map((agent) => {
-                  const isSelected = selectedAgent.endpoint === agent.endpoint
-                  const colors = getAgentColor(agent.welcomeTab)
-
-                  return (
-                    <button
-                      key={agent.endpoint}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => setSelectedAgent(agent)}
-                      className={`group flex min-w-0 flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-center transition ${
-                        isSelected
-                          ? `bg-white shadow-[0_4px_18px_rgba(99,102,241,0.12)] ring-1 ${colors.selected} dark:bg-zinc-900`
-                          : "border-transparent bg-white/70 hover:border-zinc-200 hover:bg-white dark:bg-zinc-900/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
-                      }`}
-                    >
-                      <span
-                        className={`grid size-11 place-items-center rounded-2xl transition ${colors.icon}`}
-                      >
-                        <AgentIcon welcomeTab={agent.welcomeTab} className="size-5" />
-                      </span>
-                      <span className="max-w-full truncate text-[11px] font-semibold text-zinc-800 dark:text-zinc-100">
-                        {agent.label}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                        {agent.description}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          </div>
         ) : (
 
           <div className="w-full space-y-7 text-sm leading-relaxed sm:text-base">
@@ -1303,11 +1279,11 @@ export default function Page() {
       {/* INPUT */}
       {/* ---------------------------------------- */}
 
-     <div className="fixed bottom-0 left-0 right-0 z-40 flex flex-col items-center bg-gradient-to-t from-[#fafafa] via-[#fafafa] p-4 to-transparent dark:from-zinc-950 dark:via-zinc-950">
+     <div className="flex w-full flex-col items-center bg-gradient-to-t from-zinc-200/70 via-zinc-100/50 to-transparent px-4 pb-5 pt-3 dark:from-zinc-900/80 dark:via-zinc-900/40">
 
   <form
     onSubmit={search}
-    className="flex w-full max-w-3xl items-center gap-2"
+    className="flex w-full max-w-3xl items-center gap-2.5"
   >
 
     {/* New chat */}
@@ -1316,7 +1292,7 @@ export default function Page() {
       onClick={reset}
       title="New chat"
       aria-label="New chat"
-      className="grid size-10 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+      className="grid size-9 shrink-0 place-items-center rounded-full border border-zinc-200/80 bg-white/80 text-zinc-700 shadow-sm transition hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300 dark:hover:bg-zinc-800"
     >
       <span className="text-xl leading-none">
         +
@@ -1325,16 +1301,16 @@ export default function Page() {
 
     
     {/* Input */}
-    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-200/80 bg-white p-2 shadow-sm transition-shadow focus-within:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex min-h-11 min-w-0 flex-1 items-center gap-0 rounded-full border border-zinc-200/80 bg-white/90 p-1.5 shadow-[0_2px_8px_rgba(24,24,27,0.08)] transition-shadow focus-within:shadow-md dark:border-zinc-700 dark:bg-zinc-900/90">
 
-      <div className="relative shrink-0 border-r border-zinc-100 pr-2 dark:border-zinc-800">
+      <div className="relative shrink-0 border-r border-zinc-200/80 px-2 dark:border-zinc-700">
         <button
           type="button"
           aria-label={`Selected assistant: ${selectedAgent.name}`}
           aria-expanded={isAgentMenuOpen}
           aria-haspopup="listbox"
           onClick={() => setIsAgentMenuOpen((open) => !open)}
-          className="flex max-w-40 items-center gap-1 py-2 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+          className="flex max-w-40 items-center gap-1 py-1.5 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
         >
           <AgentIcon
             welcomeTab={selectedAgent.welcomeTab}
@@ -1399,7 +1375,7 @@ export default function Page() {
         }
         placeholder="Ask for a website template"
         maxLength={1000}
-        className="min-h-10 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-zinc-400"
+        className="min-h-9 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-zinc-400"
       />
 
       <button
@@ -1409,7 +1385,7 @@ export default function Page() {
           !message.trim()
         }
         aria-label="Send"
-        className="grid size-10 shrink-0 place-items-center rounded-xl bg-black text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-35 dark:bg-white dark:text-black"
+        className="grid size-9 shrink-0 place-items-center rounded-xl bg-violet-500 text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:bg-zinc-400 disabled:opacity-80 dark:disabled:bg-zinc-600"
       >
         <span className="text-lg">
           ↑
@@ -1452,9 +1428,13 @@ export default function Page() {
 function WelcomeMessage({
   setInput,
   welcomeTab,
+  selectedAgent,
+  onSelectAgent,
 }: {
   setInput: (input: string) => void
   welcomeTab: WelcomeTab
+  selectedAgent: Agent
+  onSelectAgent: (agent: Agent) => void
 }) {
   const { user } = useUser()
   const [isPromptPickerOpen, setIsPromptPickerOpen] = useState(false)
@@ -1472,55 +1452,84 @@ function WelcomeMessage({
   return (
     <>
       <Card
-        className="relative mx-auto flex aspect-[958/780] w-full flex-col overflow-hidden border border-white/70 shadow-xl"
+        className="relative mx-auto w-full overflow-hidden border border-white/70"
         style={{ borderRadius: "30px" }}
       >
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage:
-              'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
-            backgroundSize: "105% auto",
-            backgroundPosition: "center 38%",
-            backgroundColor: "#fff",
-          }}
-          aria-hidden="true"
-        />
+        <div className="relative h-64 w-full overflow-hidden sm:h-80">
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage:
+                'url("https://3xxm6vnmie4vdjlz.public.blob.vercel-storage.com/Untitled%20design%20%281%29.png")',
+              backgroundSize: "105% auto",
+              backgroundPosition: "center 38%",
+              backgroundColor: "#fff",
+            }}
+            aria-hidden="true"
+          />
 
-        <div
-          className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/90"
-          aria-hidden="true"
-        />
+          <div
+            className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/90"
+            aria-hidden="true"
+          />
 
-        <div className="absolute inset-x-0 top-7 z-10 px-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
-            Welcome to 7Wingz
-          </p>
-          <h1 className="mt-2 font-mono text-[1.05rem] font-bold text-zinc-900 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]">
-            Hi {user?.firstName?.trim() || "there"}.
-          </h1>
         </div>
 
-        <CardContent className="relative z-10 mt-auto w-full bg-white/90 px-4 py-4 text-center backdrop-blur-md dark:bg-zinc-950/90 sm:px-6">
-          <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-300">
-            {welcomeTab === "account"
-              ? "Get a clear snapshot of your account, plan, and website status"
-              : welcomeTab === "google-ads"
-                ? "Plan and improve your Google Ads campaigns"
-                : welcomeTab === "domain"
-                  ? "Find and check domain ideas for your business"
-                  : welcomeTab === "email"
-                    ? "Draft polished emails and newsletters with a few prompts"
-                    : "Create elegant and sophisticated components in just a few prompts"}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsPromptPickerOpen(true)}
-            className="rounded-full px-4"
-          >
-            Browse prompt suggestions
-          </Button>
+        <CardContent className="relative z-10 flex w-full flex-col gap-4 bg-white/90 px-4 py-4 text-center dark:bg-zinc-950/90 sm:px-6">
+          <div>
+            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-300">
+              {welcomeTab === "account"
+                ? "Get a clear snapshot of your account, plan, and website status"
+                : welcomeTab === "google-ads"
+                  ? "Plan and improve your Google Ads campaigns"
+                  : welcomeTab === "domain"
+                    ? "Find and check domain ideas for your business"
+                    : welcomeTab === "email"
+                      ? "Draft polished emails and newsletters with a few prompts"
+                      : ""}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsPromptPickerOpen(true)}
+              className="rounded-full px-4"
+            >
+              Browse prompt suggestions
+            </Button>
+          </div>
+
+          <div className="mt-auto grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {agents.map((agent) => {
+              const isSelected = selectedAgent.endpoint === agent.endpoint
+              const colors = getAgentColor(agent.welcomeTab)
+
+              return (
+                <button
+                  key={agent.endpoint}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => onSelectAgent(agent)}
+                  className={`group flex min-w-0 flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-center transition ${
+                    isSelected
+                      ? `bg-white ring-1 ${colors.selected} dark:bg-zinc-900`
+                      : "border-transparent bg-white/70 hover:border-zinc-200 hover:bg-white dark:bg-zinc-900/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+                  }`}
+                >
+                  <span
+                    className={`grid size-11 place-items-center rounded-2xl transition ${colors.icon}`}
+                  >
+                    <AgentIcon welcomeTab={agent.welcomeTab} className="size-5" />
+                  </span>
+                  <span className="max-w-full truncate text-[11px] font-semibold text-zinc-800 dark:text-zinc-100">
+                    {agent.label}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    {agent.description}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </CardContent>
       </Card>
 

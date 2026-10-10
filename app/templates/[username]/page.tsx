@@ -364,12 +364,11 @@ export default function Page({ params }: PageProps) {
       <Nav username={username} />
 
       <main
-        className="mx-auto mt-12 w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8"
-        style={{ zoom: "0.92" }}
+        className="mx-auto mt-20 w-full max-w-7xl flex-1 px-4 py-10 sm:px-6 lg:px-8"
+        style={{ zoom: "0.80" }}
       >
         {/* Header */}
-        <header className="mb-[6rem] md:mb-[3rem] text-center max-w-3xl mx-auto space-y-4">
-          <div className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/0 border border-primary/10 text-primary text-xs font-medium"></div>
+        <header className="mb-[6rem] md:mb-[4rem] text-center max-w-3xl mx-auto space-y-5">
 
           <h1
             className={`text-4xl sm:text-3xl mb-2 md:text-5xl font-semibold tracking-tight ${
@@ -380,8 +379,7 @@ export default function Page({ params }: PageProps) {
           </h1>
 
           <p className="text-muted-foreground tracking-[0.08rem] mb-3 text-base sm:text-lg leading-relaxed">
-            7winks helps you launch fast, learn quickly, and see what actually
-            works.
+            Launch fast, learn quickly, and see what actually works.
           </p>
         </header>
 

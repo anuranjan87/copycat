@@ -14,11 +14,12 @@ This manual explains how to start using 7Wingz based on the features and screens
 - Saved projects and revisit flows
 - Subscription and premium upgrade
 - Analytics and AI agent insights
+- Marketing AI Copilot for growth recommendations
 - Email marketing workflow
 - Domain search and purchase research
 - Refund and billing information
 
-The core idea is simple: create a site quickly, improve it with AI, and then understand how it is performing.
+The core idea is simple: create a site quickly, improve it with AI, and then understand how it is performing. The newest feature is the Marketing AI Copilot, which turns website and campaign data into practical next steps for growth.
 
 ---
 
@@ -188,6 +189,7 @@ Page behavior from the repo suggests:
 - More design variety
 - Save and revisit projects
 - Full layout and code access
+- Marketing AI Copilot with campaign and funnel analysis
 - AI, email, and Google Ads credits
 
 ### Premium pricing shown in the repo
@@ -265,26 +267,26 @@ Important note: This is a research and recommendation workflow, not an unconditi
 
 ---
 
-## 9. AI agent and website insights
+## 9. Marketing AI Copilot and website insights
 
-This is one of the key differentiators of the product. The repo includes an AI user agent that answers business questions using real website data and tool access.
+This is one of the key differentiators of the product. The repo includes a Marketing AI Copilot that answers business questions using real website data, campaign context, and tool access.
 
-### What the agent can do
-The system prompt says the agent can:
-- search Unsplash for website images
-- retrieve enquiries
-- review visitor counts and traffic trends
-- check active visitors
-- review Google Ads campaigns
-- explain 7Wingz features
-- research domain names within budget
-- review HTML, scripts, design, UX, SEO, accessibility, performance, and conversion flow
+### What the Marketing AI Copilot can do
+The system prompt says the AI can:
+- review performance trends and identify weak points in the funnel
+- summarize active visitors, traffic changes, conversions, and lead quality
+- recommend improvements to page messaging, CTAs, or landing sections
+- review Google Ads campaign health and spending efficiency
+- assess incoming enquiries and suggest follow-up actions
+- provide growth recommendations for marketing experiments and next steps
+- search for supporting imagery or content ideas when needed
+- explain 7Wingz features and suggest route-level next actions
 
 ### How to use it
 - Open the developer or agent page
-- Ask a question in plain language
-- The AI reads the relevant website and/or connected data
-- It returns suggestions and analysis
+- Ask a question in plain language, such as “What should I fix to improve conversion?”
+- The AI reads the relevant website, analytics, campaigns, and lead data
+- It returns actionable recommendations and a short plan
 
 Examples of good questions:
 - “What is my account status?”
@@ -293,9 +295,10 @@ Examples of good questions:
 - “Which pages are likely converting?”
 - “What should I fix on the homepage?”
 - “Are my Google Ads campaigns healthy?”
+- “Which marketing action would improve lead quality?”
 
 ### Important caveat
-The agent is intended to be grounded in real data and connected tools. It should not invent capabilities or pretend to do things outside the supported system.
+The AI copilot is intended to be grounded in real data and connected tools. It should not invent capabilities or pretend to do things outside the supported system.
 
 ---
 
@@ -354,7 +357,7 @@ If you are new to the product, this is the easiest order to follow:
 6. Save your work
 7. Review your site and improve the messaging
 8. Upgrade to Premium when needed
-9. Use the AI agent to review traffic, enquiry quality, and next actions
+9. Use the Marketing AI Copilot to review traffic, enquiry quality, and next actions
 10. Try domain research for naming ideas
 11. Run email campaigns and growth experiments
 
@@ -375,7 +378,7 @@ This path gives you the fastest route from zero to a working site and then to op
 | View pricing | /pricing/[username] |
 | View refunds | /refunds/[username] |
 | Review domain options | /domains |
-| Use AI agent | /dev-agent/[username] |
+| Use Marketing AI Copilot | /dev-agent/[username] |
 
 ---
 

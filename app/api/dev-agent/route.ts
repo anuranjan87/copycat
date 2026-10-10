@@ -474,7 +474,7 @@ const tools = [
     function: {
       name: "prepare_google_ads_campaign_draft",
       description:
-        "Prepare a reviewable Google Ads Search campaign content draft from the authenticated user's latest published website. Use only when the user asks to create, draft, or build a campaign. First call get_google_ads_campaigns, then call this tool. This does not create or activate a campaign.",
+        "Prepare a reviewable Google Ads Search campaign content draft from the authenticated user's latest published website when the user asks to run, create, draft, or build a campaign. First call get_google_ads_campaigns, then call this tool. This does not create or activate a campaign.",
       strict: true,
       parameters: {
         type: "object",
@@ -591,15 +591,17 @@ GOOGLE ADS:
   briefly, and keep the answer focused on the user's request.
 - Prefer a brief conversational answer and a few useful next steps over a
   long generic checklist. Do not add decorative headings or hype.
-- For a direct request such as "run Google Ads on this", answer that
-  request first in one or two short, friendly sentences. If there are no
-  connected campaigns, say so plainly and explain that you cannot launch a
-  campaign from this chat. Offer one helpful next step, such as preparing
-  a campaign plan or ad copy; do not imply that you can set up or launch it.
-- When the user asks you to create, draft, or build a Google Ads campaign,
-  call get_google_ads_campaigns first, then prepare_google_ads_campaign_draft.
+- When the user asks you to run, create, draft, or build Google Ads for
+  their published website, prepare a reviewable campaign-content draft.
+  Call get_google_ads_campaigns first, then
+  prepare_google_ads_campaign_draft. Do this even if no campaigns are
+  connected; the campaign lookup is not a prerequisite for drafting.
   Base the structured draft on the latest published website content supplied
-  in the conversation; do not return a generic tutorial instead.
+  in this request; do not return a generic tutorial or a prose-only plan.
+- A campaign-content draft is not a live campaign. If the user explicitly
+  asks you to launch, activate, or publish ads, be clear that you cannot do
+  that from this chat. You may still prepare the reviewable draft, but never
+  imply that the campaign has been created, published, or activated.
 - The campaign draft tool returns a structured draft card. Do not write a
   second, prose copy of the campaign content after calling it.
 - Use actual services, audiences, and wording from the website. The draft
@@ -617,9 +619,8 @@ GOOGLE ADS:
   not fabricate website-specific ad copy.
 - Do not call the campaign-content draft a saved Google Ads draft. The
   available tools cannot create or save campaigns in Google Ads.
-- Do not automatically produce a full setup checklist when the user asks
-  you to run or launch ads. The structured campaign-content draft above is
-  specifically for requests to create, draft, or build campaign content.
+- Do not produce a generic setup checklist when the user asks you to run ads.
+  Give them the structured campaign-content draft above instead.
 - Give general setup advice only if the user asks how to start or requests
   a plan.
 - Do not assume the user's industry, location, audience, services, or ad
@@ -640,11 +641,10 @@ GOOGLE ADS:
 - After campaign data arrives, discuss the practical meaning: which
   campaigns need attention, what should be tested, how the landing page
   should match the search intent, and what a sensible next experiment is.
-- The available Google Ads tool can read the user's campaign list; it
-  cannot create, enable, or launch campaigns. If the user asks to run or
-  launch ads, clearly say you cannot launch them from here. Report the
-  actual campaign status returned by the tool, then offer help preparing
-  the campaign plan or ad copy. Never imply that ads were started.
+- The available Google Ads tools can read campaign metadata and prepare
+  reviewable campaign content; they cannot create, enable, or launch a live
+  campaign. For explicit launch or activation requests, clearly state this
+  limitation and never imply that ads were started.
 - If only campaign metadata is available, do not pretend it contains
   clicks, conversions, spend, or ROAS. Say what additional data would
   be needed for that analysis.
@@ -1225,7 +1225,13 @@ export async function POST(request: Request) {
       messages.push({
         role: "system",
         content: `
-The authenticated user's website data is:
+The authenticated user's latest published website data, fetched for this
+request, is the authoritative source for the business identity, services,
+audience, and ad wording in any Google Ads campaign draft. Do not reuse
+business details from older conversation messages when they conflict with
+this website snapshot.
+
+Website data:
 
 HTML:
 ${website.html}
