@@ -572,30 +572,24 @@ export default function Page() {
 
         </form>
 
-        <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
+        {history.length === 0 && (
+          <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
+            <span className="mr-1 py-1.5">
+              Try an idea:
+            </span>
 
-          <span className="mr-1 py-1.5">
-            Try an idea:
-          </span>
-
-          {examples.map(
-            (example) => (
+            {examples.map((example) => (
               <button
                 key={example}
                 type="button"
-                onClick={() =>
-                  setMessage(
-                    example,
-                  )
-                }
+                onClick={() => setMessage(example)}
                 className="rounded-full border border-zinc-200 px-3 py-1.5 transition hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500"
               >
                 {example}
               </button>
-            ),
-          )}
-
-        </div>
+            ))}
+          </div>
+        )}
 
       </div>
 

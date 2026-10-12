@@ -1398,7 +1398,7 @@ export default function Page() {
   </form>
 
   {/* Suggestions */}
-  {history.length > 0 && (
+  {history.length === 0 && (
     <div className="mt-3 flex max-w-3xl items-center justify-center gap-2 text-xs text-zinc-500">
       <span>Need an idea?</span>
       <button
