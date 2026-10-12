@@ -21,7 +21,14 @@ type TemplateRow = {
   code: string
   code_script: string
   code_data: string
+  subcategory: string
+  meta_data: unknown
 }
+
+type StoredTemplateRow = Pick<
+  TemplateRow,
+  "id" | "code" | "subcategory" | "meta_data"
+>
 
 type ToolTrace = {
   name: string
@@ -235,17 +242,17 @@ function parseJson(value: unknown): Record<string, unknown> | null {
  *
  * Searches:
  *
- * public.website_template
+ * public.real_estate_templates
  *
  * across:
  *
  * code
- * code_script
- * code_data
+ * subcategory
+ * meta_data
  */
 async function searchWebsiteTemplates(
   query: string,
-): Promise<TemplateRow[]> {
+): Promise<StoredTemplateRow[]> {
   const normalized = query.trim()
 
   if (!normalized) {
@@ -269,18 +276,18 @@ async function searchWebsiteTemplates(
     SELECT
       id,
       code,
-      code_script,
-      code_data
-    FROM public.website_template
+      subcategory,
+      meta_data
+    FROM public.real_estate_templates
     WHERE
       code ILIKE ANY(${patterns})
-      OR code_script ILIKE ANY(${patterns})
-      OR code_data ILIKE ANY(${patterns})
+      OR subcategory ILIKE ANY(${patterns})
+      OR meta_data::text ILIKE ANY(${patterns})
     ORDER BY id ASC
     LIMIT 5
   `
 
-  return rows as TemplateRow[]
+  return rows as StoredTemplateRow[]
 }
 
 /**
@@ -288,19 +295,19 @@ async function searchWebsiteTemplates(
  * FIRST TEMPLATE
  * -------------------------------------------------------
  */
-async function getFirstWebsiteTemplate(): Promise<TemplateRow[]> {
+async function getFirstWebsiteTemplate(): Promise<StoredTemplateRow[]> {
   const rows = await sql`
     SELECT
       id,
       code,
-      code_script,
-      code_data
-    FROM public.website_template
+      subcategory,
+      meta_data
+    FROM public.real_estate_templates
     ORDER BY id ASC
     LIMIT 1
   `
 
-  return rows as TemplateRow[]
+  return rows as StoredTemplateRow[]
 }
 
 /**
@@ -308,19 +315,19 @@ async function getFirstWebsiteTemplate(): Promise<TemplateRow[]> {
  * RANDOM TEMPLATE
  * -------------------------------------------------------
  */
-async function getRandomWebsiteTemplate(): Promise<TemplateRow[]> {
+async function getRandomWebsiteTemplate(): Promise<StoredTemplateRow[]> {
   const rows = await sql`
     SELECT
       id,
       code,
-      code_script,
-      code_data
-    FROM public.website_template
+      subcategory,
+      meta_data
+    FROM public.real_estate_templates
     ORDER BY RANDOM()
     LIMIT 1
   `
 
-  return rows as TemplateRow[]
+  return rows as StoredTemplateRow[]
 }
 
 /**
@@ -330,19 +337,19 @@ async function getRandomWebsiteTemplate(): Promise<TemplateRow[]> {
  */
 async function getWebsiteTemplateById(
   id: number,
-): Promise<TemplateRow[]> {
+): Promise<StoredTemplateRow[]> {
   const rows = await sql`
     SELECT
       id,
       code,
-      code_script,
-      code_data
-    FROM public.website_template
+      subcategory,
+      meta_data
+    FROM public.real_estate_templates
     WHERE id = ${id}
     LIMIT 1
   `
 
-  return rows as TemplateRow[]
+  return rows as StoredTemplateRow[]
 }
 
 /**
@@ -400,6 +407,21 @@ function getToolArguments(
 function normalizeTemplate(
   row: Record<string, unknown>,
 ): TemplateRow {
+  const metaData =
+    row.meta_data &&
+    typeof row.meta_data === "object" &&
+    !Array.isArray(row.meta_data)
+      ? row.meta_data as Record<string, unknown>
+      : {}
+  const codeData =
+    "code_data" in metaData
+      ? metaData.code_data
+      : Object.fromEntries(
+          Object.entries(metaData).filter(
+            ([key]) => key !== "code_script",
+          ),
+        )
+
   return {
     id:
       typeof row.id === "number"
@@ -414,12 +436,23 @@ function normalizeTemplate(
     code_script:
       typeof row.code_script === "string"
         ? row.code_script
-        : "",
+        : typeof metaData.code_script === "string"
+          ? metaData.code_script
+          : "",
 
     code_data:
       typeof row.code_data === "string"
         ? row.code_data
+        : typeof codeData === "string"
+          ? codeData
+          : JSON.stringify(codeData),
+
+    subcategory:
+      typeof row.subcategory === "string"
+        ? row.subcategory
         : "",
+
+    meta_data: row.meta_data ?? {},
   }
 }
 
@@ -1241,60 +1274,22 @@ export async function POST(
                 content: `
 You are the 7Wingz Website Template Agent.
 
-Your database is:
-
-public.website_template
-
-Columns:
-
-id
-code
-code_script
-code_data
+Your database table is public.real_estate_templates, with columns:
+id, code, subcategory, and meta_data.
+Use code as the website HTML. Treat meta_data as the website data object;
+when present, its code_script value supplies the JavaScript and its code_data
+value supplies the editable website data. If code_data is absent, use the
+remaining meta_data values as the website data.
 
 You can retrieve website templates using exactly four operations.
 
 OPERATION 1 — SEARCH
 
-Use search_website_templates when the user describes a business, project,
-audience, or desired outcome that a website could support, even if they do
-not explicitly ask for a website. This includes goals such as finding
-customers, getting more bookings, selling a product, or promoting a service.
-Also use it when the user wants a template based on:
-
-- industry
-- business
-- topic
-- website type
-- style
-
-Examples:
-
-"tuition website"
-"coaching website"
-"restaurant website"
-"portfolio website"
-"modern SaaS website"
-"coffee shop website"
-"fashion website"
-
-Extract a short useful search query.
-
-Example:
-
-User:
-"Make me a website for tuition and coaching"
-
-Use:
-
-search_website_templates
-
-query:
-"tuition coaching"
-
-IMPORTANT:
-
-If the user wants a specific business type such as tuition, coaching, restaurant, gym, salon, etc., include that business type in the search query.
+Use search_website_templates for requests for a real-estate website, property
+listing site, or real-estate business site. Search only
+public.real_estate_templates. Extract a short search query from the property
+type or requested real-estate subcategory, such as "apartments",
+"luxury homes", or "commercial property".
 
 ---
 
@@ -1348,12 +1343,10 @@ After the server retrieves the template, another AI step will customize ONLY cod
 When using search_website_templates, also provide a concise, personalized
 "reply" for the user:
 
-- If they describe a broader goal, acknowledge the specific goal in plain
-  language and propose the most useful first website-related step.
-- Choose the step based on their request, not a fixed industry example. For
-  customer or booking goals, a focused landing page with a clear offer and
-  enquiry or booking action is a good starting point. For other goals, choose
-  a suitable site or page for that goal.
+- If they describe a real-estate goal, acknowledge it in plain language and
+  propose the most useful first website-related step.
+- Choose the step based on their request. For property enquiries, a focused
+  listing page with a clear enquiry action is a useful starting point.
 - Mention that a first draft is included below, since the server will create
   one from the selected template.
 - Do not promise results, invent facts, or assume a budget or marketing plan.
@@ -1396,7 +1389,7 @@ Choose exactly one retrieval operation.
                   "search_website_templates",
 
                 description:
-                  "Search public.website_template for templates matching the user's requested website type, industry, style, or topic.",
+                  "Search public.real_estate_templates for real-estate templates matching the requested property type or subcategory.",
 
                 strict: true,
 
@@ -1438,7 +1431,7 @@ Choose exactly one retrieval operation.
                   "get_first_website_template",
 
                 description:
-                  "Get the first row from public.website_template ordered by id ascending.",
+                  "Get the first row from public.real_estate_templates ordered by id ascending.",
 
                 strict: true,
 
@@ -1464,7 +1457,7 @@ Choose exactly one retrieval operation.
                   "get_random_website_template",
 
                 description:
-                  "Get one random row from public.website_template.",
+                  "Get one random row from public.real_estate_templates.",
 
                 strict: true,
 
@@ -1490,7 +1483,7 @@ Choose exactly one retrieval operation.
                   "get_website_template_by_id",
 
                 description:
-                  "Get one website template from public.website_template by numeric id.",
+                  "Get one real-estate template from public.real_estate_templates by numeric id.",
 
                 strict: true,
 
@@ -1592,7 +1585,7 @@ Choose exactly one retrieval operation.
           ok: true,
           type: "chat",
           reply:
-            "There are no website templates in public.website_template.",
+            "There are no real-estate templates in public.real_estate_templates.",
         })
       }
 
@@ -1626,7 +1619,7 @@ Choose exactly one retrieval operation.
             ok: true,
             type: "chat",
             reply:
-              "There are no website templates in public.website_template.",
+              "There are no real-estate templates in public.real_estate_templates.",
           })
         }
 
@@ -1736,25 +1729,11 @@ Choose exactly one retrieval operation.
           )
 
         if (!rows.length) {
-          const fallbackRows =
-            await getWebsiteTemplateById(11)
-
-          if (!fallbackRows.length) {
-            return errorResponse(
-              "No relevant template was found and fallback template 11 is unavailable.",
-              404,
-            )
-          }
-
-          template = normalizeTemplate(
-            fallbackRows[0] as Record<
-              string,
-              unknown
-            >,
-          )
-
-          operation = "fallback"
-          searchQuery = query
+          return Response.json({
+            ok: true,
+            type: "chat",
+            reply: `I could not find a real-estate template matching "${query}" in public.real_estate_templates.`,
+          })
         } else {
           /**
            * Use the first matching template.
@@ -1871,6 +1850,8 @@ Choose exactly one retrieval operation.
 
       code_data:
         editedCodeData,
+
+      subcategory: template.subcategory,
     }
 
     const retrievalToolTrace: ToolTrace =
@@ -1890,13 +1871,13 @@ Choose exactly one retrieval operation.
           ? {
               name: "get_first_website_template",
               label: "Get first website template",
-              detail: "Retrieved the first template from public.website_template.",
+              detail: "Retrieved the first template from public.real_estate_templates.",
             }
           : operation === "random"
             ? {
                 name: "get_random_website_template",
                 label: "Get random website template",
-                detail: "Retrieved a random template from public.website_template.",
+                detail: "Retrieved a random template from public.real_estate_templates.",
               }
             : operation === "id"
               ? {
@@ -1907,7 +1888,7 @@ Choose exactly one retrieval operation.
               : {
                   name: "search_website_templates",
                   label: "Search website templates",
-                  detail: `Searched public.website_template for "${searchQuery || message}".`,
+                  detail: `Searched public.real_estate_templates for "${searchQuery || message}".`,
                 }
 
     /**

@@ -37,6 +37,7 @@ type WebsiteTemplate = {
   code: string
   code_script: string
   code_data: string
+  subcategory?: string
 }
 
 type ToolCall = {
@@ -1602,17 +1603,21 @@ function TemplateCard({
       <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
 
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          public.website_template
+          {template.subcategory !== undefined
+            ? "public.real_estate_templates"
+            : "public.website_template"}
         </div>
 
         <div className="mt-1 flex items-center justify-between">
 
           <div className="text-sm font-semibold">
-            Website Template #{template.id}
+            {template.subcategory !== undefined
+              ? `Real-Estate Template #${template.id}`
+              : `Website Template #${template.id}`}
           </div>
 
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-800">
-            Template
+            {template.subcategory || "Template"}
           </span>
 
         </div>
@@ -1655,11 +1660,15 @@ function TemplateList({
                 <div>
 
                   <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    Website Template
+                    {template.subcategory !== undefined
+                      ? "Real-Estate Template"
+                      : "Website Template"}
                   </div>
 
                   <div className="mt-1 text-sm font-semibold">
-                    Template #{template.id}
+                    {template.subcategory !== undefined
+                      ? `Real-Estate Template #${template.id}`
+                      : `Template #${template.id}`}
                   </div>
 
                 </div>

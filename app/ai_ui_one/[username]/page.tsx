@@ -13,6 +13,7 @@ type WebsiteTemplate = {
   code: string
   code_script: string
   code_data: string
+  subcategory?: string
 }
 
 type Message = {
@@ -49,8 +50,8 @@ type Message = {
 const examples = [
   "get the first website template",
   "fetch a random website template",
-  "find a restaurant website",
-  "I want more bookings for my salon",
+  "find an apartment listing website",
+  "I want more enquiries for my real-estate agency",
 ]
 
 export default function Page() {
@@ -617,17 +618,17 @@ function TemplateCard({
       <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
 
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          public.website_template
+          public.real_estate_templates
         </div>
 
         <div className="mt-1 flex items-center justify-between">
 
           <div className="text-sm font-semibold">
-            Website Template #{template.id}
+            Real-Estate Template #{template.id}
           </div>
 
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-800">
-            Template
+            {template.subcategory || "Real estate"}
           </span>
 
         </div>
@@ -674,7 +675,7 @@ function TemplateList({
                   </div>
 
                   <div className="mt-1 text-sm font-semibold">
-                    Template #{template.id}
+                    Real-Estate Template #{template.id}
                   </div>
 
                 </div>
