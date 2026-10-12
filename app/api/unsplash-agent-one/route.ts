@@ -58,7 +58,7 @@ function asksToPublish(message: string): boolean {
 }
 
 function asksToEdit(message: string): boolean {
-  return /\b(edit|modify|customize|update|change|adapt|add|remove|replace|delete|insert|improve|fix)\b/i.test(message) ||
+  return /\b(edit|edits|modify|modifies|customize|customizes|update|updates|chang(?:e|es|ed|ing)|adapt|adapts|add|adds|remove|removes|replace|replaces|delete|deletes|insert|inserts|improve|improves|fix|fixes|rename|renames|renamed|renaming)\b/i.test(message) ||
     /\b(?:make|do|use|apply|turn)\s+(?:it|this|that|the)\b/i.test(message)
 }
 
@@ -182,6 +182,41 @@ function getRecentTemplate(history: unknown): TemplateRow | null {
   }
 
   return null
+}
+
+function getRecentConversationContext(history: unknown): string {
+  if (!Array.isArray(history)) {
+    return "No previous chat history."
+  }
+
+  const recentMessages = history
+    .filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        "role" in item &&
+        (item.role === "user" || item.role === "assistant") &&
+        "content" in item &&
+        typeof item.content === "string",
+    )
+    .slice(-6)
+    .map((item) => ({
+      role: item.role,
+      content: String(item.content).slice(0, 500),
+    }))
+
+  const recentTemplate = getRecentTemplate(history)
+
+  return JSON.stringify({
+    recentMessages,
+    currentTemplate: recentTemplate
+      ? {
+          id: recentTemplate.id,
+          subcategory: recentTemplate.subcategory,
+          availableInChat: true,
+        }
+      : null,
+  })
 }
 
 async function publishRecentTemplate(
@@ -1375,7 +1410,18 @@ when present, its code_script value supplies the JavaScript and its code_data
 value supplies the editable website data. If code_data is absent, use the
 remaining meta_data values as the website data.
 
-You can retrieve website templates using exactly four operations.
+You can retrieve a template or edit the latest template already present in chat.
+
+Before selecting a tool, interpret the current request together with the recent
+conversation and current-template context supplied by the server. If the user
+requests a change to the website currently shown in chat, call
+edit_recent_website_template with a concise instruction describing the exact
+requested change. Do not rely on specific edit keywords; understand requests
+such as "make the name X", "the title should be X", or "can we have X instead".
+Only choose this tool when an existing template is available in chat.
+
+If the user explicitly asks to fetch/find/show a different template, use the
+appropriate retrieval tool instead of editing the current one.
 
 OPERATION 1 — SEARCH
 
@@ -1430,11 +1476,11 @@ Examples:
 
 IMPORTANT
 
-When editing a template already shown in this chat, reuse the latest version
-from the conversation history. For templates with editable code_data, only
-customize values in that data object. For templates without editable code_data,
-apply the requested change to the current HTML and return the complete updated
-HTML. Each response becomes the source for the next edit.
+When editing, the server reuses the latest version from conversation history.
+For templates with editable code_data, customize values in that data object.
+For templates without editable code_data, apply the change to current HTML and
+return the complete updated HTML. Each response becomes the source for the next
+edit.
 
 When using search_website_templates, also provide a concise, personalized
 "reply" for the user:
@@ -1451,33 +1497,47 @@ When using search_website_templates, also provide a concise, personalized
 - Keep the reply to a few short sentences. Do not ask questions before
   producing the first draft; mention useful details they can provide to refine it.
 
-If the user asks to edit, modify, customize, update, change, add to, remove from,
-or improve a template shown in the recent chat, reuse its latest version instead
-of searching for a new one.
-If they explicitly name a template ID while correcting which template to use, honor
-that ID instead of using the most recent template. Keep its HTML, layout, CSS, and
-JavaScript unchanged; customize only the values in code_data. The user can also ask
-to change the business idea or language.
+For a requested edit to the current template, call
+edit_recent_website_template and reuse its latest version. If the user explicitly
+names a different template ID, retrieve that template instead. Data-backed
+templates should be edited through code_data; static-HTML templates should be
+edited in the HTML while preserving unrelated sections and behavior.
 
 For data-backed templates, keep the HTML/code and JavaScript/code_script
 unchanged. For static-HTML templates, preserve unrelated HTML and functionality
 while applying only the requested changes.
 
-Never generate SQL.
-
-Never invent template records.
-
-Choose exactly one retrieval operation.
+Never generate SQL or invent template records. Choose one appropriate action:
+edit the current template or retrieve a template.
                 `,
               },
 
               {
                 role: "user",
-                content: message,
+                content: `RECENT CHAT AND CURRENT TEMPLATE:\n${getRecentConversationContext(history)}\n\nCURRENT USER REQUEST:\n${message}`,
               },
             ],
 
             tools: [
+              {
+                type: "function",
+                name: "edit_recent_website_template",
+                description:
+                  "Edit the latest website template already shown in chat. Use this for any natural-language request to change, add, remove, or revise something in the current template.",
+                strict: true,
+                parameters: {
+                  type: "object",
+                  properties: {
+                    instruction: {
+                      type: "string",
+                      description:
+                        "A concise instruction preserving the user's requested website change.",
+                    },
+                  },
+                  required: ["instruction"],
+                  additionalProperties: false,
+                },
+              },
               /**
                * SEARCH
                */
@@ -1634,10 +1694,21 @@ Choose exactly one retrieval operation.
      */
 
     const requestedTemplateId = getRequestedTemplateId(message)
-    const templateEditRequested = asksToEdit(message)
+    const editRecentCall = findToolCall(
+      openaiData?.output,
+      "edit_recent_website_template",
+    )
+    const editArguments = getToolArguments(editRecentCall)
+    const editInstruction =
+      typeof editArguments?.instruction === "string" &&
+      editArguments.instruction.trim()
+        ? editArguments.instruction.trim()
+        : message
+    const explicitIdEditRequested =
+      requestedTemplateId !== null && asksToEdit(message)
     let template: TemplateRow | null = null
 
-    if (templateEditRequested && requestedTemplateId !== null) {
+    if (explicitIdEditRequested) {
       const rows = await getWebsiteTemplateById(requestedTemplateId)
 
       if (!rows.length) {
@@ -1651,12 +1722,21 @@ Choose exactly one retrieval operation.
       template = normalizeTemplate(
         rows[0] as Record<string, unknown>,
       )
-    } else if (templateEditRequested) {
+    } else if (editRecentCall) {
       template = getRecentTemplate(history)
+
+      if (!template) {
+        return Response.json({
+          ok: true,
+          type: "chat",
+          reply:
+            "I can edit a website after you fetch a template in this chat. Which real-estate template would you like to start with?",
+        })
+      }
     }
 
     let operation = template
-      ? requestedTemplateId !== null
+      ? explicitIdEditRequested
         ? "edit_id"
         : "edit_recent"
       : ""
@@ -1892,7 +1972,9 @@ Choose exactly one retrieval operation.
         : null
     const templateEditRequest = previousCustomization
       ? `${previousCustomization}\n\nThe user is correcting the template selection: apply that same customization to website template ${template.id}. Do not search for or switch to another template.`
-      : message
+      : editRecentCall
+        ? editInstruction
+        : message
 
     let editedCode = originalCode
     let editedCodeData = originalCodeData
