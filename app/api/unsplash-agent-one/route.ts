@@ -58,8 +58,8 @@ function asksToPublish(message: string): boolean {
 }
 
 function asksToEdit(message: string): boolean {
-  return /\b(edit|modify|customize|update|change|adapt)\b/i.test(message) ||
-    /\b(?:make|do|use|apply)\s+(?:it|this|that)\s+(?:for|to|as|in)\b/i.test(message)
+  return /\b(edit|modify|customize|update|change|adapt|add|remove|replace|delete|insert|improve|fix)\b/i.test(message) ||
+    /\b(?:make|do|use|apply|turn)\s+(?:it|this|that|the)\b/i.test(message)
 }
 
 function getRequestedTemplateId(message: string): number | null {
@@ -421,6 +421,17 @@ function normalizeTemplate(
             ([key]) => key !== "code_script",
           ),
         )
+  const normalizedCodeData =
+    typeof row.code_data === "string"
+      ? row.code_data
+      : typeof codeData === "string"
+        ? codeData
+        : JSON.stringify(codeData)
+  const parsedCodeData = parseJson(normalizedCodeData)
+  const hasCodeData =
+    parsedCodeData
+      ? Object.keys(parsedCodeData).length > 0
+      : normalizedCodeData.trim().length > 0
 
   return {
     id:
@@ -441,11 +452,7 @@ function normalizeTemplate(
           : "",
 
     code_data:
-      typeof row.code_data === "string"
-        ? row.code_data
-        : typeof codeData === "string"
-          ? codeData
-          : JSON.stringify(codeData),
+      hasCodeData ? normalizedCodeData : "",
 
     subcategory:
       typeof row.subcategory === "string"
@@ -454,6 +461,93 @@ function normalizeTemplate(
 
     meta_data: row.meta_data ?? {},
   }
+}
+
+async function editTemplateCode(
+  originalCode: string,
+  userRequest: string,
+  openaiKey: string,
+): Promise<string> {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "system",
+          content: `You edit an existing real-estate website incrementally.
+
+Apply the user's requested changes to the supplied current HTML. Preserve all existing content, layout, styles, links, images, functionality, and responsive behavior unless the user asks to change them. Do not rebuild the site from scratch or remove unrelated sections. Do not invent factual claims, contact details, property listings, or prices. Return the complete updated HTML document only, with no markdown fences or explanation.`,
+        },
+        {
+          role: "user",
+          content: `USER REQUEST:\n${userRequest}\n\nCURRENT WEBSITE HTML:\n${originalCode}`,
+        },
+      ],
+    }),
+  })
+
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error?.message === "string"
+        ? data.error.message
+        : "OpenAI failed while editing the website HTML.",
+    )
+  }
+
+  if (
+    typeof data?.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+    return cleanEditedHtml(data.output_text, originalCode)
+  }
+
+  if (Array.isArray(data?.output)) {
+    for (const item of data.output) {
+      if (item && typeof item === "object" && Array.isArray(item.content)) {
+        for (const content of item.content) {
+          if (
+            content &&
+            typeof content === "object" &&
+            "text" in content &&
+            typeof content.text === "string" &&
+            content.text.trim()
+          ) {
+            return cleanEditedHtml(content.text, originalCode)
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error("OpenAI returned no updated website HTML.")
+}
+
+function cleanEditedHtml(
+  value: string,
+  originalCode: string,
+): string {
+  const html = value.trim()
+    .replace(/^```(?:html)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim()
+
+  if (!html) {
+    throw new Error("OpenAI returned empty website HTML.")
+  }
+  if (
+    /<html\b/i.test(originalCode) &&
+    (!/<html\b/i.test(html) || !/<\/html\s*>/i.test(html))
+  ) {
+    throw new Error("OpenAI returned incomplete website HTML.")
+  }
+
+  return html
 }
 
 /**
@@ -1336,9 +1430,11 @@ Examples:
 
 IMPORTANT
 
-You are selecting a template.
-
-After the server retrieves the template, another AI step will customize ONLY code_data.
+When editing a template already shown in this chat, reuse the latest version
+from the conversation history. For templates with editable code_data, only
+customize values in that data object. For templates without editable code_data,
+apply the requested change to the current HTML and return the complete updated
+HTML. Each response becomes the source for the next edit.
 
 When using search_website_templates, also provide a concise, personalized
 "reply" for the user:
@@ -1355,14 +1451,17 @@ When using search_website_templates, also provide a concise, personalized
 - Keep the reply to a few short sentences. Do not ask questions before
   producing the first draft; mention useful details they can provide to refine it.
 
-If the user asks to edit, modify, customize, update, change, or adapt a template
-shown in the recent chat, reuse that template instead of searching for a new one.
+If the user asks to edit, modify, customize, update, change, add to, remove from,
+or improve a template shown in the recent chat, reuse its latest version instead
+of searching for a new one.
 If they explicitly name a template ID while correcting which template to use, honor
 that ID instead of using the most recent template. Keep its HTML, layout, CSS, and
 JavaScript unchanged; customize only the values in code_data. The user can also ask
 to change the business idea or language.
 
-The HTML/code and JavaScript/code_script must remain unchanged.
+For data-backed templates, keep the HTML/code and JavaScript/code_script
+unchanged. For static-HTML templates, preserve unrelated HTML and functionality
+while applying only the requested changes.
 
 Never generate SQL.
 
@@ -1774,7 +1873,7 @@ Choose exactly one retrieval operation.
     /**
      * ---------------------------------------------------
      * STEP 3
-     * CUSTOMIZE ONLY CODE_DATA
+     * EDIT THE TEMPLATE HELD IN CHAT HISTORY
      * ---------------------------------------------------
      */
 
@@ -1795,58 +1894,55 @@ Choose exactly one retrieval operation.
       ? `${previousCustomization}\n\nThe user is correcting the template selection: apply that same customization to website template ${template.id}. Do not search for or switch to another template.`
       : message
 
-    const editedCodeDataRaw =
-      await editTemplateData(
-        originalCodeData,
-        templateEditRequest,
-        openaiKey,
-      )
+    let editedCode = originalCode
+    let editedCodeData = originalCodeData
+    const editedCodeScript = originalCodeScript
+    const parsedCodeData = parseJson(originalCodeData)
+    const hasEditableCodeData =
+      parsedCodeData !== null &&
+      Object.keys(parsedCodeData).length > 0
 
-    const editedCodeData =
-      cleanCodeData(
-        editedCodeDataRaw,
-      )
+    if (hasEditableCodeData) {
+      const editedCodeDataRaw =
+        await editTemplateData(
+          originalCodeData,
+          templateEditRequest,
+          openaiKey,
+        )
 
-    /**
-     * ---------------------------------------------------
-     * STEP 4
-     * VERIFY DATA STRUCTURE
-     * ---------------------------------------------------
-     */
-    const validation =
-      validateDataStructure(
+      editedCodeData = cleanCodeData(editedCodeDataRaw)
+
+      const validation = validateDataStructure(
         originalCodeData,
         editedCodeData,
       )
 
-    if (!validation.valid) {
-      return errorResponse(
-        validation.reason ||
-          "AI changed the template data structure.",
-        500,
+      if (!validation.valid) {
+        return errorResponse(
+          validation.reason ||
+            "AI changed the code_data structure.",
+          500,
+        )
+      }
+    } else if (
+      asksToEdit(message) ||
+      operation === "edit_recent" ||
+      operation === "edit_id"
+    ) {
+      editedCode = await editTemplateCode(
+        originalCode,
+        templateEditRequest,
+        openaiKey,
       )
     }
 
-    /**
-     * ---------------------------------------------------
-     * STEP 5
-     * IMPORTANT
-     *
-     * code and code_script come DIRECTLY from
-     * PostgreSQL.
-     *
-     * They are NOT taken from OpenAI.
-     *
-     * Only code_data comes from the AI editor.
-     * ---------------------------------------------------
-     */
     const finalTemplate = {
       id: template.id,
 
-      code: originalCode,
+      code: editedCode,
 
       code_script:
-        originalCodeScript,
+        editedCodeScript,
 
       code_data:
         editedCodeData,
@@ -1919,23 +2015,32 @@ Choose exactly one retrieval operation.
 
       toolCalls: [
         retrievalToolTrace,
-        {
-          name: "customize_template_data",
-          label: "Customize template content",
-          detail: `Updated content for template ${template.id} while preserving its HTML and JavaScript.`,
-        },
+        ...(editedCode !== originalCode
+          ? [{
+              name: "edit_template_html",
+              label: "Edit website HTML",
+              detail: `Applied the requested change to the current HTML for template ${template.id}.`,
+            }]
+          : editedCodeData !== originalCodeData
+            ? [{
+                name: "customize_template_data",
+                label: "Customize template content",
+                detail: `Updated content for template ${template.id} while preserving its HTML and JavaScript.`,
+              }]
+            : []),
       ],
 
       customization: {
-        changed: "code_data",
-
-        preserved: [
-          "code",
-          "code_script",
-        ],
-
-        structure:
-          "preserved",
+        changed:
+          editedCode !== originalCode
+            ? "code"
+            : editedCodeData !== originalCodeData
+              ? "code_data"
+              : null,
+        preserved:
+          editedCode !== originalCode
+            ? ["code_script", "code_data"]
+            : ["code", "code_script"],
       },
     })
   } catch (error) {
