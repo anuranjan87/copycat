@@ -237,21 +237,6 @@ function findMatchingBrace(
 
 /*
  * ================================================================
- * DETECT BABEL
- * ================================================================
- */
-
-function hasBabelScript(
-  html: string
-): boolean {
-  return /<script[^>]*type=["']text\/babel["'][^>]*>/i.test(
-    html
-  )
-}
-
-
-/*
- * ================================================================
  * INJECT OPENAI API KEY
  * ================================================================
  *
@@ -351,11 +336,11 @@ function injectOpenAIKey(
 
 /*
  * ================================================================
- * BUILD HTML FOR BABEL WEBSITE
+ * BUILD HTML FOR WEBSITE
  * ================================================================
  */
 
-function buildBabelHtml(
+function buildWebsiteHtml(
   html: string,
   rawData: string | null | undefined,
   username: string
@@ -473,6 +458,7 @@ const data = window.__SITE_DATA__;
     form.addEventListener(
       "submit",
       function (event) {
+        event.preventDefault()
 
         const values =
           getFormData(form)
@@ -487,6 +473,34 @@ const data = window.__SITE_DATA__;
         )
       },
       true
+    )
+
+    window.addEventListener(
+      "message",
+      function (event) {
+        if (
+          event.source !== window.parent ||
+          !event.data ||
+          event.data.type !== "formResponse"
+        ) {
+          return
+        }
+
+        let status =
+          form.querySelector('[role="status"]')
+
+        if (!status) {
+          status = document.createElement("p")
+          status.setAttribute("role", "status")
+          form.appendChild(status)
+        }
+
+        status.textContent =
+          event.data.status === "success"
+            ? "Your enquiry was sent successfully."
+            : "Your enquiry could not be sent. Please try again."
+        status.classList.remove("hidden")
+      }
     )
   }
 
@@ -695,47 +709,8 @@ export default async function UserWebsitePage({
     const html =
       content.html
 
-    /*
-     * ============================================================
-     * STATIC HTML WEBSITE
-     * ============================================================
-     *
-     * No Babel.
-     *
-     * We still inject OPENAI_API_KEY because you want the rendered
-     * HTML to be able to use:
-     *
-     * window.OPENAI_API_KEY
-     *
-     * ============================================================
-     */
-
-
-
-    if (!hasBabelScript(html)) {
-  const finalHtml =
-    injectOpenAIKey(html)
-
-  return (
-    <IframeWithLinkHandler
-      content={finalHtml}
-      username={username}
-    />
-  )
-}
-     
-
-    /*
-     * ============================================================
-     * BABEL / REACT WEBSITE
-     * ============================================================
-     *
-     * Goes through the existing iframe processing pipeline.
-     * ============================================================
-     */
-
     const finalHtml =
-      buildBabelHtml(
+      buildWebsiteHtml(
         html,
         content.data,
         username
