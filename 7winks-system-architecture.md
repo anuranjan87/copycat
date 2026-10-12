@@ -120,6 +120,8 @@ There are multiple AI-related services in the codebase. They include:
 
 These services call OpenAI or Google GenAI APIs. They are orchestrated in route handlers, with rules to maintain conversation state, streaming output, and structured tool responses.
 
+For edits to an existing website, the editor requests targeted HTML patches and applies them only when each exact target occurs once and the combined replacement stays below half of the current document. Broad redesigns and blank-site generation use complete HTML generation; only that full-generation path performs the Unsplash image search and attribution workflow.
+
 ### 5.4.1 Marketing AI Copilot
 The Marketing AI Copilot is the product’s strategic assistant layer. It sits above the website editor and analytics pipelines and turns raw data into prioritized recommendations for growth. In practice, it interprets visitor trends, active user behavior, enquiry quality, campaign spend, landing-page friction, and domain opportunities to answer questions such as:
 

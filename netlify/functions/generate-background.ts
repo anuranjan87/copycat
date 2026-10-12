@@ -38,6 +38,15 @@ type GenerationUsage = {
   estimatedCostUsd: number;
 };
 
+type HtmlPatch = {
+  oldText: string;
+  newText: string;
+};
+
+type EditDecision =
+  | { mode: "patch"; patches: HtmlPatch[] }
+  | { mode: "full" };
+
 /* ============================================================
    HELPERS
 ============================================================ */
@@ -63,6 +72,104 @@ function estimateCost(
       outputPricePerMillion;
 
   return Number(cost.toFixed(6));
+}
+
+function parseEditDecision(raw: string): EditDecision {
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const decision = JSON.parse(cleaned) as Partial<EditDecision>;
+
+  if (decision.mode === "full") {
+    return { mode: "full" };
+  }
+
+  if (
+    decision.mode !== "patch" ||
+    !Array.isArray(decision.patches) ||
+    decision.patches.length === 0 ||
+    decision.patches.length > 30
+  ) {
+    throw new Error("AI returned an invalid edit plan.");
+  }
+
+  const patches = decision.patches as HtmlPatch[];
+  if (
+    patches.some(
+      (patch) =>
+        !patch ||
+        typeof patch.oldText !== "string" ||
+        patch.oldText.length === 0 ||
+        typeof patch.newText !== "string"
+    )
+  ) {
+    throw new Error("AI returned an invalid HTML patch.");
+  }
+
+  return { mode: "patch", patches };
+}
+
+function applyHtmlPatches(html: string, patches: HtmlPatch[]): string {
+  const replacedCharacters = patches.reduce(
+    (total, patch) => total + patch.oldText.length,
+    0
+  );
+  const insertedCharacters = patches.reduce(
+    (total, patch) => total + patch.newText.length,
+    0
+  );
+
+  if (
+    replacedCharacters > html.length * 0.5 ||
+    insertedCharacters > html.length * 0.5
+  ) {
+    throw new Error(
+      "AI edit was too broad to apply as an incremental change."
+    );
+  }
+
+  const replacements = patches.map((patch) => {
+    const firstIndex = html.indexOf(patch.oldText);
+    if (
+      firstIndex === -1 ||
+      html.indexOf(patch.oldText, firstIndex + patch.oldText.length) !== -1
+    ) {
+      throw new Error(
+        "AI edit could not be applied safely because its target is missing or ambiguous."
+      );
+    }
+
+    return { ...patch, index: firstIndex };
+  });
+
+  const ascendingReplacements = [...replacements].sort(
+    (left, right) => left.index - right.index
+  );
+  for (let index = 1; index < ascendingReplacements.length; index += 1) {
+    const previous = ascendingReplacements[index - 1];
+    const current = ascendingReplacements[index];
+    if (previous.index + previous.oldText.length > current.index) {
+      throw new Error("AI edits overlap and cannot be applied safely.");
+    }
+  }
+
+  let updatedHtml = html;
+  const descendingReplacements = replacements.sort(
+    (left, right) => right.index - left.index
+  );
+  for (const patch of descendingReplacements) {
+    updatedHtml =
+      updatedHtml.slice(0, patch.index) +
+      patch.newText +
+      updatedHtml.slice(patch.index + patch.oldText.length);
+  }
+
+  if (!updatedHtml.trim()) {
+    throw new Error("AI edit resulted in empty HTML.");
+  }
+
+  return updatedHtml;
 }
 
 function createJobId(): string {
@@ -598,7 +705,80 @@ async function runGeneration(
     return;
   }
 
+  const startedAt = Date.now();
+
   try {
+    let editDecisionUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    };
+
+    if (currentCode.trim()) {
+      await updateJob(jobId, {
+        status: "processing",
+        stage: "planning_edits",
+      });
+
+      const decisionResponse = await openai.responses.create({
+        model: "gpt-5.6-luna",
+        stream: false,
+        input: `
+You edit an existing website's HTML. Choose the smallest safe change that fulfills the user's request.
+
+Return exactly one JSON object, with no Markdown:
+- For a localized edit, return {"mode":"patch","patches":[{"oldText":"exact unique text copied from the current HTML","newText":"replacement text"}]}.
+- For a request that requires a broad redesign, restructuring most of the page, or adding/removing whole major sections, return {"mode":"full"}.
+
+Patch rules:
+- Make only changes requested by the user; preserve all unrelated HTML, functionality, and image URLs.
+- Each oldText must be copied exactly from the current HTML and must appear exactly once.
+- Keep oldText as short as possible while still uniquely identifying the intended location.
+- Use one patch per localized change. Do not include unchanged surrounding code.
+- Do not output the updated page or any explanation.
+
+CURRENT HTML:
+${currentCode}
+
+USER REQUEST:
+${prompt}
+        `.trim(),
+      });
+
+      editDecisionUsage = {
+        inputTokens: decisionResponse.usage?.input_tokens ?? 0,
+        outputTokens: decisionResponse.usage?.output_tokens ?? 0,
+        totalTokens: decisionResponse.usage?.total_tokens ?? 0,
+      };
+      const decision = parseEditDecision(
+        decisionResponse.output_text || ""
+      );
+
+      if (decision.mode === "patch") {
+        const html = applyHtmlPatches(currentCode, decision.patches);
+        const inputTokens = editDecisionUsage.inputTokens;
+        const outputTokens = editDecisionUsage.outputTokens;
+        const usage: GenerationUsage = {
+          inputTokens,
+          outputTokens,
+          totalTokens: editDecisionUsage.totalTokens || inputTokens + outputTokens,
+          estimatedCostUsd: estimateCost(inputTokens, outputTokens),
+        };
+
+        await updateJob(jobId, {
+          status: "completed",
+          stage: "completed",
+          mode: "patch",
+          html,
+          usage,
+          durationMs: Date.now() - startedAt,
+          imageCount: 0,
+          completedAt: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
     /* ========================================================
        STEP 1 — IMAGE QUERY
     ======================================================== */
@@ -837,9 +1017,6 @@ ${prompt}
        STEP 5 — OPENAI
     ======================================================== */
 
-    const startedAt =
-      Date.now();
-
     const finalResponse =
       await openai.responses.create({
         model:
@@ -967,6 +1144,9 @@ ${prompt}
         usage.input_tokens ??
           usage.inputTokens ??
           0
+      ) +
+      Number(
+        editDecisionUsage.inputTokens
       );
 
     const outputTokens =
@@ -974,14 +1154,21 @@ ${prompt}
         usage.output_tokens ??
           usage.outputTokens ??
           0
+      ) +
+      Number(
+        editDecisionUsage.outputTokens
       );
 
     const totalTokens =
       Number(
         usage.total_tokens ??
           usage.totalTokens ??
-          inputTokens +
-            outputTokens
+          Number(usage.input_tokens ?? usage.inputTokens ?? 0) +
+            Number(usage.output_tokens ?? usage.outputTokens ?? 0)
+      ) +
+      Number(
+        editDecisionUsage.totalTokens ||
+          editDecisionUsage.inputTokens + editDecisionUsage.outputTokens
       );
 
     const estimatedCostUsd =
@@ -1008,6 +1195,8 @@ ${prompt}
         status: "completed",
 
         stage: "completed",
+
+        mode: "full",
 
         html,
 

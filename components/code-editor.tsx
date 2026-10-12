@@ -731,7 +731,7 @@ const handlePublish = async () => {
         estimatedCostUsd: Number(usage.estimatedCostUsd || 0),
       });
 
-      toast.success('AI generated new code!', {
+      toast.success('AI changes are ready!', {
         description: 'Review the changes and save if you like.',
         position: 'top-center',
       });
