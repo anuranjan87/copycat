@@ -22,12 +22,11 @@ type TemplateRow = {
   code_script: string
   code_data: string
   subcategory: string
-  meta_data: unknown
 }
 
 type StoredTemplateRow = Pick<
   TemplateRow,
-  "id" | "code" | "subcategory" | "meta_data"
+  "id" | "code" | "code_script" | "code_data"
 >
 
 type ToolTrace = {
@@ -60,6 +59,10 @@ function asksToPublish(message: string): boolean {
 function asksToEdit(message: string): boolean {
   return /\b(edit|edits|modify|modifies|customize|customizes|update|updates|chang(?:e|es|ed|ing)|adapt|adapts|add|adds|remove|removes|replace|replaces|delete|deletes|insert|inserts|improve|improves|fix|fixes|rename|renames|renamed|renaming)\b/i.test(message) ||
     /\b(?:make|do|use|apply|turn)\s+(?:it|this|that|the)\b/i.test(message)
+}
+
+function explicitlyRequestsTemplateRetrieval(message: string): boolean {
+  return /\b(?:get|fetch|show|find|search|load|retrieve)\b[\s\S]{0,50}\b(?:template|website|site)\b/i.test(message)
 }
 
 function getRequestedTemplateId(message: string): number | null {
@@ -275,15 +278,7 @@ function parseJson(value: unknown): Record<string, unknown> | null {
  * SEARCH WEBSITE TEMPLATES
  * -------------------------------------------------------
  *
- * Searches:
- *
- * public.real_estate_templates
- *
- * across:
- *
- * code
- * subcategory
- * meta_data
+ * Searches the existing website_template catalog across its template content.
  */
 async function searchWebsiteTemplates(
   query: string,
@@ -311,13 +306,13 @@ async function searchWebsiteTemplates(
     SELECT
       id,
       code,
-      subcategory,
-      meta_data
-    FROM public.real_estate_templates
+      code_script,
+      code_data
+    FROM website_template
     WHERE
       code ILIKE ANY(${patterns})
-      OR subcategory ILIKE ANY(${patterns})
-      OR meta_data::text ILIKE ANY(${patterns})
+      OR code_script ILIKE ANY(${patterns})
+      OR code_data ILIKE ANY(${patterns})
     ORDER BY id ASC
     LIMIT 5
   `
@@ -335,9 +330,9 @@ async function getFirstWebsiteTemplate(): Promise<StoredTemplateRow[]> {
     SELECT
       id,
       code,
-      subcategory,
-      meta_data
-    FROM public.real_estate_templates
+      code_script,
+      code_data
+    FROM website_template
     ORDER BY id ASC
     LIMIT 1
   `
@@ -355,9 +350,9 @@ async function getRandomWebsiteTemplate(): Promise<StoredTemplateRow[]> {
     SELECT
       id,
       code,
-      subcategory,
-      meta_data
-    FROM public.real_estate_templates
+      code_script,
+      code_data
+    FROM website_template
     ORDER BY RANDOM()
     LIMIT 1
   `
@@ -377,9 +372,9 @@ async function getWebsiteTemplateById(
     SELECT
       id,
       code,
-      subcategory,
-      meta_data
-    FROM public.real_estate_templates
+      code_script,
+      code_data
+    FROM website_template
     WHERE id = ${id}
     LIMIT 1
   `
@@ -442,32 +437,6 @@ function getToolArguments(
 function normalizeTemplate(
   row: Record<string, unknown>,
 ): TemplateRow {
-  const metaData =
-    row.meta_data &&
-    typeof row.meta_data === "object" &&
-    !Array.isArray(row.meta_data)
-      ? row.meta_data as Record<string, unknown>
-      : {}
-  const codeData =
-    "code_data" in metaData
-      ? metaData.code_data
-      : Object.fromEntries(
-          Object.entries(metaData).filter(
-            ([key]) => key !== "code_script",
-          ),
-        )
-  const normalizedCodeData =
-    typeof row.code_data === "string"
-      ? row.code_data
-      : typeof codeData === "string"
-        ? codeData
-        : JSON.stringify(codeData)
-  const parsedCodeData = parseJson(normalizedCodeData)
-  const hasCodeData =
-    parsedCodeData
-      ? Object.keys(parsedCodeData).length > 0
-      : normalizedCodeData.trim().length > 0
-
   return {
     id:
       typeof row.id === "number"
@@ -482,19 +451,17 @@ function normalizeTemplate(
     code_script:
       typeof row.code_script === "string"
         ? row.code_script
-        : typeof metaData.code_script === "string"
-          ? metaData.code_script
-          : "",
+        : "",
 
     code_data:
-      hasCodeData ? normalizedCodeData : "",
+      typeof row.code_data === "string"
+        ? row.code_data
+        : "",
 
     subcategory:
       typeof row.subcategory === "string"
         ? row.subcategory
         : "",
-
-    meta_data: row.meta_data ?? {},
   }
 }
 
@@ -502,6 +469,8 @@ async function editTemplateCode(
   originalCode: string,
   userRequest: string,
   openaiKey: string,
+  retryFeedback = "",
+  retryCount = 0,
 ): Promise<string> {
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
@@ -514,9 +483,268 @@ async function editTemplateCode(
       input: [
         {
           role: "system",
-          content: `You edit an existing real-estate website incrementally.
+          content: `You edit an existing website template by returning a small set of exact HTML text replacements, not a rewritten document.
 
-Apply the user's requested changes to the supplied current HTML. Preserve all existing content, layout, styles, links, images, functionality, and responsive behavior unless the user asks to change them. Do not rebuild the site from scratch or remove unrelated sections. Do not invent factual claims, contact details, property listings, or prices. Return the complete updated HTML document only, with no markdown fences or explanation.`,
+Apply the user's requested changes to the supplied current HTML. Preserve all existing content, layout, styles, links, images, functionality, and responsive behavior unless the user asks to change them. Do not rebuild the site from scratch or remove unrelated sections. Do not invent factual claims, contact details, property listings, or prices.
+
+Return ONLY a JSON object with this shape:
+{"edits":[{"find":"an exact, unique snippet from the current HTML","replace":"that snippet with only the requested changes"}]}
+
+Each find value must exactly match one unique substring in the current HTML. Use as few edits as possible. For a new section, anchor the replacement to the smallest unique surrounding HTML snippet and include only the new section in replace. Do not return the full HTML, markdown, or explanations. If the request requires no HTML change, return {"edits":[]}.`,
+        },
+        {
+          role: "user",
+          content: `USER REQUEST:\n${userRequest}${retryFeedback ? `\n\nCORRECTION REQUIRED:\n${retryFeedback}` : ""}\n\nCURRENT WEBSITE HTML (all find snippets must be copied exactly from this original document):\n${originalCode}`,
+        },
+      ],
+    }),
+  })
+
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error?.message === "string"
+        ? data.error.message
+        : "OpenAI failed while creating an incremental website HTML edit.",
+    )
+  }
+
+  const outputText =
+    typeof data?.output_text === "string"
+      ? data.output_text
+      : Array.isArray(data?.output)
+        ? data.output
+            .flatMap((item: unknown) =>
+              item &&
+              typeof item === "object" &&
+              "content" in item &&
+              Array.isArray(item.content)
+                ? item.content
+                : [],
+            )
+            .map((content: unknown) =>
+              content &&
+              typeof content === "object" &&
+              "text" in content &&
+              typeof content.text === "string"
+                ? content.text
+                : "",
+            )
+            .find((text: string) => text.trim())
+        : null
+
+  if (
+    typeof outputText !== "string" ||
+    !outputText.trim()
+  ) {
+    throw new Error("OpenAI returned no incremental website HTML edits.")
+  }
+
+  const jsonText = outputText.trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim()
+  let parsedResponse: unknown
+
+  try {
+    parsedResponse = JSON.parse(jsonText)
+  } catch {
+    throw new Error("OpenAI returned invalid JSON for incremental website edits.")
+  }
+
+  if (
+    !parsedResponse ||
+    typeof parsedResponse !== "object" ||
+    !("edits" in parsedResponse) ||
+    !Array.isArray(parsedResponse.edits)
+  ) {
+    throw new Error("OpenAI returned an invalid incremental website edit response.")
+  }
+
+  const locatedEdits: Array<{
+    start: number
+    end: number
+    replace: string
+  }> = []
+
+  for (const edit of parsedResponse.edits) {
+    if (
+      !edit ||
+      typeof edit !== "object" ||
+      !("find" in edit) ||
+      typeof edit.find !== "string" ||
+      !edit.find ||
+      !("replace" in edit) ||
+      typeof edit.replace !== "string"
+    ) {
+      throw new Error("OpenAI returned a malformed incremental website edit.")
+    }
+
+    const match = findUniqueHtmlSnippet(originalCode, edit.find)
+
+    if (!match) {
+      const reason =
+        originalCode.includes(edit.find)
+          ? "One or more find snippets occur more than once in the original HTML. Use a longer, unique surrounding snippet."
+          : "One or more find snippets were not copied exactly from the original HTML."
+
+      if (retryCount < 1) {
+        return editTemplateCode(
+          originalCode,
+          userRequest,
+          openaiKey,
+          `${reason} Return a corrected JSON edit list. Keep each find snippet exact and unique, and do not include previous changes in its find text.`,
+          retryCount + 1,
+        )
+      }
+
+      console.warn(
+        `[website-template-agent] Incremental patch could not be matched after retry; falling back to a complete HTML edit. ${reason}`,
+      )
+      return editTemplateCodeAsDocument(
+        originalCode,
+        userRequest,
+        openaiKey,
+      )
+    }
+
+    locatedEdits.push({
+      start: match.start,
+      end: match.end,
+      replace: edit.replace,
+    })
+  }
+
+  locatedEdits.sort((a, b) => a.start - b.start)
+  const overlappingEdits = locatedEdits.some(
+    (edit, index) =>
+      index > 0 &&
+      edit.start < locatedEdits[index - 1].end,
+  )
+
+  if (overlappingEdits) {
+    if (retryCount < 1) {
+      return editTemplateCode(
+        originalCode,
+        userRequest,
+        openaiKey,
+        "Some find snippets overlap each other. Return fewer non-overlapping replacements, each copied exactly from the original HTML.",
+        retryCount + 1,
+      )
+    }
+
+    console.warn(
+      "[website-template-agent] Incremental patches overlap after retry; falling back to a complete HTML edit.",
+    )
+    return editTemplateCodeAsDocument(
+      originalCode,
+      userRequest,
+      openaiKey,
+    )
+  }
+
+  let editedCode = originalCode
+  for (const edit of locatedEdits.reverse()) {
+    editedCode =
+      editedCode.slice(0, edit.start) +
+      edit.replace +
+      editedCode.slice(edit.end)
+  }
+
+  try {
+    return cleanEditedHtml(editedCode, originalCode)
+  } catch (error) {
+    console.warn(
+      "[website-template-agent] Incremental patches produced incomplete HTML; falling back to a complete HTML edit.",
+      error,
+    )
+    return editTemplateCodeAsDocument(
+      originalCode,
+      userRequest,
+      openaiKey,
+    )
+  }
+}
+
+function findUniqueHtmlSnippet(
+  html: string,
+  snippet: string,
+): { start: number; end: number } | null {
+  const exactStart = html.indexOf(snippet)
+  if (exactStart !== -1) {
+    if (html.indexOf(snippet, exactStart + snippet.length) !== -1) {
+      return null
+    }
+
+    return {
+      start: exactStart,
+      end: exactStart + snippet.length,
+    }
+  }
+
+  const normalizedHtml: string[] = []
+  const sourceStarts: number[] = []
+  const sourceEnds: number[] = []
+
+  for (let index = 0; index < html.length;) {
+    const start = index
+    const isWhitespace = /\s/.test(html[index])
+
+    while (
+      index < html.length &&
+      /\s/.test(html[index]) === isWhitespace
+    ) {
+      index += 1
+    }
+
+    normalizedHtml.push(isWhitespace ? " " : html[start])
+    sourceStarts.push(start)
+    sourceEnds.push(index)
+  }
+
+  const normalizeWhitespace = (value: string) =>
+    value.trim().replace(/\s+/g, " ")
+  const normalizedSnippet = normalizeWhitespace(snippet)
+  const normalizedSource = normalizedHtml.join("")
+  const matchStart = normalizedSource.indexOf(normalizedSnippet)
+
+  if (
+    !normalizedSnippet ||
+    matchStart === -1 ||
+    normalizedSource.indexOf(
+      normalizedSnippet,
+      matchStart + normalizedSnippet.length,
+    ) !== -1
+  ) {
+    return null
+  }
+
+  const matchEnd = matchStart + normalizedSnippet.length - 1
+  return {
+    start: sourceStarts[matchStart],
+    end: sourceEnds[matchEnd],
+  }
+}
+
+async function editTemplateCodeAsDocument(
+  originalCode: string,
+  userRequest: string,
+  openaiKey: string,
+  retryFeedback = "",
+  retryCount = 0,
+): Promise<string> {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      input: [
+        {
+          role: "system",
+          content: `Apply the user's requested change to the current website HTML. Preserve all unrelated content, layout, styles, links, images, functionality, and responsive behavior. Do not invent factual claims, contact details, property listings, or prices. Return the complete, valid HTML document, including all closing tags, only. Do not omit or summarize any existing sections. Do not return markdown or explanations.${retryFeedback ? `\n\nCORRECTION REQUIRED:\n${retryFeedback}` : ""}`,
         },
         {
           role: "user",
@@ -531,36 +759,57 @@ Apply the user's requested changes to the supplied current HTML. Preserve all ex
     throw new Error(
       typeof data?.error?.message === "string"
         ? data.error.message
-        : "OpenAI failed while editing the website HTML.",
+        : "OpenAI failed while applying the website edit.",
     )
   }
 
-  if (
-    typeof data?.output_text === "string" &&
-    data.output_text.trim()
-  ) {
-    return cleanEditedHtml(data.output_text, originalCode)
+  const outputText =
+    typeof data?.output_text === "string"
+      ? data.output_text
+      : Array.isArray(data?.output)
+        ? data.output
+            .flatMap((item: unknown) =>
+              item &&
+              typeof item === "object" &&
+              "content" in item &&
+              Array.isArray(item.content)
+                ? item.content
+                : [],
+            )
+            .map((content: unknown) =>
+              content &&
+              typeof content === "object" &&
+              "text" in content &&
+              typeof content.text === "string"
+                ? content.text
+                : "",
+            )
+            .find((text: string) => text.trim())
+        : null
+
+  if (typeof outputText !== "string" || !outputText.trim()) {
+    throw new Error("OpenAI returned no updated website HTML.")
   }
 
-  if (Array.isArray(data?.output)) {
-    for (const item of data.output) {
-      if (item && typeof item === "object" && Array.isArray(item.content)) {
-        for (const content of item.content) {
-          if (
-            content &&
-            typeof content === "object" &&
-            "text" in content &&
-            typeof content.text === "string" &&
-            content.text.trim()
-          ) {
-            return cleanEditedHtml(content.text, originalCode)
-          }
-        }
-      }
+  try {
+    return cleanEditedHtml(outputText, originalCode)
+  } catch (error) {
+    if (
+      retryCount < 1 &&
+      /<html\b/i.test(originalCode) &&
+      (!/<html\b/i.test(outputText) || !/<\/html\s*>/i.test(outputText))
+    ) {
+      return editTemplateCodeAsDocument(
+        originalCode,
+        userRequest,
+        openaiKey,
+        "The previous response was missing the complete HTML document or its closing HTML tag. Return the entire updated document from <!DOCTYPE html> through </html>.",
+        retryCount + 1,
+      )
     }
-  }
 
-  throw new Error("OpenAI returned no updated website HTML.")
+    throw error
+  }
 }
 
 function cleanEditedHtml(
@@ -1403,12 +1652,10 @@ export async function POST(
                 content: `
 You are the 7Wingz Website Template Agent.
 
-Your database table is public.real_estate_templates, with columns:
-id, code, subcategory, and meta_data.
-Use code as the website HTML. Treat meta_data as the website data object;
-when present, its code_script value supplies the JavaScript and its code_data
-value supplies the editable website data. If code_data is absent, use the
-remaining meta_data values as the website data.
+The website template catalog is the existing website_template table, with
+columns id, code, code_script, and code_data. The code column contains the
+website HTML, code_script contains its JavaScript, and code_data contains the
+JSON data used by that HTML.
 
 You can retrieve a template or edit the latest template already present in chat.
 
@@ -1425,11 +1672,9 @@ appropriate retrieval tool instead of editing the current one.
 
 OPERATION 1 — SEARCH
 
-Use search_website_templates for requests for a real-estate website, property
-listing site, or real-estate business site. Search only
-public.real_estate_templates. Extract a short search query from the property
-type or requested real-estate subcategory, such as "apartments",
-"luxury homes", or "commercial property".
+Use search_website_templates when the user asks to find a website template.
+Search the existing website_template catalog for content matching the
+requested business, industry, or website purpose.
 
 ---
 
@@ -1485,10 +1730,9 @@ edit.
 When using search_website_templates, also provide a concise, personalized
 "reply" for the user:
 
-- If they describe a real-estate goal, acknowledge it in plain language and
-  propose the most useful first website-related step.
-- Choose the step based on their request. For property enquiries, a focused
-  listing page with a clear enquiry action is a useful starting point.
+- If they describe a business or website goal, acknowledge it in plain language
+and propose the most useful first website-related step.
+- Choose the step based on their request.
 - Mention that a first draft is included below, since the server will create
   one from the selected template.
 - Do not promise results, invent facts, or assume a budget or marketing plan.
@@ -1548,7 +1792,7 @@ edit the current template or retrieve a template.
                   "search_website_templates",
 
                 description:
-                  "Search public.real_estate_templates for real-estate templates matching the requested property type or subcategory.",
+                  "Search the existing website_template catalog for website templates matching the requested business, industry, or purpose.",
 
                 strict: true,
 
@@ -1590,7 +1834,7 @@ edit the current template or retrieve a template.
                   "get_first_website_template",
 
                 description:
-                  "Get the first row from public.real_estate_templates ordered by id ascending.",
+                  "Get the first row from website_template ordered by id ascending.",
 
                 strict: true,
 
@@ -1616,7 +1860,7 @@ edit the current template or retrieve a template.
                   "get_random_website_template",
 
                 description:
-                  "Get one random row from public.real_estate_templates.",
+                  "Get one random row from website_template.",
 
                 strict: true,
 
@@ -1642,7 +1886,7 @@ edit the current template or retrieve a template.
                   "get_website_template_by_id",
 
                 description:
-                  "Get one real-estate template from public.real_estate_templates by numeric id.",
+                  "Get one website template from website_template by numeric ID.",
 
                 strict: true,
 
@@ -1694,11 +1938,20 @@ edit the current template or retrieve a template.
      */
 
     const requestedTemplateId = getRequestedTemplateId(message)
-    const editRecentCall = findToolCall(
+    const modelEditCall = findToolCall(
       openaiData?.output,
       "edit_recent_website_template",
     )
-    const editArguments = getToolArguments(editRecentCall)
+    const recentTemplate = getRecentTemplate(history)
+    const explicitTemplateRetrieval =
+      explicitlyRequestsTemplateRetrieval(message)
+    const editRecentRequested =
+      !explicitTemplateRetrieval &&
+      (
+        Boolean(modelEditCall) ||
+        (asksToEdit(message) && recentTemplate !== null)
+      )
+    const editArguments = getToolArguments(modelEditCall)
     const editInstruction =
       typeof editArguments?.instruction === "string" &&
       editArguments.instruction.trim()
@@ -1722,15 +1975,15 @@ edit the current template or retrieve a template.
       template = normalizeTemplate(
         rows[0] as Record<string, unknown>,
       )
-    } else if (editRecentCall) {
-      template = getRecentTemplate(history)
+    } else if (editRecentRequested) {
+      template = recentTemplate
 
       if (!template) {
         return Response.json({
           ok: true,
           type: "chat",
           reply:
-            "I can edit a website after you fetch a template in this chat. Which real-estate template would you like to start with?",
+            "I can edit a website after you fetch a template in this chat. Which website template would you like to start with?",
         })
       }
     }
@@ -1764,7 +2017,7 @@ edit the current template or retrieve a template.
           ok: true,
           type: "chat",
           reply:
-            "There are no real-estate templates in public.real_estate_templates.",
+            "There are no website templates available.",
         })
       }
 
@@ -1798,7 +2051,7 @@ edit the current template or retrieve a template.
             ok: true,
             type: "chat",
             reply:
-              "There are no real-estate templates in public.real_estate_templates.",
+              "There are no website templates available.",
           })
         }
 
@@ -1911,7 +2164,7 @@ edit the current template or retrieve a template.
           return Response.json({
             ok: true,
             type: "chat",
-            reply: `I could not find a real-estate template matching "${query}" in public.real_estate_templates.`,
+            reply: `I could not find a website template matching "${query}".`,
           })
         } else {
           /**
@@ -1972,7 +2225,7 @@ edit the current template or retrieve a template.
         : null
     const templateEditRequest = previousCustomization
       ? `${previousCustomization}\n\nThe user is correcting the template selection: apply that same customization to website template ${template.id}. Do not search for or switch to another template.`
-      : editRecentCall
+      : editRecentRequested
         ? editInstruction
         : message
 
@@ -2049,13 +2302,13 @@ edit the current template or retrieve a template.
           ? {
               name: "get_first_website_template",
               label: "Get first website template",
-              detail: "Retrieved the first template from public.real_estate_templates.",
+              detail: "Retrieved the first template from website_template.",
             }
           : operation === "random"
             ? {
                 name: "get_random_website_template",
                 label: "Get random website template",
-                detail: "Retrieved a random template from public.real_estate_templates.",
+                detail: "Retrieved a random template from website_template.",
               }
             : operation === "id"
               ? {
@@ -2066,7 +2319,7 @@ edit the current template or retrieve a template.
               : {
                   name: "search_website_templates",
                   label: "Search website templates",
-                  detail: `Searched public.real_estate_templates for "${searchQuery || message}".`,
+                  detail: `Searched website_template for "${searchQuery || message}".`,
                 }
 
     /**

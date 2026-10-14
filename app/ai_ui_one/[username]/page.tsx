@@ -25,6 +25,8 @@ type Message = {
 
   error?: boolean
 
+  responseTimeMs?: number
+
   template?: WebsiteTemplate
 
   templates?: WebsiteTemplate[]
@@ -116,6 +118,7 @@ export default function Page() {
     ])
 
     setLoading(true)
+    const requestStartedAt = performance.now()
 
     try {
       const response =
@@ -171,17 +174,10 @@ export default function Page() {
           content:
             data.reply ||
             "Your latest website template has been published.",
-          button:
-            data.button &&
-            typeof data.button.label === "string" &&
-            typeof data.button.url === "string"
-              ? data.button
-              : data.editorUrl
-                ? {
-                    label: "Open in Editor",
-                    url: data.editorUrl,
-                  }
-                : undefined,
+          button: {
+            label: "Open in Editor",
+            url: `/edit/${encodeURIComponent(username)}`,
+          },
           liveUrl:
             typeof data.liveUrl === "string"
               ? data.liveUrl
@@ -303,6 +299,10 @@ export default function Page() {
         }
       }
 
+      assistantMessage.responseTimeMs = Math.round(
+        performance.now() - requestStartedAt,
+      )
+
       setHistory((current) => [
         ...current,
         assistantMessage,
@@ -320,6 +320,10 @@ export default function Page() {
               : "Request failed.",
 
           error: true,
+
+          responseTimeMs: Math.round(
+            performance.now() - requestStartedAt,
+          ),
 
           responseType:
             "chat",
@@ -421,15 +425,36 @@ export default function Page() {
 
                     <div
                       className={`w-full py-2 ${
+                        history[index - 1]?.role === "user"
+                          ? "mt-3 border-t border-zinc-200 pt-5 dark:border-zinc-800"
+                          : ""
+                      } ${
                         item.error
                           ? "font-mono text-xs text-red-500"
                           : "text-zinc-700 dark:text-zinc-200"
                       }`}
                     >
 
+                      {history[index - 1]?.role === "user" && (
+                        <div className="mb-3 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                          <span>Response</span>
+                          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                        </div>
+                      )}
+
                       <p className="mb-4">
                         {item.content}
                       </p>
+
+                      {item.responseTimeMs !== undefined && (
+                        <p className="-mt-2 mb-4 text-xs text-zinc-400 dark:text-zinc-500">
+                          Response time:{" "}
+                          {item.responseTimeMs < 1000
+                            ? `${item.responseTimeMs} ms`
+                            : `${(item.responseTimeMs / 1000).toFixed(1)} s`}
+                        </p>
+                      )}
 
                       {item.button && (
                         <a
@@ -572,24 +597,30 @@ export default function Page() {
 
         </form>
 
-        {history.length === 0 && (
-          <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
-            <span className="mr-1 py-1.5">
-              Try an idea:
-            </span>
+        <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
 
-            {examples.map((example) => (
+          <span className="mr-1 py-1.5">
+            Try an idea:
+          </span>
+
+          {examples.map(
+            (example) => (
               <button
                 key={example}
                 type="button"
-                onClick={() => setMessage(example)}
+                onClick={() =>
+                  setMessage(
+                    example,
+                  )
+                }
                 className="rounded-full border border-zinc-200 px-3 py-1.5 transition hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500"
               >
                 {example}
               </button>
-            ))}
-          </div>
-        )}
+            ),
+          )}
+
+        </div>
 
       </div>
 
@@ -612,17 +643,17 @@ function TemplateCard({
       <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
 
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          public.real_estate_templates
+          website_template
         </div>
 
         <div className="mt-1 flex items-center justify-between">
 
           <div className="text-sm font-semibold">
-            Real-Estate Template #{template.id}
+            Website Template #{template.id}
           </div>
 
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-800">
-            {template.subcategory || "Real estate"}
+            {template.subcategory || "Website"}
           </span>
 
         </div>
@@ -669,7 +700,7 @@ function TemplateList({
                   </div>
 
                   <div className="mt-1 text-sm font-semibold">
-                    Real-Estate Template #{template.id}
+                    Website Template #{template.id}
                   </div>
 
                 </div>

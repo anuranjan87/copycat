@@ -1,5 +1,5 @@
 import {
-  getLatestPublishedSiteWithNullData,
+  getWebsiteContent,
   getSavedWebsiteItem,
 } from "@/lib/website-actions";
 import { notFound } from "next/navigation";
@@ -24,7 +24,7 @@ export default async function EditPage({ params, searchParams }: PageProps) {
       : null;
 
     const content = savedContent ??
-      (await getLatestPublishedSiteWithNullData(username)) ?? {
+      (await getWebsiteContent(username)) ?? {
         html: "",
         script: "",
         data: "",
