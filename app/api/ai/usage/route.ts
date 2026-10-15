@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import { getSubscription } from "@/lib/website-actions";
 
-const DAILY_AI_LIMIT = 2;
+const DAILY_AI_LIMIT = 50;
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,

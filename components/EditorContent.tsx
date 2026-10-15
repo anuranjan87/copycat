@@ -48,7 +48,7 @@ function cleanGeneratedCode(raw: string): string {
 /**
  * Free AI usage is stored server-side in Upstash Redis.
  */
-const DAILY_AI_LIMIT = 2
+const DAILY_AI_LIMIT = 50
 
 type AIUsageResponse = {
   premium: boolean

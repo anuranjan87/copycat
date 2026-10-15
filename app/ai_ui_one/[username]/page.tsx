@@ -9,6 +9,7 @@ import {
 } from "react"
 import { useParams } from "next/navigation"
 import { CodeEditor } from "@/components/code-editor"
+import EditorContent1 from "@/components/EditorContent1"
 
 type WebsiteTemplate = {
   id: number
@@ -31,6 +32,11 @@ type Message = {
 
   template?: WebsiteTemplate
 
+  draft?: {
+    language: string
+    template: WebsiteTemplate
+  }
+
   templates?: WebsiteTemplate[]
 
   query?: string
@@ -48,7 +54,9 @@ type Message = {
     | "website_template"
     | "template_search"
     | "chat"
+    | "website_draft"
     | "publish"
+  isEditedTemplate?: boolean
 }
 
 const examples = [
@@ -57,6 +65,41 @@ const examples = [
   "find an apartment listing website",
   "I want more enquiries for my real-estate agency",
 ]
+
+async function reserveDailyAIUsage(): Promise<{ premium: boolean }> {
+  const response = await fetch("/api/ai/usage", {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ action: "reserve" }),
+  })
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(data?.error || "Unable to reserve daily AI usage.")
+  }
+
+  return { premium: Boolean(data?.premium) }
+}
+
+async function releaseDailyAIUsage(): Promise<void> {
+  try {
+    const response = await fetch("/api/ai/usage", {
+      method: "DELETE",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    })
+
+    if (!response.ok) {
+      console.error("Failed to release AI usage reservation.")
+    }
+  } catch (error) {
+    console.error("Failed to release AI usage reservation:", error)
+  }
+}
 
 export default function Page() {
   const [message, setMessage] =
@@ -72,6 +115,8 @@ export default function Page() {
     useState(false)
 
   const [previewModalTemplate, setPreviewModalTemplate] =
+    useState<WebsiteTemplate | null>(null)
+  const [contentEditorTemplate, setContentEditorTemplate] =
     useState<WebsiteTemplate | null>(null)
   const [isPreviewModalVisible, setIsPreviewModalVisible] =
     useState(false)
@@ -174,8 +219,12 @@ export default function Page() {
 
     setLoading(true)
     const requestStartedAt = performance.now()
+    let usageReserved = false
 
     try {
+      const reservation = await reserveDailyAIUsage()
+      usageReserved = !reservation.premium
+
       const response =
         await fetch(
           "/api/unsplash-agent-one",
@@ -198,10 +247,13 @@ export default function Page() {
                     role,
                     content,
                     template,
+                    draft,
                   }) => ({
                     role,
                     content,
-                    ...(template ? { template } : {}),
+                    ...((template ?? draft?.template)
+                      ? { template: template ?? draft?.template }
+                      : {}),
                   }),
                 ),
             }),
@@ -220,6 +272,8 @@ export default function Page() {
             "Something went wrong.",
         )
       }
+
+      usageReserved = false
 
       let assistantMessage: Message
 
@@ -242,6 +296,36 @@ export default function Page() {
               ? data.liveMessage
               : undefined,
           responseType: "publish",
+        }
+      }
+      else if (data.type === "website_draft") {
+        const draft = data.draft
+        if (
+          !draft ||
+          typeof draft.html !== "string" ||
+          typeof draft.script !== "string" ||
+          typeof draft.data !== "string" ||
+          typeof draft.language !== "string"
+        ) {
+          throw new Error("The translated website draft was incomplete.")
+        }
+
+        assistantMessage = {
+          role: "assistant",
+          content:
+            data.reply ||
+            `Here is the translated website draft in ${draft.language}.`,
+          draft: {
+            language: draft.language,
+            template: {
+              id: 0,
+              code: draft.html,
+              code_script: draft.script,
+              code_data: draft.data,
+              subcategory: draft.language,
+            },
+          },
+          responseType: "website_draft",
         }
       }
 
@@ -285,11 +369,11 @@ export default function Page() {
         }
 
         if (
-          data.operation ===
-          "edit_recent"
+          data.operation === "edit_recent" ||
+          data.operation === "edit_id"
         ) {
           content =
-            `Here is the updated website template (ID ${template?.id}).`
+            `Here is the edited website template (ID ${template?.id}).`
         }
 
         assistantMessage = {
@@ -302,6 +386,9 @@ export default function Page() {
               : content,
 
           template,
+          isEditedTemplate:
+            data.operation === "edit_recent" ||
+            data.operation === "edit_id",
 
           responseType:
             "website_template",
@@ -363,6 +450,10 @@ export default function Page() {
         assistantMessage,
       ])
     } catch (error) {
+      if (usageReserved) {
+        await releaseDailyAIUsage()
+      }
+
       setHistory((current) => [
         ...current,
 
@@ -552,21 +643,49 @@ export default function Page() {
                             template={
                               item.template
                             }
+                            isEdited={item.isEditedTemplate}
                           />
                           <p className="mt-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                            If you want to{" "}
+                            If you want to edit the layout, tell me and I can adapt it to your business idea or change the language while keeping the layout and style intact. If you like it and want to publish it, simply say "publish" and I will publish it for you.{" "}
+                            For simple content edits, click{" "}
                             <button
                               type="button"
                               onClick={() =>
-                                setPreviewModalTemplate(item.template ?? null)
+                                setContentEditorTemplate(item.template ?? null)
                               }
                               className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
                             >
                               edit
-                            </button>{" "}
-                            the content, tell me and I can adapt it to your business idea or change the language while keeping the layout and style intact. If you like it and want to publish it, simply say "publish" and I will publish it for you.
+                            </button>.
                           </p>
                         </>
+                      )}
+
+                      {item.draft && (
+                        <div className="mb-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                                Translated website draft
+                              </div>
+                              <div className="mt-1 text-sm font-semibold">
+                                {item.draft.language} version
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewModalTemplate(item.draft?.template ?? null)
+                              }
+                              className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+                            >
+                              Open in Editor
+                            </button>
+                          </div>
+                          <div className="p-5">
+                            <TemplatePreview template={item.draft.template} />
+                          </div>
+                        </div>
                       )}
 
                       {item.templates &&
@@ -721,6 +840,28 @@ export default function Page() {
         </div>
       )}
 
+      {contentEditorTemplate && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Content editor for website template ${contentEditorTemplate.id}`}
+        >
+          <div className="h-full w-full">
+            <EditorContent1
+              key={contentEditorTemplate.id}
+              username={username}
+              initialContent={{
+                html: buildEditorHtml(contentEditorTemplate),
+                script: contentEditorTemplate.code_script,
+                data: contentEditorTemplate.code_data,
+              }}
+              onClose={() => setContentEditorTemplate(null)}
+            />
+          </div>
+        </div>
+      )}
+
     </main>
   )
 }
@@ -731,8 +872,10 @@ export default function Page() {
 
 function TemplateCard({
   template,
+  isEdited = false,
 }: {
   template: WebsiteTemplate
+  isEdited?: boolean
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -740,13 +883,13 @@ function TemplateCard({
       <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
 
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          website_template
+          {isEdited ? "Edited website template" : "website_template"}
         </div>
 
         <div className="mt-1 flex items-center justify-between">
 
           <div className="text-sm font-semibold">
-            Website Template #{template.id}
+            {isEdited ? "Updated Website Template" : "Website Template"} #{template.id}
           </div>
 
           <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-800">
@@ -867,6 +1010,21 @@ function buildPreviewDocument(
   }
 
   return html
+}
+
+function buildEditorHtml(template: WebsiteTemplate): string {
+  let html = template.code.trim()
+  const script = template.code_script.trim()
+
+  if (!script) return html
+
+  const scriptTag = `<script>${script}</script>`
+
+  return html.includes('<script src="script.js"></script>')
+    ? html.replace('<script src="script.js"></script>', scriptTag)
+    : html.includes("</body>")
+      ? html.replace("</body>", `${scriptTag}</body>`)
+      : `${html}${scriptTag}`
 }
 
 function TemplatePreview({

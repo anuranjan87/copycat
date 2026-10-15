@@ -43,7 +43,7 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ),
 })
 
-const DAILY_AI_LIMIT = 2
+const DAILY_AI_LIMIT = 50
 
 type AIUsageResponse = {
   premium: boolean
@@ -776,11 +776,13 @@ function updateSimpleField(data: string, path: string, value: string) {
 export interface NewMobileProps {
   username: string
   initialContent: Content
+  onClose?: () => void
 }
 
 export default function EditorContent({
   username,
   initialContent,
+  onClose,
 }: NewMobileProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1123,6 +1125,11 @@ export default function EditorContent({
   }
 
   const handleCloseEditor = () => {
+    if (onClose) {
+      onClose()
+      return
+    }
+
     let category = categoryFromUrl
 
     try {
