@@ -2,11 +2,13 @@
 
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react"
 import { useParams } from "next/navigation"
+import { CodeEditor } from "@/components/code-editor"
 
 type WebsiteTemplate = {
   id: number
@@ -69,11 +71,29 @@ export default function Page() {
   const [dark, setDark] =
     useState(false)
 
+  const [previewModalTemplate, setPreviewModalTemplate] =
+    useState<WebsiteTemplate | null>(null)
+  const [isPreviewModalVisible, setIsPreviewModalVisible] =
+    useState(false)
+
   const params = useParams<{ username: string }>()
   const username = params?.username || ""
 
   const endRef =
     useRef<HTMLDivElement>(null)
+  const previewModalCloseTimer =
+    useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const closePreviewModal = useCallback(() => {
+    setIsPreviewModalVisible(false)
+    if (previewModalCloseTimer.current) {
+      clearTimeout(previewModalCloseTimer.current)
+    }
+    previewModalCloseTimer.current = setTimeout(() => {
+      setPreviewModalTemplate(null)
+      previewModalCloseTimer.current = null
+    }, 650)
+  }, [])
 
   useEffect(() => {
     document.documentElement.classList.toggle(
@@ -93,6 +113,41 @@ export default function Page() {
       behavior: "smooth",
     })
   }, [history, loading])
+
+  useEffect(() => {
+    if (!previewModalTemplate) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setIsPreviewModalVisible(true)
+    })
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closePreviewModal()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [closePreviewModal, previewModalTemplate])
+
+  useEffect(
+    () => () => {
+      if (previewModalCloseTimer.current) {
+        clearTimeout(previewModalCloseTimer.current)
+      }
+    },
+    [],
+  )
 
   async function search(
     event?: FormEvent<HTMLFormElement>,
@@ -499,7 +554,17 @@ export default function Page() {
                             }
                           />
                           <p className="mt-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                            If you want to edit the content, tell me and I can adapt it to your business idea or change the language while keeping the layout and style intact. If you like it and want to publish it, simply say "publish" and I will publish it for you.
+                            If you want to{" "}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewModalTemplate(item.template ?? null)
+                              }
+                              className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              edit
+                            </button>{" "}
+                            the content, tell me and I can adapt it to your business idea or change the language while keeping the layout and style intact. If you like it and want to publish it, simply say "publish" and I will publish it for you.
                           </p>
                         </>
                       )}
@@ -623,6 +688,38 @@ export default function Page() {
         </div>
 
       </div>
+
+      {previewModalTemplate && (
+        <div
+          className={`fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-[650ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:duration-0 ${
+            isPreviewModalVisible ? "opacity-100" : "opacity-0"
+          }`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Full-screen editor for website template ${previewModalTemplate.id}`}
+        >
+          <div
+            className={`h-full w-full origin-center transition-[transform,opacity,border-radius] duration-[650ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:duration-0 ${
+              isPreviewModalVisible
+                ? "translate-y-0 scale-100 rounded-none opacity-100"
+                : "translate-y-5 scale-[0.96] rounded-2xl opacity-80"
+            }`}
+          >
+            <CodeEditor
+              key={previewModalTemplate.id}
+              username={username}
+              initialContent={{
+                html: buildPreviewDocument(previewModalTemplate),
+                script: "",
+                data: "",
+              }}
+              onClose={closePreviewModal}
+              disableDataInjection
+              disableTemplateLoad
+            />
+          </div>
+        </div>
+      )}
 
     </main>
   )

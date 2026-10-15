@@ -89,6 +89,8 @@ export interface CodeEditorProps {
     script: string;
     data: string;
   };
+  onClose?: () => void;
+  disableDataInjection?: boolean;
   /** Prevents the component from loading a template from the URL parameter */
   disableTemplateLoad?: boolean;
 }
@@ -96,6 +98,8 @@ export interface CodeEditorProps {
 export function CodeEditor({
   username,
   initialContent,
+  onClose,
+  disableDataInjection = false,
   disableTemplateLoad = false,
 }: CodeEditorProps) {
   const router = useRouter();
@@ -329,6 +333,10 @@ export function CodeEditor({
   // Preview and iframe
   // ------------------------------------------------------------
   const previewCode = useMemo(() => {
+    if (disableDataInjection) {
+      return draftHtml;
+    }
+
     return draftHtml.replace(
       '<script type="text/babel">',
       `<script>
@@ -338,7 +346,7 @@ ${savedData}
 </script>
 <script type="text/babel">`
     );
-  }, [draftHtml, savedData]);
+  }, [disableDataInjection, draftHtml, savedData]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scrollPosition, setScrollPosition] = useState({ x: 0, y: 0 });
@@ -683,7 +691,20 @@ const handlePublish = async () => {
 
       const startData = await response.json().catch(() => ({}));
 
-      if (response.status !== 202) {
+      let result: any;
+
+      if (response.status === 202) {
+        // Netlify background function accepted the job; poll for completion.
+        result = await pollGenerationStatus(jobId);
+      } else if (
+        response.ok &&
+        startData?.success === true &&
+        typeof startData.html === 'string' &&
+        startData.html.trim()
+      ) {
+        // The Next.js route can complete generation synchronously with HTTP 200.
+        result = startData;
+      } else {
         if (startData?.code === 'PREMIUM_REQUIRED') {
           throw new Error(
             'AI website generation requires Premium access.'
@@ -700,10 +721,6 @@ const handlePublish = async () => {
             `Unable to start AI generation (${response.status})`
         );
       }
-
-      // Background functions do not return the completed result in the POST.
-      // Poll the separate status endpoint until the job is complete.
-      const result = await pollGenerationStatus(jobId);
 
       const fullCode = String(result.html);
       const durationMs =
@@ -961,7 +978,7 @@ ${savedData}
 
           {/* Close / Back button */}
           <button
-            onClick={() => router.back()}
+            onClick={() => (onClose ? onClose() : router.back())}
             className="p-1.5 rounded text-white/40 hover:text-white/70 transition-all hover:bg-white/5 hover:scale-110"
             title="Close editor and go back"
           >
