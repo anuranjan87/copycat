@@ -10,6 +10,7 @@ import {
 import { useParams } from "next/navigation"
 import { CodeEditor } from "@/components/code-editor"
 import EditorContent1 from "@/components/EditorContent1"
+import { CheckCircle2, ExternalLink, Pencil, Users } from "lucide-react"
 
 type WebsiteTemplate = {
   id: number
@@ -49,6 +50,7 @@ type Message = {
   liveUrl?: string
 
   liveMessage?: string
+  editorUrl?: string
 
   responseType?:
     | "website_template"
@@ -278,23 +280,22 @@ export default function Page() {
       let assistantMessage: Message
 
       if (data.type === "publish") {
+        const publishedLiveUrl =
+          typeof data.liveUrl === "string"
+            ? new URL(data.liveUrl, window.location.origin).href
+            : new URL(
+                `/${encodeURIComponent(username)}`,
+                window.location.origin,
+              ).href
+
         assistantMessage = {
           role: "assistant",
-          content:
-            data.reply ||
-            "Your latest website template has been published.",
-          button: {
-            label: "Open in Editor",
-            url: `/edit/${encodeURIComponent(username)}`,
-          },
-          liveUrl:
-            typeof data.liveUrl === "string"
-              ? data.liveUrl
-              : undefined,
-          liveMessage:
-            typeof data.liveMessage === "string"
-              ? data.liveMessage
-              : undefined,
+          content: "Your website is now live!",
+          liveUrl: publishedLiveUrl,
+          editorUrl:
+            typeof data.editorUrl === "string"
+              ? data.editorUrl
+              : `/edit_new/${encodeURIComponent(username)}`,
           responseType: "publish",
         }
       }
@@ -589,11 +590,87 @@ export default function Page() {
                         </div>
                       )}
 
-                      <p className="mb-4">
-                        {item.content}
-                      </p>
+                      {item.responseType === "publish" && item.liveUrl ? (
+                        <div className="mb-5 space-y-1 text-sm">
+                          <div className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
+                            <CheckCircle2
+                              aria-hidden="true"
+                              className="h-4 w-4 shrink-0 fill-emerald-500 text-white"
+                            />
+                            <span>Your website is now live!</span>
+                          </div>
+                          <p className="text-zinc-600 dark:text-zinc-300">
+                            It has been published to{" "}
+                            <a
+                              href={item.liveUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-zinc-900 underline decoration-zinc-400 underline-offset-2 dark:text-zinc-100"
+                            >
+                              {item.liveUrl}
+                            </a>{" "}
+                            and is accessible to everyone.
+                          </p>
+                          {item.responseTimeMs !== undefined && (
+                            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                              Response time:{" "}
+                              {item.responseTimeMs < 1000
+                                ? `${item.responseTimeMs} ms`
+                                : `${(item.responseTimeMs / 1000).toFixed(1)} s`}
+                            </p>
+                          )}
 
-                      {item.responseTimeMs !== undefined && (
+                          <ul className="space-y-1 pt-1 text-zinc-600 dark:text-zinc-300">
+                            {[
+                              "HTTPS enabled (secure connection)",
+                              "Mobile optimised",
+                              "Basic SEO settings configured (title, description, sitemap)",
+                              "Enquiry form submissions are collected",
+                            ].map((feature) => (
+                              <li key={feature} className="flex items-start gap-2">
+                                <CheckCircle2
+                                  aria-hidden="true"
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 fill-emerald-500 text-white"
+                                />
+                                <span>{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            <a
+                              href={item.liveUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                            >
+                              <ExternalLink aria-hidden="true" className="h-4 w-4" />
+                              View Live Website
+                            </a>
+                            <a
+                              href={`/dashboard/${encodeURIComponent(username)}`}
+                              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                              <Users aria-hidden="true" className="h-4 w-4" />
+                              Manage Enquiries
+                            </a>
+                            <a
+                              href={item.editorUrl || `/edit_new/${encodeURIComponent(username)}`}
+                              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                            >
+                              <Pencil aria-hidden="true" className="h-4 w-4" />
+                              Edit Website
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mb-4">
+                          {item.content}
+                        </p>
+                      )}
+
+                      {item.responseTimeMs !== undefined &&
+                        item.responseType !== "publish" && (
                         <p className="-mt-2 mb-4 text-xs text-zinc-400 dark:text-zinc-500">
                           Response time:{" "}
                           {item.responseTimeMs < 1000
@@ -602,7 +679,7 @@ export default function Page() {
                         </p>
                       )}
 
-                      {item.button && (
+                      {item.button && item.responseType !== "publish" && (
                         <a
                           href={item.button.url}
                           target="_blank"
@@ -613,7 +690,7 @@ export default function Page() {
                         </a>
                       )}
 
-                      {item.liveUrl && (
+                      {item.liveUrl && item.responseType !== "publish" && (
                         <div className="mb-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
                           <p className="text-sm text-zinc-600 dark:text-zinc-300">
                             Use this link to access your site:
@@ -781,30 +858,24 @@ export default function Page() {
 
         </form>
 
-        <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
+        {history.length === 0 && (
+          <div className="mt-3 flex max-w-2xl flex-wrap justify-center gap-2 text-xs text-zinc-500">
+            <span className="mr-1 py-1.5">
+              Try an idea:
+            </span>
 
-          <span className="mr-1 py-1.5">
-            Try an idea:
-          </span>
-
-          {examples.map(
-            (example) => (
+            {examples.map((example) => (
               <button
                 key={example}
                 type="button"
-                onClick={() =>
-                  setMessage(
-                    example,
-                  )
-                }
+                onClick={() => setMessage(example)}
                 className="rounded-full border border-zinc-200 px-3 py-1.5 transition hover:border-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-500"
               >
                 {example}
               </button>
-            ),
-          )}
-
-        </div>
+            ))}
+          </div>
+        )}
 
       </div>
 
@@ -878,9 +949,9 @@ function TemplateCard({
   isEdited?: boolean
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white p-2.5 font-[inherit] shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
 
-      <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+      <div className="px-2.5 py-1.5">
 
         <div className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           {isEdited ? "Edited website template" : "website_template"}
@@ -900,7 +971,7 @@ function TemplateCard({
 
       </div>
 
-      <div className="space-y-5 p-5">
+      <div className="pt-1.5">
         <TemplatePreview template={template} />
 
       </div>
@@ -926,10 +997,10 @@ function TemplateList({
 
           <details
             key={template.id}
-            className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            className="overflow-hidden rounded-xl border border-zinc-200 bg-white p-2.5 font-[inherit] shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
 
-            <summary className="cursor-pointer list-none px-5 py-4">
+            <summary className="cursor-pointer list-none px-2.5 py-1.5">
 
               <div className="flex items-center justify-between">
 
@@ -953,7 +1024,7 @@ function TemplateList({
 
             </summary>
 
-            <div className="space-y-5 border-t border-zinc-100 p-5 dark:border-zinc-800">
+            <div className="pt-2.5">
               <TemplatePreview template={template} />
 
             </div>
@@ -1033,7 +1104,7 @@ function TemplatePreview({
   template: WebsiteTemplate
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950">
+    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950">
       <div
         className="w-full"
         style={{ zoom: 0.65 }}

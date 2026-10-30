@@ -8,6 +8,7 @@ import {
   Palette,
   GraduationCap,
   ShoppingBag,
+  Building2,
 } from "lucide-react";
 
 export interface TemplateMeta {
@@ -29,6 +30,7 @@ export interface TemplateMeta {
  */
 export const getCategories = (userFirstName?: string) => [
   { name: userFirstName?.trim() || "For You", icon: UserRound },
+  { name: "Real Estate", icon: Building2 },
   { name: "Entrepreneurs & Startups", icon: Rocket },
   { name: "Professional Services", icon: BriefcaseBusiness },
   { name: "Job Search", icon: GraduationCap },
@@ -340,5 +342,28 @@ export const templatesMeta: TemplateMeta[] = [
     moveX: 0,
     moveY: -2,
     zoom: 1,
+  },
+   {
+    id: "38",
+    localImage: "/39.png",
+    title: "Real Estate",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Real Estate",
+    moveX: .9,
+    moveY: 0.9,
+    zoom: 1.2,
+  },
+
+  {
+    id: "39",
+    localImage: "/38.png",
+    title: "Real Estate",
+    description: "Simple, focused landing page designed to turn visitors into customers.",
+    mood: "Landing page",
+    category: "Real Estate",
+    moveX: .9,
+    moveY: 0.9,
+    zoom: 1.2,
   },
 ];
