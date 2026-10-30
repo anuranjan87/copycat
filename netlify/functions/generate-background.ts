@@ -2,22 +2,14 @@ import OpenAI from "openai";
 import { getStore } from "@netlify/blobs";
 import type { Config } from "@netlify/functions";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const jobs = getStore("website-generation-jobs");
 
 const UNSPLASH_API = "https://api.unsplash.com";
-
 const UNSPLASH_SOURCE =
   process.env.UNSPLASH_UTM_SOURCE ||
   process.env.NEXT_PUBLIC_APP_NAME ||
   "7wingz";
-
-/* ============================================================
-   TYPES
-============================================================ */
 
 type UnsplashImage = {
   id: number;
@@ -31,145 +23,34 @@ type UnsplashImage = {
   downloadLocation: string;
 };
 
-type GenerationUsage = {
+type Usage = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
 };
 
-type HtmlPatch = {
+type TextPatch = {
   oldText: string;
   newText: string;
 };
 
 type EditDecision =
-  | { mode: "patch"; patches: HtmlPatch[] }
+  | { mode: "patch"; htmlPatches: TextPatch[] }
   | { mode: "full" };
 
-/* ============================================================
-   HELPERS
-============================================================ */
-
-function estimateCost(
-  inputTokens: number,
-  outputTokens: number
-): number {
-  /*
-    This is only a UI estimate.
-
-    Do not treat this as billing information.
-    Update these values when you want exact model pricing.
-  */
-
-  const inputPricePerMillion = 0.25;
-  const outputPricePerMillion = 2.0;
-
-  const cost =
-    (inputTokens / 1_000_000) *
-      inputPricePerMillion +
-    (outputTokens / 1_000_000) *
-      outputPricePerMillion;
-
-  return Number(cost.toFixed(6));
+function estimateCost(inputTokens: number, outputTokens: number): number {
+  // UI estimate only; update rates when model pricing changes.
+  return Number(
+    (
+      (inputTokens / 1_000_000) * 0.25 +
+      (outputTokens / 1_000_000) * 2.0
+    ).toFixed(6)
+  );
 }
 
-function parseEditDecision(raw: string): EditDecision {
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-  const decision = JSON.parse(cleaned) as Partial<EditDecision>;
-
-  if (decision.mode === "full") {
-    return { mode: "full" };
-  }
-
-  if (
-    decision.mode !== "patch" ||
-    !Array.isArray(decision.patches) ||
-    decision.patches.length === 0 ||
-    decision.patches.length > 30
-  ) {
-    throw new Error("AI returned an invalid edit plan.");
-  }
-
-  const patches = decision.patches as HtmlPatch[];
-  if (
-    patches.some(
-      (patch) =>
-        !patch ||
-        typeof patch.oldText !== "string" ||
-        patch.oldText.length === 0 ||
-        typeof patch.newText !== "string"
-    )
-  ) {
-    throw new Error("AI returned an invalid HTML patch.");
-  }
-
-  return { mode: "patch", patches };
-}
-
-function applyHtmlPatches(html: string, patches: HtmlPatch[]): string {
-  const replacedCharacters = patches.reduce(
-    (total, patch) => total + patch.oldText.length,
-    0
-  );
-  const insertedCharacters = patches.reduce(
-    (total, patch) => total + patch.newText.length,
-    0
-  );
-
-  if (
-    replacedCharacters > html.length * 0.5 ||
-    insertedCharacters > html.length * 0.5
-  ) {
-    throw new Error(
-      "AI edit was too broad to apply as an incremental change."
-    );
-  }
-
-  const replacements = patches.map((patch) => {
-    const firstIndex = html.indexOf(patch.oldText);
-    if (
-      firstIndex === -1 ||
-      html.indexOf(patch.oldText, firstIndex + patch.oldText.length) !== -1
-    ) {
-      throw new Error(
-        "AI edit could not be applied safely because its target is missing or ambiguous."
-      );
-    }
-
-    return { ...patch, index: firstIndex };
-  });
-
-  const ascendingReplacements = [...replacements].sort(
-    (left, right) => left.index - right.index
-  );
-  for (let index = 1; index < ascendingReplacements.length; index += 1) {
-    const previous = ascendingReplacements[index - 1];
-    const current = ascendingReplacements[index];
-    if (previous.index + previous.oldText.length > current.index) {
-      throw new Error("AI edits overlap and cannot be applied safely.");
-    }
-  }
-
-  let updatedHtml = html;
-  const descendingReplacements = replacements.sort(
-    (left, right) => right.index - left.index
-  );
-  for (const patch of descendingReplacements) {
-    updatedHtml =
-      updatedHtml.slice(0, patch.index) +
-      patch.newText +
-      updatedHtml.slice(patch.index + patch.oldText.length);
-  }
-
-  if (!updatedHtml.trim()) {
-    throw new Error("AI edit resulted in empty HTML.");
-  }
-
-  return updatedHtml;
+function jsonError(message: string, status = 500): Response {
+  return Response.json({ success: false, error: message }, { status });
 }
 
 function createJobId(): string {
@@ -177,567 +58,335 @@ function createJobId(): string {
 }
 
 function isValidJobId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^[A-Za-z0-9_-]{8,128}$/.test(value)
-  );
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,128}$/.test(value);
 }
 
-function jsonError(
-  message: string,
-  status = 500
-) {
-  return Response.json(
-    {
-      success: false,
-      error: message,
-    },
-    { status }
-  );
+function cleanJson(raw: string): string {
+  return raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
 }
 
-/* ============================================================
-   UNSPLASH SEARCH
-============================================================ */
+function parseEditDecision(raw: string): EditDecision {
+  const value = JSON.parse(cleanJson(raw)) as Partial<EditDecision>;
 
-async function searchUnsplash(
-  query: string
-): Promise<UnsplashImage[]> {
-  const accessKey =
-    process.env.UNSPLASH_ACCESS_KEY;
+  if (value.mode === "full") return { mode: "full" };
 
+  if (
+    value.mode !== "patch" ||
+    !Array.isArray(value.htmlPatches) ||
+    value.htmlPatches.length === 0 ||
+    value.htmlPatches.length > 30
+  ) {
+    throw new Error("AI returned an invalid edit plan.");
+  }
+
+  const allPatches = value.htmlPatches as TextPatch[];
+  if (
+    allPatches.some(
+      (patch) =>
+        !patch ||
+        typeof patch.oldText !== "string" ||
+        patch.oldText.length === 0 ||
+        typeof patch.newText !== "string"
+    )
+  ) {
+    throw new Error("AI returned an invalid patch.");
+  }
+
+  return { mode: "patch", htmlPatches: value.htmlPatches as TextPatch[] };
+}
+
+function applyTextPatches(source: string, patches: TextPatch[]): string {
+  if (patches.length === 0) return source;
+
+  const replacements = patches.map((patch) => {
+    const first = source.indexOf(patch.oldText);
+    if (
+      first < 0 ||
+      source.indexOf(patch.oldText, first + patch.oldText.length) !== -1
+    ) {
+      throw new Error(
+        "Edit target is missing or ambiguous. No changes were applied."
+      );
+    }
+    return { ...patch, index: first };
+  });
+
+  const ascending = [...replacements].sort((a, b) => a.index - b.index);
+  for (let i = 1; i < ascending.length; i++) {
+    const previous = ascending[i - 1];
+    const current = ascending[i];
+    if (previous.index + previous.oldText.length > current.index) {
+      throw new Error("AI edits overlap. No changes were applied.");
+    }
+  }
+
+  let result = source;
+  for (const patch of [...replacements].sort((a, b) => b.index - a.index)) {
+    result =
+      result.slice(0, patch.index) +
+      patch.newText +
+      result.slice(patch.index + patch.oldText.length);
+  }
+
+  if (!result.trim()) throw new Error("Edit resulted in empty source.");
+  return result;
+}
+
+async function updateJob(jobId: string, data: Record<string, unknown>) {
+  await jobs.setJSON(jobId, {
+    ...data,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function searchUnsplash(query: string): Promise<UnsplashImage[]> {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
   if (!accessKey) {
-    console.warn(
-      "UNSPLASH_ACCESS_KEY is not configured."
-    );
-
+    console.warn("UNSPLASH_ACCESS_KEY is not configured.");
     return [];
   }
 
-  const url =
-    `${UNSPLASH_API}/search/photos` +
-    `?query=${encodeURIComponent(query)}` +
-    `&per_page=20`;
-
   try {
-    const response = await fetch(url, {
-      method: "GET",
-
-      headers: {
-        Authorization:
-          `Client-ID ${accessKey}`,
-
-        Accept: "application/json",
-      },
-
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${UNSPLASH_API}/search/photos?query=${encodeURIComponent(query)}&per_page=20`,
+      {
+        headers: {
+          Authorization: `Client-ID ${accessKey}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
 
     if (!response.ok) {
-      console.error(
-        `Unsplash API error: ${response.status} ${response.statusText}`
-      );
-
+      console.warn(`Unsplash search failed: ${response.status}`);
       return [];
     }
 
-    const data =
-      await response.json();
-
+    const data = await response.json();
     return (data.results || [])
-      .filter(
-        (photo: any) =>
-          typeof photo?.urls?.regular ===
-            "string" &&
-          photo.urls.regular.length > 0
-      )
-      .map(
-        (
-          photo: any,
-          index: number
-        ) => ({
-          id: index + 1,
-
-          photoId:
-            photo.id || "",
-
-          url:
-            photo.urls.regular,
-
-          thumb:
-            photo.urls.small ||
-            photo.urls.regular,
-
-          alt:
-            photo.alt_description ||
-            photo.description ||
-            query,
-
-          photographer:
-            photo.user?.name ||
-            "Unsplash photographer",
-
-          photographerUrl:
-            photo.user?.links?.html ||
-            "https://unsplash.com",
-
-          unsplashUrl:
-            photo.links?.html ||
-            "https://unsplash.com",
-
-          downloadLocation:
-            photo.links
-              ?.download_location ||
-            "",
-        })
-      );
+      .filter((photo: any) => typeof photo?.urls?.regular === "string")
+      .map((photo: any, index: number) => ({
+        id: index + 1,
+        photoId: photo.id || "",
+        url: photo.urls.regular,
+        thumb: photo.urls.small || photo.urls.regular,
+        alt: photo.alt_description || photo.description || query,
+        photographer: photo.user?.name || "Unsplash photographer",
+        photographerUrl: photo.user?.links?.html || "https://unsplash.com",
+        unsplashUrl: photo.links?.html || "https://unsplash.com",
+        downloadLocation: photo.links?.download_location || "",
+      }));
   } catch (error) {
-    console.error(
-      "Unsplash search failed:",
-      error
-    );
-
+    console.warn("Unsplash search failed:", error);
     return [];
   }
 }
 
-/* ============================================================
-   UNSPLASH DOWNLOAD TRACKING
-============================================================ */
-
-async function trackUnsplashDownload(
-  downloadLocation: string
-) {
-  const accessKey =
-    process.env.UNSPLASH_ACCESS_KEY;
-
-  if (
-    !accessKey ||
-    !downloadLocation
-  ) {
-    return;
-  }
-
+async function createImageQuery(prompt: string): Promise<string> {
   try {
-    const parsed =
-      new URL(downloadLocation);
+    const response = await openai.responses.create({
+      model: "gpt-4.1-nano",
+      input: `Create one concise Unsplash search query for the website request.
+Return only the query, no explanation.
 
-    if (
-      parsed.origin !==
-      UNSPLASH_API
-    ) {
-      console.warn(
-        "Rejected non-Unsplash download location:",
-        downloadLocation
-      );
+Website request:
+${prompt}`,
+    });
 
-      return;
-    }
-
-    parsed.searchParams.set(
-      "client_id",
-      accessKey
-    );
-
-    const response =
-      await fetch(
-        parsed.toString(),
-        {
-          method: "GET",
-
-          headers: {
-            Accept:
-              "application/json",
-          },
-
-          cache: "no-store",
-        }
-      );
-
-    if (!response.ok) {
-      console.warn(
-        `Unsplash tracking failed: ${response.status} ${response.statusText}`
-      );
-    }
-  } catch (error) {
-    console.warn(
-      "Unsplash tracking error:",
-      error
-    );
+    return (response.output_text || prompt)
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .slice(0, 150);
+  } catch {
+    return prompt.trim().slice(0, 150);
   }
 }
 
-/* ============================================================
-   HTML IMAGE HELPERS
-============================================================ */
-
-function extractImageUrls(
-  html: string
-): string[] {
-  const urls: string[] = [];
-
-  const regex =
-    /<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi;
-
-  let match: RegExpExecArray | null;
-
-  while (
-    (match = regex.exec(html)) !== null
-  ) {
-    urls.push(match[1]);
-  }
-
-  return urls;
-}
-
-function removeInvalidImageUrls(
-  html: string,
-  allowedUrls: Set<string>
-): string {
-  const transparentPixel =
-    "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-
-  return html.replace(
-    /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
-
-    (
-      fullMatch,
-      prefix,
-      url,
-      suffix
-    ) => {
-      if (
-        allowedUrls.has(url)
-      ) {
-        return fullMatch;
-      }
-
-      return (
-        `${prefix}` +
-        `${transparentPixel}` +
-        `${suffix}`
-      );
-    }
-  );
-}
-
-function addUnsplashUtm(
-  url: string
-): string {
+function addUtm(url: string): string {
   try {
-    const parsed =
-      new URL(url);
-
-    if (
-      parsed.hostname !==
-        "unsplash.com" &&
-      parsed.hostname !==
-        "www.unsplash.com"
-    ) {
+    const parsed = new URL(url);
+    if (!["unsplash.com", "www.unsplash.com"].includes(parsed.hostname)) {
       return url;
     }
-
-    parsed.searchParams.set(
-      "utm_source",
-      UNSPLASH_SOURCE
-    );
-
-    parsed.searchParams.set(
-      "utm_medium",
-      "referral"
-    );
-
+    parsed.searchParams.set("utm_source", UNSPLASH_SOURCE);
+    parsed.searchParams.set("utm_medium", "referral");
     return parsed.toString();
   } catch {
     return url;
   }
 }
 
-function escapeHtml(
-  value: string
-): string {
+function escapeHtml(value: string): string {
   return value
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function addUnsplashAttribution(
-  html: string,
-  imageLibrary: UnsplashImage[]
-): string {
-  if (!imageLibrary.length) {
-    return html;
-  }
-
-  const byUrl = new Map(
-    imageLibrary.map((image) => [image.url, image])
+function extractImageUrls(html: string): string[] {
+  return [...html.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)].map(
+    (match) => match[1]
   );
+}
 
-  // Remove attribution blocks previously generated by this function.
-  // This prevents duplicate credits when existing HTML already contains them.
+function validateImageUrls(html: string, allowedUrls: Set<string>): string {
+  const transparentPixel =
+    "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
+  return html.replace(
+    /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+    (full, prefix, url, suffix) =>
+      allowedUrls.has(url)
+        ? full
+        : `${prefix}${transparentPixel}${suffix}`
+  );
+}
+
+function addImageAttribution(
+  html: string,
+  images: UnsplashImage[]
+): string {
+  if (!images.length) return html;
+
+  const byUrl = new Map(images.map((image) => [image.url, image]));
   html = html.replace(
-    /<p[^>]*data-unsplash-attribution=["']true["'][^>]*>[\s\S]*?<\/p>/gi,
+    /<p\b[^>]*data-unsplash-attribution=["']true["'][^>]*>[\s\S]*?<\/p>/gi,
     ""
   );
 
   return html.replace(
     /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
-    (
-      fullMatch: string,
-      prefix: string,
-      url: string,
-      suffix: string
-    ) => {
+    (full, prefix, url, suffix) => {
       const image = byUrl.get(url);
+      if (!image) return full;
 
-      if (!image) {
-        return fullMatch;
-      }
-
-      // IMPORTANT:
-      // Use the exact URLs returned by Unsplash.
-      // Only add UTM parameters to attribution links, never to image URLs.
-      const photographerUrl = addUnsplashUtm(
-        image.photographerUrl
-      );
-
-      const unsplashUrl = addUnsplashUtm(
-        image.unsplashUrl
-      );
-
-      const attribution = `
-<p data-unsplash-attribution="true" class="mt-1 text-xs text-gray-500">
-  Photo by
-  <a
-    href="${escapeHtml(photographerUrl)}"
-    target="_blank"
-    rel="noopener noreferrer"
-  >${escapeHtml(image.photographer)}</a>
-  on
-  <a
-    href="${escapeHtml(unsplashUrl)}"
-    target="_blank"
-    rel="noopener noreferrer"
-  >Unsplash</a>
-</p>`;
+      const attribution = `<p data-unsplash-attribution="true" class="mt-1 text-xs text-gray-500">Photo by <a href="${escapeHtml(
+        addUtm(image.photographerUrl)
+      )}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+        image.photographer
+      )}</a> on <a href="${escapeHtml(
+        addUtm(image.unsplashUrl)
+      )}" target="_blank" rel="noopener noreferrer">Unsplash</a></p>`;
 
       return `${prefix}${url}${suffix}${attribution}`;
     }
   );
 }
 
-/* ============================================================
-   GENERATE IMAGE QUERY
-============================================================ */
+async function trackUnsplashDownload(downloadLocation: string): Promise<void> {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  if (!accessKey || !downloadLocation) return;
 
-async function createImageQuery(
-  prompt: string
-): Promise<string> {
   try {
-    const response =
-      await openai.responses.create({
-        model: "gpt-4.1-nano",
+    const parsed = new URL(downloadLocation);
+    if (parsed.origin !== UNSPLASH_API) return;
+    parsed.searchParams.set("client_id", accessKey);
 
-        stream: false,
-
-        input: `
-Create ONE concise Unsplash search query for the website below.
-
-The query should describe the main visual subject.
-
-Examples:
-- kids playing games
-- modern luxury interior
-- fitness training gym
-- construction workers building
-- professional financial consulting
-- tropical beach resort
-- modern software technology
-- restaurant food dining
-
-Return ONLY the search query.
-
-No explanation.
-
-Website request:
-${prompt}
-        `.trim(),
-      });
-
-    return (
-      response.output_text ||
-      prompt
-    )
-      .trim()
-      .replace(
-        /^["']|["']$/g,
-        ""
-      )
-      .slice(0, 150);
+    const response = await fetch(parsed.toString(), {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      console.warn(`Unsplash download tracking failed: ${response.status}`);
+    }
   } catch (error) {
-    console.warn(
-      "Image query generation failed. Using user prompt.",
-      error
-    );
-
-    return prompt
-      .trim()
-      .slice(0, 150);
+    console.warn("Unsplash download tracking failed:", error);
   }
 }
 
-/* ============================================================
-   SAVE JOB
-============================================================ */
-
-async function updateJob(
-  jobId: string,
-  data: Record<string, any>
-) {
-  await jobs.setJSON(
-    jobId,
-    {
-      ...data,
-      updatedAt:
-        new Date().toISOString(),
-    }
-  );
+function buildImageLibrary(images: UnsplashImage[]): string {
+  if (!images.length) return "NO IMAGES WERE AVAILABLE.";
+  return images
+    .map(
+      (image) => `
+IMAGE ${image.id}
+PHOTO ID: ${image.photoId}
+URL: ${image.url}
+ALT: ${image.alt}
+PHOTOGRAPHER: ${image.photographer}
+PHOTOGRAPHER URL: ${image.photographerUrl}
+UNSPLASH URL: ${image.unsplashUrl}
+DOWNLOAD LOCATION: ${image.downloadLocation}`.trim()
+    )
+    .join("\n\n");
 }
 
-/* ============================================================
-   GENERATION
-============================================================ */
-
-async function runGeneration(
-  request: Request
-): Promise<void> {
+async function runGeneration(request: Request): Promise<void> {
   let body: any;
-
   try {
-    body =
-      await request.json();
+    body = await request.json();
   } catch {
-    console.error(
-      "Invalid JSON request body."
-    );
-
+    console.error("Invalid JSON request body.");
     return;
   }
 
-  const jobId =
-    isValidJobId(body?.jobId)
-      ? body.jobId
-      : createJobId();
-
+  const jobId = isValidJobId(body?.jobId) ? body.jobId : createJobId();
+  // Single-file architecture: inline data object + React/Babel JSX live in currentCode.
   const currentCode =
-    typeof body?.currentCode ===
-    "string"
+    typeof body?.currentCode === "string"
       ? body.currentCode
-      : "";
+      : typeof body?.html === "string"
+        ? body.html
+        : "";
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
 
-  const prompt =
-    typeof body?.prompt ===
-    "string"
-      ? body.prompt.trim()
-      : "";
-
-  console.log(
-    "=================================================="
-  );
-
-  console.log(
-    "AI BACKGROUND GENERATION"
-  );
-
-  console.log(
-    "Job:",
-    jobId
-  );
-
-  console.log(
-    "Prompt:",
-    prompt
-  );
-
-  console.log(
-    "=================================================="
-  );
-
-  await updateJob(
-    jobId,
-    {
-      status: "processing",
-      createdAt:
-        new Date().toISOString(),
-    }
-  );
+  await updateJob(jobId, {
+    status: "processing",
+    stage: "starting",
+    createdAt: new Date().toISOString(),
+  });
 
   if (!prompt) {
-    await updateJob(
-      jobId,
-      {
-        status: "failed",
-        error:
-          "Prompt is required",
-        failedAt:
-          new Date().toISOString(),
-      }
-    );
-
+    await updateJob(jobId, {
+      status: "failed",
+      error: "Prompt is required.",
+      failedAt: new Date().toISOString(),
+    });
     return;
   }
 
   const startedAt = Date.now();
+  let planningInputTokens = 0;
+  let planningOutputTokens = 0;
+  let planningTotalTokens = 0;
 
   try {
-    let editDecisionUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-    };
-
+    // Existing websites are edited incrementally first. Copy edits should target the inline data object.
     if (currentCode.trim()) {
-      await updateJob(jobId, {
-        status: "processing",
-        stage: "planning_edits",
-      });
+      await updateJob(jobId, { status: "processing", stage: "planning_edits" });
 
       const decisionResponse = await openai.responses.create({
         model: "gpt-5.6-luna",
-        stream: false,
         input: `
-You edit an existing website's HTML. Choose the smallest safe change that fulfills the user's request.
+You are a precise source-code editor for 7Wingz. The website is ONE complete HTML document.
+It contains a JavaScript data object such as const data = { ... }, plus React JSX in a <script type="text/babel"> block. Content is rendered dynamically through expressions like {data.hero.heading}.
 
-Return exactly one JSON object, with no Markdown:
-- For a localized edit, return {"mode":"patch","patches":[{"oldText":"exact unique text copied from the current HTML","newText":"replacement text"}]}.
-- For a request that requires a broad redesign, restructuring most of the page, or adding/removing whole major sections, return {"mode":"full"}.
+Return exactly one JSON object and nothing else.
+For a safe localized edit, return:
+{"mode":"patch","htmlPatches":[{"oldText":"exact unique source text","newText":"replacement source text"}]}
+For a broad redesign, major structural change, or unsafe patch, return:
+{"mode":"full"}
 
-Patch rules:
-- Make only changes requested by the user; preserve all unrelated HTML, functionality, and image URLs.
-- Each oldText must be copied exactly from the current HTML and must appear exactly once.
-- Keep oldText as short as possible while still uniquely identifying the intended location.
-- Use one patch per localized change. Do not include unchanged surrounding code.
-- Do not output the updated page or any explanation.
+Rules:
+- This is a SINGLE FILE. Never create or return a separate data.js file.
+- Prefer the smallest safe edit.
+- For copy/content changes, patch the relevant value inside the existing const data object whenever possible.
+- For layout, responsive behavior, styling, or markup changes, patch JSX/Tailwind markup.
+- For a new section, update the inline data object and JSX only as necessary.
+- Do not hardcode copy in JSX if it belongs in the data object.
+- Preserve the existing data schema, React/Babel/Tailwind scripts, data bindings, event handlers, IDs, classes, forms, image URLs, and unrelated code.
+- Never rename or replace data keys unless explicitly requested.
+- Every oldText must be copied exactly and occur exactly once in the complete HTML source.
+- Use one patch per localized change; if uncertain, choose full mode.
+- Do not return explanations or markdown fences.
 
-CURRENT HTML:
+CURRENT SINGLE-FILE HTML:
 ${currentCode}
 
 USER REQUEST:
@@ -745,24 +394,20 @@ ${prompt}
         `.trim(),
       });
 
-      editDecisionUsage = {
-        inputTokens: decisionResponse.usage?.input_tokens ?? 0,
-        outputTokens: decisionResponse.usage?.output_tokens ?? 0,
-        totalTokens: decisionResponse.usage?.total_tokens ?? 0,
-      };
-      const decision = parseEditDecision(
-        decisionResponse.output_text || ""
-      );
+      planningInputTokens = decisionResponse.usage?.input_tokens ?? 0;
+      planningOutputTokens = decisionResponse.usage?.output_tokens ?? 0;
+      planningTotalTokens = decisionResponse.usage?.total_tokens ?? 0;
+
+      const decision = parseEditDecision(decisionResponse.output_text || "");
 
       if (decision.mode === "patch") {
-        const html = applyHtmlPatches(currentCode, decision.patches);
-        const inputTokens = editDecisionUsage.inputTokens;
-        const outputTokens = editDecisionUsage.outputTokens;
-        const usage: GenerationUsage = {
-          inputTokens,
-          outputTokens,
-          totalTokens: editDecisionUsage.totalTokens || inputTokens + outputTokens,
-          estimatedCostUsd: estimateCost(inputTokens, outputTokens),
+        const html = applyTextPatches(currentCode, decision.htmlPatches);
+
+        const usage: Usage = {
+          inputTokens: planningInputTokens,
+          outputTokens: planningOutputTokens,
+          totalTokens: planningTotalTokens || planningInputTokens + planningOutputTokens,
+          estimatedCostUsd: estimateCost(planningInputTokens, planningOutputTokens),
         };
 
         await updateJob(jobId, {
@@ -779,488 +424,161 @@ ${prompt}
       }
     }
 
-    /* ========================================================
-       STEP 1 — IMAGE QUERY
-    ======================================================== */
+    // Full generation is reserved for broad changes or new websites.
+    await updateJob(jobId, { status: "processing", stage: "image_query" });
+    const imageQuery = await createImageQuery(prompt);
+    const imageResults = await searchUnsplash(imageQuery);
+    const allowedImageUrls = new Set(imageResults.map((image) => image.url));
 
-    await updateJob(
-      jobId,
-      {
-        status: "processing",
-        stage: "image_query",
-      }
-    );
-
-    const imageQuery =
-      await createImageQuery(
-        prompt
-      );
-
-    console.log(
-      "Image query:",
-      imageQuery
-    );
-
-    /* ========================================================
-       STEP 2 — UNSPLASH
-    ======================================================== */
-
-    await updateJob(
-      jobId,
-      {
-        status: "processing",
-        stage: "images",
-        imageQuery,
-      }
-    );
-
-    const imageResults =
-      await searchUnsplash(
-        imageQuery
-      );
-
-    const allowedImageUrls =
-      new Set(
-        imageResults
-          .map(
-            (image) =>
-              image.url
-          )
-          .filter(
-            (
-              url
-            ): url is string =>
-              typeof url ===
-                "string" &&
-              url.length > 0
-          )
-      );
-
-    console.log(
-      `Images found: ${imageResults.length}`
-    );
-
-    /* ========================================================
-       STEP 3 — IMAGE LIBRARY
-    ======================================================== */
-
-    const imageLibrary =
-      imageResults.length > 0
-        ? imageResults
-            .map(
-              (image) =>
-                `
-IMAGE ${image.id}
-PHOTO ID: ${image.photoId}
-URL: ${image.url}
-ALT: ${image.alt}
-PHOTOGRAPHER: ${image.photographer}
-PHOTOGRAPHER URL: ${addUnsplashUtm(
-                  image.photographerUrl
-                )}
-UNSPLASH URL: ${addUnsplashUtm(
-                  image.unsplashUrl
-                )}
-DOWNLOAD LOCATION: ${image.downloadLocation}
-                `.trim()
-            )
-            .join(
-              "\n\n"
-            )
-        : "NO IMAGES WERE AVAILABLE.";
-
-    /* ========================================================
-       STEP 4 — GENERATE WEBSITE
-    ======================================================== */
-
-    await updateJob(
-      jobId,
-      {
-        status: "processing",
-        stage: "generating",
-      }
-    );
+    await updateJob(jobId, {
+      status: "processing",
+      stage: "generating",
+      imageQuery,
+    });
 
     const systemPrompt = `
-You are an expert HTML and Tailwind CSS developer.
+You are an expert HTML, Tailwind CSS, React 18, and browser-Babel developer building websites for 7Wingz.
 
-Your task is to generate or update a modern, polished,
-responsive HTML website.
+Return exactly one JSON object: {"html":"complete updated HTML document as a string"}.
+No markdown fences or commentary.
 
-============================================================
-CORE RULES
-============================================================
+SINGLE-FILE ARCHITECTURE:
+- Return one complete HTML document. Do not return a separate data.js file.
+- The document contains a const data = { ... } object in a regular <script> block and React JSX in a <script type="text/babel"> block.
+- Store editable website copy, labels, service descriptions, prices, testimonials, contact details, alt text, and URLs in the existing data object whenever appropriate.
+- Render content through data bindings such as {data.hero.heading}; keep data keys and JSX references synchronized.
+- Preserve the existing data schema and key names whenever possible.
+- For content-only requests, change data values and leave JSX/layout unchanged.
+- For design/layout requests, change JSX/Tailwind classes as needed while preserving data bindings and behavior.
+- For new sections, add the required data and JSX without unnecessarily rebuilding the page.
+- Preserve React, ReactDOM, Babel, Tailwind setup, event handlers, forms, IDs, accessibility, and unrelated code.
+- If existing HTML is supplied, update it instead of rebuilding unrelated parts.
+- Keep the page responsive and valid as a complete HTML document.
 
-- If current code is provided, UPDATE the existing code.
-- Preserve existing functionality unless the user asks to change it.
-- Apply the user's requested changes.
-- Return the COMPLETE final HTML.
-- Never return only changed sections.
+IMAGE RULES:
+- Only use image URLs supplied in the image library below for newly introduced images.
+- Never invent, construct, or modify image URLs.
+- If no image results are available, preserve existing image URLs and do not add fabricated ones.
+- Each new Unsplash image must have attribution immediately after it, using supplied photographer and Unsplash page URLs.
+- Do not duplicate existing attribution.
 
-============================================================
-OUTPUT
-============================================================
+UNSPLASH IMAGE LIBRARY:
+${buildImageLibrary(imageResults)}
 
-- First line MUST be:
-<!-- generated code -->
+CURRENT SINGLE-FILE HTML:
+${currentCode || "(No existing HTML. Create a complete single-file HTML website with an inline data object and React/Babel rendering.)"}
 
-- Return ONLY raw HTML.
-- Never use Markdown code fences.
-- Never include explanations.
-- Never include commentary outside the HTML.
-
-============================================================
-HTML
-============================================================
-
-- Return a complete HTML document.
-- Use semantic HTML.
-- Make the page fully responsive.
-- Make the design polished and visually rich.
-- Use Tailwind CSS.
-
-Include:
-
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-
-============================================================
-IMAGES
-============================================================
-
-Images are automatically required unless the user explicitly requests:
-
-- no images
-- without images
-- remove images
-- text only
-
-The final website should be image-rich.
-
-Use images for:
-
-- hero sections
-- cards
-- products
-- services
-- articles
-- projects
-- destinations
-- activities
-- galleries
-- major visual sections
-
-============================================================
-UNSPLASH IMAGE LIBRARY
-============================================================
-
-ONLY use URLs from this image library.
-
-${imageLibrary}
-
-============================================================
-ABSOLUTE IMAGE URL RULE
-============================================================
-
-NEVER:
-
-- invent image URLs
-- invent Unsplash photo IDs
-- construct Unsplash URLs
-- modify Unsplash URLs
-- add parameters to image URLs
-- remove parameters from image URLs
-- use random external image URLs
-- use placeholder image services
-
-ONLY use URLs supplied in the image library.
-
-============================================================
-ATTRIBUTION
-============================================================
-
-Every Unsplash image must have attribution.
-
-Use:
-
-Photo by PHOTOGRAPHER on Unsplash
-
-Use the supplied photographer URL and Unsplash URL.
-
-CRITICAL ATTRIBUTION URL RULES:
-- Copy the supplied PHOTOGRAPHER URL exactly.
-- Copy the supplied UNSPLASH URL exactly.
-- NEVER construct, guess, rewrite, slugify, or invent an Unsplash photo-page URL.
-- NEVER derive an Unsplash photo URL from the photo ID, alt text, image description, or filename.
-- NEVER replace a supplied UNSPLASH URL with a manually constructed /photos/... URL.
-- The image URL and attribution URL are different fields. Keep them separate.
-- Put attribution immediately after each corresponding image.
-- Do not add a second attribution for an image that already has one.
-
-
-============================================================
-CURRENT CODE
-============================================================
-
-${
-  currentCode ||
-  "(No existing code was provided. Create the website from scratch.)"
-}
-
-============================================================
-USER REQUEST
-============================================================
-
+USER REQUEST:
 ${prompt}
     `.trim();
 
-    /* ========================================================
-       STEP 5 — OPENAI
-    ======================================================== */
+    const finalResponse = await openai.responses.create({
+      model: "gpt-5.6-luna",
+      input: systemPrompt,
+    });
 
-    const finalResponse =
-      await openai.responses.create({
-        model:
-          "gpt-5.6-luna",
+    let result: { html?: string };
+    try {
+      result = JSON.parse(cleanJson(finalResponse.output_text || ""));
+    } catch {
+      throw new Error("AI returned invalid JSON for the full website update.");
+    }
 
-        stream: false,
-
-        input:
-          systemPrompt,
-      });
-
-    let html =
-      finalResponse.output_text ||
-      "";
-
-    const durationMs =
-      Date.now() -
-      startedAt;
-
-    /* ========================================================
-       STEP 6 — CLEAN MARKDOWN
-    ======================================================== */
-
-    html =
-      html
-        .replace(
-          /^```html\s*/i,
-          ""
-        )
-        .replace(
-          /^```\s*/i,
-          ""
-        )
-        .replace(
-          /\s*```$/i,
-          ""
-        )
-        .trim();
-
+    let html = typeof result.html === "string" ? result.html.trim() : "";
     if (!html) {
-      throw new Error(
-        "OpenAI returned empty HTML."
-      );
+      throw new Error("AI must return a complete HTML document in the html property.");
     }
 
-    /* ========================================================
-       STEP 7 — IMAGE VALIDATION
-    ======================================================== */
-
-    const generatedImageUrls =
-      extractImageUrls(
-        html
-      );
-
-    const invalidImageUrls =
-      generatedImageUrls.filter(
-        (url) =>
-          !allowedImageUrls.has(
-            url
-          )
-      );
-
-    if (
-      invalidImageUrls.length > 0
-    ) {
-      console.warn(
-        "Invalid image URLs found:",
-        invalidImageUrls
-      );
-
-      html =
-        removeInvalidImageUrls(
-          html,
-          allowedImageUrls
-        );
+    html = html.replace(/^```html\s*/i, "").replace(/\s*```$/i, "").trim();
+    if (!/<html\b/i.test(html) || !/<body\b/i.test(html)) {
+      throw new Error("AI response is not a complete HTML document.");
     }
 
-    /* ========================================================
-       STEP 8 — ATTRIBUTION
-    ======================================================== */
+    const invalidImageUrls = extractImageUrls(html).filter(
+      (url) => !allowedImageUrls.has(url) && !extractImageUrls(currentCode).includes(url)
+    );
+    if (invalidImageUrls.length) {
+      html = validateImageUrls(html, new Set([
+        ...allowedImageUrls,
+        ...extractImageUrls(currentCode),
+      ]));
+    }
 
-    html =
-      addUnsplashAttribution(
-        html,
-        imageResults
-      );
+    html = addImageAttribution(html, imageResults);
 
-    /* ========================================================
-       STEP 9 — TRACK USED IMAGES
-    ======================================================== */
-
-    const finalImageUrls =
-      extractImageUrls(
-        html
-      );
-
-    const usedImages =
-      imageResults.filter(
-        (image) =>
-          finalImageUrls.includes(
-            image.url
-          ) &&
-          image.downloadLocation
-      );
-
+    const finalImageUrls = extractImageUrls(html);
+    const usedImages = imageResults.filter(
+      (image) => finalImageUrls.includes(image.url) && image.downloadLocation
+    );
     await Promise.allSettled(
-      usedImages.map(
-        (image) =>
-          trackUnsplashDownload(
-            image.downloadLocation
-          )
-      )
+      usedImages.map((image) => trackUnsplashDownload(image.downloadLocation))
     );
 
-    /* ========================================================
-       STEP 10 — USAGE
-    ======================================================== */
-
-    const usage: any =
-      (finalResponse as any)
-        ?.usage || {};
-
+    const finalUsage = finalResponse.usage;
     const inputTokens =
-      Number(
-        usage.input_tokens ??
-          usage.inputTokens ??
-          0
-      ) +
-      Number(
-        editDecisionUsage.inputTokens
-      );
-
+      (finalUsage?.input_tokens ?? 0) + planningInputTokens;
     const outputTokens =
-      Number(
-        usage.output_tokens ??
-          usage.outputTokens ??
-          0
-      ) +
-      Number(
-        editDecisionUsage.outputTokens
-      );
-
+      (finalUsage?.output_tokens ?? 0) + planningOutputTokens;
     const totalTokens =
-      Number(
-        usage.total_tokens ??
-          usage.totalTokens ??
-          Number(usage.input_tokens ?? usage.inputTokens ?? 0) +
-            Number(usage.output_tokens ?? usage.outputTokens ?? 0)
-      ) +
-      Number(
-        editDecisionUsage.totalTokens ||
-          editDecisionUsage.inputTokens + editDecisionUsage.outputTokens
-      );
+      (finalUsage?.total_tokens ?? 0) +
+      (planningTotalTokens || planningInputTokens + planningOutputTokens);
 
-    const estimatedCostUsd =
-      estimateCost(
-        inputTokens,
-        outputTokens
-      );
+    const usage: Usage = {
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      estimatedCostUsd: estimateCost(inputTokens, outputTokens),
+    };
 
-    const generationUsage:
-      GenerationUsage = {
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        estimatedCostUsd,
-      };
-
-    /* ========================================================
-       STEP 11 — COMPLETE JOB
-    ======================================================== */
-
-    await updateJob(
-      jobId,
-      {
-        status: "completed",
-
-        stage: "completed",
-
-        mode: "full",
-
-        html,
-
-        usage:
-          generationUsage,
-
-        durationMs,
-
-        imageCount:
-          usedImages.length,
-
-        completedAt:
-          new Date().toISOString(),
-      }
-    );
-
-    console.log(
-      "Generation completed:",
-      jobId
-    );
+    await updateJob(jobId, {
+      status: "completed",
+      stage: "completed",
+      mode: "full",
+      html,
+      usage,
+      durationMs: Date.now() - startedAt,
+      imageCount: usedImages.length,
+      completedAt: new Date().toISOString(),
+    });
   } catch (error: any) {
-    console.error(
-      "AI generation failed:",
-      error
-    );
-
-    await updateJob(
-      jobId,
-      {
-        status: "failed",
-
-        error:
-          error?.message ||
-          "AI generation failed.",
-
-        failedAt:
-          new Date().toISOString(),
-      }
-    );
+    console.error("AI generation failed:", error);
+    await updateJob(jobId, {
+      status: "failed",
+      error: error?.message || "AI generation failed.",
+      failedAt: new Date().toISOString(),
+    });
   }
 }
 
-/* ============================================================
-   NETLIFY BACKGROUND FUNCTION
-============================================================ */
-
-export default async function handler(
-  request: Request
-) {
+export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return jsonError("Method not allowed", 405);
   }
 
-  await runGeneration(request);
+  // The frontend can use this ID to poll the background job.
+  let body: any;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return jsonError("Invalid JSON request body.", 400);
+  }
 
-  return new Response(null, {
-    status: 202,
-  });
+  const jobId = isValidJobId(body?.jobId) ? body.jobId : createJobId();
+  // Return the ID immediately so the client can poll the job.
+  // The existing frontend should pass its own jobId if it already creates one.
+  await runGeneration(
+    new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify({ ...body, jobId }),
+    })
+  );
+
+  return Response.json({ success: true, jobId }, { status: 202 });
 }
 
 export const config: Config = {
   path: "/api/ai/generate",
-
   method: "POST",
-
   background: true,
 };
